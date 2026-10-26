@@ -1,0 +1,29 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.9.0.schema.json
+PackageIdentifier: BiruniGIS.BiruniGIS
+PackageVersion: 0.2.0
+PackageLocale: en-US
+Publisher: Biruni GIS contributors
+PublisherUrl: https://github.com/HatemTarekGIS
+PublisherSupportUrl: https://github.com/HatemTarekGIS/biruni-gis/issues
+PackageName: Biruni GIS
+PackageUrl: https://github.com/HatemTarekGIS/biruni-gis
+License: GPL-2.0-or-later
+LicenseUrl: https://github.com/HatemTarekGIS/biruni-gis/blob/main/LICENSE
+ReleaseNotesUrl: https://github.com/HatemTarekGIS/biruni-gis/releases/tag/v0.2.0
+ShortDescription: Free desktop GIS with a modern ribbon interface, English and Arabic, based on QGIS.
+Description: |-
+  Biruni GIS is a free and open-source desktop GIS for surveyors, engineers, planners and students.
+  It opens ArcGIS Pro projects and ArcMap documents, turns Excel and CAD drawings into GIS layers, downloads open data
+  (OpenStreetMap, satellite imagery, elevation, land cover), checks data quality, makes print-ready
+  map sheets and web maps, and keeps a version of the project on every save. Based on QGIS.
+Moniker: biruni
+Tags:
+  - gis
+  - maps
+  - qgis
+  - arcgis
+  - survey
+  - cad
+  - arabic
+ManifestType: defaultLocale
+ManifestVersion: 1.9.0

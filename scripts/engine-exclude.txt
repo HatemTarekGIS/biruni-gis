@@ -1,0 +1,21 @@
+# Engine files Biruni GIS must NOT redistribute (paths relative to the engine root).
+# Their licences do not allow redistribution inside another desktop application
+# (ECW: "does not permit You to ... distribute Desktop Applications that include
+# the SDK"), or require separate agreements (MrSID DSDK, Oracle Instant Client).
+
+# ERDAS ECW/JP2 SDK (Hexagon)
+apps/gdal/lib/gdalplugins/gdal_ECW_JP2ECW.dll
+bin/NCSEcw.dll
+# MrSID DSDK (Extensis/LizardTech)
+apps/gdal/lib/gdalplugins/gdal_MrSID.dll
+bin/lti_dsdk_cdll_9.5.dll
+bin/lti_dsdk_9.5.dll
+bin/lti_lidar_dsdk_1.1.dll
+bin/tbb.dll
+# Oracle Instant Client and the drivers that need it
+apps/gdal/lib/gdalplugins/gdal_GEOR.dll
+apps/gdal/lib/gdalplugins/ogr_OCI.dll
+bin/oci.dll
+bin/oraociicus.dll
+apps/qgis/plugins/provider_oracle.dll
+apps/qgis/qtplugins/sqldrivers/qsqlocispatial.dll

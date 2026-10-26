@@ -1,0 +1,15 @@
+Shapes to Grid|0
+grid_gridding
+QgsProcessingParameterFeatureSource|INPUT|Shapes|-1|None|False
+QgsProcessingParameterField|FIELD|Attribute|None|INPUT|-1|False|False
+QgsProcessingParameterEnum|OUTPUT|Output Values|[0] data / no-data;[1] index number;[2] attribute|False|2
+QgsProcessingParameterEnum|MULTIPLE|Method for Multiple Values|[0] first;[1] last;[2] minimum;[3] maximum;[4] mean|False|1
+QgsProcessingParameterEnum|LINE_TYPE|Lines|[0] thin;[1] thick|False|1
+QgsProcessingParameterEnum|POLY_TYPE|Polygon|[0] node;[1] cell|False|1
+QgsProcessingParameterEnum|GRID_TYPE|Data Type|[0] bit;[1] unsigned 1 byte integer;[2] signed 1 byte integer;[3] unsigned 2 byte integer;[4] signed 2 byte integer;[5] unsigned 4 byte integer;[6] signed 4 byte integer;[7] unsigned 8 byte integer;[8] signed 8 byte integer;[9] 4 byte floating point number;[10] 8 byte floating point number;[11] same as attribute|False|11
+Hardcoded|-TARGET_DEFINITION 0
+QgsProcessingParameterExtent|TARGET_USER_XMIN TARGET_USER_XMAX TARGET_USER_YMIN TARGET_USER_YMAX|Output extent|None|True
+QgsProcessingParameterNumber|TARGET_USER_SIZE|Cellsize|QgsProcessingParameterNumber.Double|100.0|False|None|None
+QgsProcessingParameterEnum|TARGET_USER_FITS|Fit|[0] nodes;[1] cells|False|0
+QgsProcessingParameterRasterDestination|GRID|Grid|None|False
+QgsProcessingParameterRasterDestination|COUNT|Number of Values|None|True

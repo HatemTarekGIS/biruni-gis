@@ -1,0 +1,85 @@
+Biruni GIS
+Copyright (C) 2026 Biruni GIS contributors
+
+Biruni GIS is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation, either version 2 of the License, or (at your option) any later
+version. See LICENSE.
+
+-------------------------------------------------------------------------------
+The QGIS engine
+-------------------------------------------------------------------------------
+Biruni GIS runs on an unmodified build of QGIS 4.2.3 (https://qgis.org), as
+packaged for Windows by the OSGeo4W project (https://trac.osgeo.org/osgeo4w/).
+QGIS is licensed under the GNU GPL version 2 or later.
+
+"QGIS" is a trademark of QGIS.org. Biruni GIS is an independent derivative
+product; it is not the official QGIS release and is not endorsed by the QGIS
+project.
+
+Source code of the engine:
+  QGIS ........ https://github.com/qgis/QGIS  (tag final-4_2_3)
+  OSGeo4W ..... https://download.osgeo.org/osgeo4w/v2/  (source packages)
+Biruni GIS will also provide the corresponding source code on request.
+
+-------------------------------------------------------------------------------
+Third-party components included with the engine (main ones)
+-------------------------------------------------------------------------------
+  GDAL/OGR ......... MIT                    https://gdal.org
+  PROJ ............. MIT                    https://proj.org
+  GEOS ............. LGPL-2.1               https://libgeos.org
+  Qt 6 ............. LGPL-3.0               https://www.qt.io
+  PyQt6 ............ GPL-3.0                https://www.riverbankcomputing.com
+  Python 3.12 ...... PSF License            https://www.python.org
+  GRASS GIS ........ GPL-2.0 or later       https://grass.osgeo.org
+  SAGA GIS ......... GPL-2.0 / LGPL-2.1     https://saga-gis.sourceforge.io
+  Ghostscript ...... AGPL-3.0               https://www.ghostscript.com
+  ... and the other OSGeo4W packages listed in engine\etc\setup.
+
+Not included: the ERDAS ECW/JP2 SDK, the MrSID DSDK and the Oracle Instant
+Client that the QGIS installer ships are NOT redistributed with Biruni GIS,
+because their licences do not allow redistribution inside another desktop
+application. Users who are licensed for them can add them separately.
+
+-------------------------------------------------------------------------------
+Biruni GIS assets
+-------------------------------------------------------------------------------
+  Tabler Icons ..... MIT, Copyright (c) 2020-2026 Pawel Kuna  https://tabler.io/icons
+  Basemaps ......... OpenStreetMap data (c) OpenStreetMap contributors (ODbL);
+                     OpenTopoMap style (c) OpenTopoMap (CC-BY-SA)
+  World sample data  Natural Earth (public domain)  https://www.naturalearthdata.com
+                     app/plugins/biruni/resources/data
+  Leaflet 1.9.4 .... BSD 2-Clause, Copyright (c) 2010-2023 Volodymyr Agafonkin,
+                     (c) 2010-2011 CloudMade - app/plugins/biruni/resources/web
+                     (embedded in exported web maps); see LEAFLET-LICENSE.txt
+
+-------------------------------------------------------------------------------
+QGIS plugins bundled in app\plugins
+-------------------------------------------------------------------------------
+  Processing Saga NextGen Provider 1.3.1 (app/plugins/processing_saga_nextgen)
+                     GPL-3.0 (source headers: GPL-2.0 or later); Victor Olaya,
+                     North Road, Baswein and the QGIS maintainers. Unmodified
+                     except that its test folder is left out.
+                     https://github.com/baswein/qgis-processing-saga-nextgen
+                     (commit 33754d0d1027de6d105f14b89faf89f269ab5a06)
+                     It connects the SAGA GIS tools of the engine to Processing.
+
+-------------------------------------------------------------------------------
+Python libraries bundled in app\python
+-------------------------------------------------------------------------------
+  cryptography .............. Apache-2.0 or BSD-3-Clause
+  cffi, pycparser ........... MIT, BSD-3-Clause
+  segno (QR codes) .......... BSD-3-Clause
+The licence texts are in each package's *.dist-info folder.
+
+-------------------------------------------------------------------------------
+Online data services used on request (not bundled)
+-------------------------------------------------------------------------------
+  OpenStreetMap via the Overpass API ..... (c) OpenStreetMap contributors, ODbL
+  Sentinel-2 imagery (Earth Search by Element 84) .. Copernicus Sentinel data,
+                                           free and open licence
+  Copernicus DEM GLO-30 .................. (c) DLR e.V. 2010-2014 and (c) Airbus
+                                           Defence and Space GmbH 2014-2018,
+                                           provided under COPERNICUS by the EU and ESA
+  ESA WorldCover 2021 .................... (c) ESA WorldCover project, CC BY 4.0
+  geoBoundaries .......................... CC BY 4.0 (per-country licences apply)

@@ -1,0 +1,458 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>دليل Biruni GIS</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=block" rel="stylesheet">
+<style>
+  :root { --teal:#1fc2ad; --teal-d:#0f8f80; --dark:#0b1f2a; --ink:#1e2a30; --muted:#5b6f76; --soft:#eef8f6; --line:#d5e6e3; }
+  @page { size:A4; margin:16mm 15mm 18mm 15mm;
+          @bottom-center { content: counter(page); font-family:'Cairo',sans-serif; font-size:9pt; color:#8aa0a5; }
+          @bottom-right { content: "Biruni GIS · دليل البدء"; font-family:'Cairo',sans-serif; font-size:8pt; color:#a9bcc0; } }
+  @page cover { margin:0; @bottom-center { content:none; } @bottom-right { content:none; } }
+  * { box-sizing:border-box; }
+  html { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  body { margin:0; font-family:'Cairo','Segoe UI',Tahoma,sans-serif; color:var(--ink); font-size:10.3pt; line-height:1.68; background:#fff; }
+  bdi { unicode-bidi:isolate; }
+
+  /* cover */
+  .cover { page:cover; height:297mm; width:210mm; position:relative; overflow:hidden; color:#eef6f7;
+           background: radial-gradient(160mm 110mm at 90% -5%, #15505a 0%, transparent 60%),
+                       radial-gradient(130mm 90mm at 0% 105%, #12424c 0%, transparent 55%),
+                       linear-gradient(160deg, #0f2f3a, var(--dark)); }
+  .cover svg.contours { position:absolute; inset:0; opacity:.16; }
+  .cover .in { position:relative; padding:34mm 22mm 0; }
+  .cover img.logo { width:34mm; height:34mm; filter:drop-shadow(0 4px 12px rgba(31,194,173,.35)); }
+  .cover .name { margin-top:8mm; font-family:'Segoe UI','Cairo',sans-serif; font-size:40pt; font-weight:800; direction:ltr; text-align:right; line-height:1; }
+  .cover .name span { color:var(--teal); }
+  .cover h1 { margin:9mm 0 0; font-size:30pt; font-weight:900; line-height:1.3; }
+  .cover h1 em { font-style:normal; color:var(--teal); }
+  .cover .sub { margin-top:5mm; font-size:13pt; color:#cfe2e5; font-weight:600; line-height:1.7; }
+  .cover .chips { margin-top:10mm; display:flex; flex-wrap:wrap; gap:3mm; }
+  .cover .chips span { font-size:10.5pt; font-weight:700; padding:1.5mm 5mm; border-radius:20mm; border:1.3px solid rgba(127,227,212,.5); color:#7fe3d4; }
+  .cover .shot { margin-top:12mm; border-radius:3mm; overflow:hidden; border:1px solid rgba(255,255,255,.14); box-shadow:0 10mm 20mm rgba(0,0,0,.45); }
+  .cover .shot img { display:block; width:100%; }
+  .cover .foot { position:absolute; bottom:0; left:0; right:0; padding:6mm 22mm; background:rgba(0,0,0,.28); font-size:8.5pt; color:#93aeb3; line-height:1.6; }
+  .cover .foot b { color:#eef6f7; font-size:10pt; }
+
+  /* content */
+  section { break-before:page; }
+  section.cont { break-before:auto; margin-top:9mm; }
+  h2 { font-size:19pt; font-weight:900; color:var(--dark); margin:0 0 1mm; line-height:1.35; display:flex; align-items:center; gap:3mm; }
+  h2 .n { display:inline-flex; align-items:center; justify-content:center; width:9mm; height:9mm; border-radius:2.2mm; background:var(--teal); color:#fff; font-size:13pt; flex:none; }
+  .lead { color:var(--muted); font-weight:600; margin:0 0 4mm; font-size:10.8pt; }
+  h3 { font-size:12.5pt; font-weight:800; color:var(--teal-d); margin:5mm 0 1mm; }
+  p { margin:0 0 2.2mm; }
+  ul, ol { margin:0 0 2.5mm; padding-inline-start:6mm; }
+  li { margin-bottom:.8mm; }
+  .ui { font-weight:700; color:var(--dark); background:#e6f4f2; border-radius:1.2mm; padding:0 1.6mm; white-space:nowrap; }
+  kbd { font-family:'Segoe UI',sans-serif; font-size:9pt; border:1px solid #b9cfcb; border-bottom-width:2px; border-radius:1.2mm; padding:0 1.4mm; background:#f7fbfa; direction:ltr; unicode-bidi:isolate; }
+  code { font-family:Consolas,monospace; font-size:9.2pt; background:#f1f5f5; border-radius:1mm; padding:0 1.2mm; direction:ltr; unicode-bidi:isolate; }
+  figure { margin:3mm 0 4mm; }
+  figure img { display:block; max-width:100%; border:1px solid var(--line); border-radius:2mm; margin-inline:auto; }
+  figcaption { text-align:center; font-size:8.8pt; color:var(--muted); margin-top:1.2mm; }
+  .tip, .note, .warn { border-radius:2.5mm; padding:2.5mm 4mm; margin:3mm 0; font-size:10pt; break-inside:avoid; }
+  .tip { background:var(--soft); border-inline-start:1.2mm solid var(--teal); }
+  .note { background:#f4f6fb; border-inline-start:1.2mm solid #6b84c9; }
+  .warn { background:#fff6e9; border-inline-start:1.2mm solid #e0a030; }
+  .tip b:first-child, .note b:first-child, .warn b:first-child { color:var(--dark); }
+  table { width:100%; border-collapse:collapse; margin:2mm 0 4mm; font-size:9.6pt; break-inside:auto; }
+  th { background:var(--dark); color:#fff; font-weight:700; padding:1.6mm 2.5mm; text-align:start; }
+  td { border-bottom:1px solid var(--line); padding:1.3mm 2.5mm; vertical-align:top; }
+  tr:nth-child(even) td { background:#f8fbfb; }
+  tr { break-inside:avoid; }
+  .two { display:grid; grid-template-columns:1fr 1fr; gap:5mm; }
+  .side { display:grid; grid-template-columns:1fr 52mm; gap:5mm; align-items:start; }
+  ol:not(.steps):not(.toc) { list-style-type:arabic-indic; }
+  .steps { counter-reset:s; list-style:none; padding:0; }
+  .steps li { counter-increment:s; position:relative; padding-inline-start:9mm; margin-bottom:1.8mm; }
+  .steps li::before { content:counter(s); position:absolute; inset-inline-start:0; top:.6mm; width:6mm; height:6mm; border-radius:50%; background:var(--teal); color:#fff; font-size:9pt; font-weight:800; display:flex; align-items:center; justify-content:center; }
+  .toc { columns:2; column-gap:8mm; list-style:none; padding:0; margin:3mm 0 0; }
+  .toc li { break-inside:avoid; padding:1.2mm 0; border-bottom:1px dashed var(--line); font-weight:600; }
+  .toc li span { color:var(--teal-d); font-weight:800; margin-inline-end:2mm; }
+  .card { border:1px solid var(--line); border-radius:2.5mm; padding:2.5mm 4mm; break-inside:avoid; }
+  .card h4 { margin:0 0 1mm; font-size:11pt; color:var(--dark); }
+  .card p { margin:0; font-size:9.8pt; }
+  table.dense td { padding:.7mm 2.5mm; }
+  .tm { margin-top:6mm; padding-top:3mm; border-top:1px solid var(--line); font-size:8.8pt; color:var(--muted); }
+</style>
+</head>
+<body>
+
+<!-- ============ cover ============ -->
+<div class="cover">
+  <svg class="contours" viewBox="0 0 210 297" preserveAspectRatio="none" aria-hidden="true">
+    <g fill="none" stroke="#7fe3d4" stroke-width=".3">
+      <path d="M-5 40 C 35 27, 70 50, 110 38 S 175 23, 215 37"/>
+      <path d="M-5 48 C 33 36, 72 59, 112 47 S 177 32, 215 46"/>
+      <path d="M-5 56 C 31 45, 74 68, 114 56 S 179 41, 215 55"/>
+      <path d="M-5 236 C 40 224, 82 248, 125 236 S 183 222, 215 234"/>
+      <path d="M-5 244 C 42 232, 84 256, 127 244 S 185 230, 215 242"/>
+    </g>
+  </svg>
+  <div class="in">
+    <img class="logo" src="images/logo.png" alt="">
+    <div class="name">Biruni <span>GIS</span></div>
+    <h1>دليل البدء السريع<br><em>من أول تشغيل لأول خريطة</em></h1>
+    <p class="sub">برنامج نظم معلومات جغرافية مجاني ومفتوح المصدر، بالعربي والإنجليزي.<br>
+      الدليل ده مكتوب للمهندسين والمساحين، وبالذات اللي جايين من ArcGIS.</p>
+    <div class="chips"><span>الإصدار 0.2.0</span><span>مجاني بالكامل</span><span>من غير حساب</span><span>Windows 10 / 11</span></div>
+    <div class="shot"><img src="images/overview.png" alt=""></div>
+  </div>
+  <div class="foot">
+    <b>مبني على QGIS · مفتوح المصدر (GPL)</b><br>
+    الأسماء ArcGIS, Excel, AutoCAD, Windows, QGIS علامات تجارية لأصحابها. البرنامج مستقل، وغير تابع لهم ولا معتمد منهم.
+  </div>
+</div>
+
+<!-- ============ 1. intro ============ -->
+<section>
+  <h2><span class="n">1</span>إيه هو Biruni GIS؟</h2>
+  <p class="lead">برنامج GIS مكتبي كامل: تفتح بياناتك، ترسم وتعدّل، تحلّل، وتطلّع خريطة جاهزة للطباعة — من غير اشتراك ولا حساب.</p>
+  <p>البرنامج شغّال على محرّك <b>QGIS</b> العالمي المجرَّب، وفوقه واجهة شريطية (Ribbon) قريبة من اللي متعوّد عليه في ArcGIS Pro، بالعربي من اليمين للشمال أو بالإنجليزي. كل قوة المحرّك موجودة تحت إيدك: قرابة <b>790 أداة</b> تحليل من QGIS وGDAL وGRASS.</p>
+  <div class="two">
+    <div class="card"><h4>مجاني فعلًا</h4><p>رخصة GPL مفتوحة المصدر. مفيش نسخة تجريبية ولا ميزات مقفولة ولا حساب.</p></div>
+    <div class="card"><h4>بيشتغل من غير إنترنت</h4><p>الشغل الأساسي كله أوفلاين. الإنترنت بس لخرائط الأساس والبيانات المفتوحة والتحديثات.</p></div>
+    <div class="card"><h4>جاي من ArcGIS؟</h4><p>بيفتح مشاريع ArcGIS Pro وملفات ArcMap ‏(mxd) وFile Geodatabase، واكتب اسم أي أداة من ArcGIS في البحث يوصلك للمقابل.</p></div>
+    <div class="card"><h4>معمول لشغلنا</h4><p>أوتوكاد، COGO، تقسيم أراضي، Excel لنقاط، لوحة خريطة عربية، وتقرير ساعات الشغل.</p></div>
+  </div>
+
+  <h3>محتويات الدليل</h3>
+  <ol class="toc">
+    <li><span>1</span>إيه هو Biruni GIS؟</li>
+    <li><span>2</span>التثبيت وأول تشغيل</li>
+    <li><span>3</span>الواجهة: الشريط والبحث</li>
+    <li><span>4</span>المشروع = مجلد</li>
+    <li><span>5</span>فتح بياناتك ومشاريع ArcGIS</li>
+    <li><span>6</span>من Excel لنقاط</li>
+    <li><span>7</span>الأوتوكاد والمساحة</li>
+    <li><span>8</span>البيانات المفتوحة</li>
+    <li><span>9</span>صندوق الأدوات والتحليل</li>
+    <li><span>10</span>التحرير وجودة البيانات</li>
+    <li><span>11</span>لوحة الخريطة والمشاركة</li>
+    <li><span>12</span>GPS الموبايل والعمل الميداني</li>
+    <li><span>13</span>أمان الشغل وتقارير الساعات</li>
+    <li><span>14</span>قاموس ArcGIS ← Biruni</li>
+    <li><span>15</span>أسئلة شائعة</li>
+  </ol>
+</section>
+
+<!-- ============ 2. install ============ -->
+<section>
+  <h2><span class="n">2</span>التثبيت وأول تشغيل</h2>
+  <p class="lead">محتاج Windows 10 أو 11 (‏64 بت) وحوالي 2.5 جيجا مساحة فاضية.</p>
+  <ol class="steps">
+    <li>حمّل ملف التثبيت <code>Biruni-GIS-0.2.0-Setup.exe</code> من الرابط الرسمي اللي بننشره على صفحة البرنامج.</li>
+    <li>شغّل الملف وكمّل خطوات التثبيت (لغة المثبّت عربي أو إنجليزي).</li>
+    <li>افتح <b>Biruni GIS</b> من قائمة ابدأ أو من أيقونة سطح المكتب.</li>
+  </ol>
+  <div class="warn"><b>لو ظهرت رسالة «Windows protected your PC»:</b> دي بتظهر لأي برنامج جديد لسه ما اتوقّعش رقميًا. اضغط <b>More info</b> وبعدين <b>Run anyway</b>. التوقيع الرقمي جاي في إصدار قريب، وساعتها الرسالة دي هتختفي.</div>
+  <div class="note"><b>البرنامج مستقل:</b> ليه إعداداته الخاصة في مجلد <code>%APPDATA%\Biruni GIS</code>، ومش بيلمس أي QGIS متثبّت عندك.</div>
+
+  <h3>صفحة البداية</h3>
+  <p>أول ما البرنامج يفتح هتلاقي صفحة البداية. منها تقدر تعمل <span class="ui">مشروع جديد</span> أو <span class="ui">خريطة مؤقتة</span> تبدأ فيها على طول، وتفتح مشروع محفوظ أو أي ملف بيانات أو <span class="ui">مشروع ArcGIS</span>، أو تحوّل جدول Excel لنقاط، أو تتدرّب على <span class="ui">خريطة تجريبية</span> للعالم. وتحت الصفحة بتختار اللغة (العربية / English) والوضع اللوني (فاتح / داكن / زي الويندوز).</p>
+  <figure><img src="images/start.png" alt="" style="width:92%"><figcaption>صفحة البداية بالعربي</figcaption></figure>
+</section>
+
+<!-- ============ 3. interface ============ -->
+<section>
+  <h2><span class="n">3</span>الواجهة: الشريط والبحث</h2>
+  <p class="lead">كل الأوامر متقسّمة على تبويبات فوق، وكل تبويب فيه مجموعات — زي ArcGIS Pro بالظبط.</p>
+  <figure><img src="images/ribbon_home.png" alt="" style="width:90%"><figcaption>تبويب «الرئيسية»: المشروع، التنقل، الطبقات، التحديد، الاستعلام</figcaption></figure>
+  <table>
+    <tr><th style="width:24%">التبويب</th><th>فيه إيه</th></tr>
+    <tr><td><span class="ui">الرئيسية</span></td><td>المشروع، التكبير والتصغير، إضافة بيانات، خريطة أساس، التحديد، تعريف، قياس، جدول السمات، تعلّم.</td></tr>
+    <tr><td><span class="ui">البيانات</span></td><td>إضافة كل أنواع البيانات، Excel / CSV إلى نقاط، البيانات المفتوحة، من الكاد إلى GIS، الإسناد الجغرافي، التصدير، GPS الهاتف.</td></tr>
+    <tr><td><span class="ui">تحرير</span></td><td>جلسة التحرير، إضافة معلم، أداة الرؤوس، تقسيم ودمج، الالتقاط، أدوات CAD، حاسبة الحقول، قواعد الخصائص، COGO وتقسيم الأراضي.</td></tr>
+    <tr><td><span class="ui">التحليل</span></td><td>صندوق الأدوات، نطاق عازل، اقتطاع، إذابة، تقاطع، ربط مكاني، أقرب منشأة، حاسبة الشبكيات، مصمم النماذج.</td></tr>
+    <tr><td><span class="ui">الجودة</span></td><td>افحص بياناتي، التداخلات والفراغات، فحص وإصلاح الأشكال، قواعد الطوبولوجيا.</td></tr>
+    <tr><td><span class="ui">المشاركة</span></td><td>لوحة خريطة، التخطيطات، تصدير صورة / PDF / DXF، خريطة ويب، Google Earth، إرسال للميدان، التقارير.</td></tr>
+    <tr><td><span class="ui">عرض</span></td><td>اللوحات، ملء الشاشة، الوضع اللوني، اللغة، القوائم الكلاسيكية، الخيارات، المساعدة.</td></tr>
+    <tr><td><span class="ui">الإضافات</span></td><td>مدير الإضافات، وأي إضافة QGIS بتثبّتها بيظهر لها زرار هنا.</td></tr>
+  </table>
+  <h3>البحث في كل حاجة <kbd>Ctrl+K</kbd></h3>
+  <p>خانة البحث فوق على الشمال بتدوّر في الأدوات والطبقات والأماكن والإعدادات. <b>اكتب اسم الأداة زي ما تعرفها من ArcGIS</b> (مثلًا <code>Erase</code> أو <code>XY Table To Point</code>) وهيوصلك للأداة المقابلة.</p>
+  <h3>اللغة والشكل</h3>
+  <ul>
+    <li><b>اللغة:</b> من أيقونة اللغة فوق أو <span class="ui">عرض ← اللغة</span>. البرنامج بيطلب إعادة تشغيل مرة واحدة.</li>
+    <li><b>الوضع اللوني:</b> فاتح أو داكن أو يمشي مع إعداد الويندوز.</li>
+    <li><b>متعوّد على QGIS؟</b> زرار <span class="ui">القوائم الكلاسيكية</span> بيرجّع قوائم QGIS الأصلية، وأيقونة <span class="ui">كل القوائم</span> (☰) بتفتح أي قائمة من غير ما تسيب الشريط.</li>
+    <li><b>صغّر الشريط:</b> دبل كليك على اسم أي تبويب.</li>
+  </ul>
+</section>
+
+<!-- ============ 4. project ============ -->
+<section>
+  <h2><span class="n">4</span>المشروع = مجلد</h2>
+  <p class="lead">المشروع الجديد في Biruni مجلد واحد فيه كل حاجة، فبتنقله أو تبعته من غير ما ملفات تضيع.</p>
+  <table>
+    <tr><th style="width:36%">جوّه مجلد المشروع</th><th>وظيفته</th></tr>
+    <tr><td><code>&lt;الاسم&gt;.qgz</code></td><td>ملف المشروع (الخريطة والطبقات والتنسيق) — بيتفتح كمان في QGIS.</td></tr>
+    <tr><td><code>&lt;الاسم&gt;.gpkg</code></td><td>قاعدة بيانات المشروع: أي طبقة جديدة أو مؤقتة بتتحفظ هنا.</td></tr>
+    <tr><td><code>data</code> · <code>outputs</code> · <code>exports</code></td><td>البيانات الداخلة، ونتائج الأدوات، والملفات المصدّرة.</td></tr>
+    <tr><td><code>.history</code></td><td>نسخ المشروع القديمة (سجل نسخ المشروع).</td></tr>
+  </table>
+  <ul>
+    <li><kbd>Ctrl+N</kbd> مشروع جديد: تختار اسم ومكان والبرنامج يعمل المجلد.</li>
+    <li><span class="ui">خريطة مؤقتة</span>: ابدأ على طول من غير حفظ، ولما تحب تحفظها <kbd>Ctrl+S</kbd> بيحوّلها لمجلد مشروع.</li>
+    <li><span class="ui">نسخ كل البيانات إلى المشروع</span>: لو ضفت ملفات من أماكن تانية على الجهاز، بينسخها جوّه المجلد.</li>
+    <li><span class="ui">حفظ الطبقات المؤقتة</span>: بينقل أي طبقة مؤقتة لقاعدة بيانات المشروع قبل ما تضيع.</li>
+    <li><span class="ui">حزم المشروع كملف ZIP</span>: ملف واحد تبعته لزميلك أو للعميل.</li>
+  </ul>
+
+  <section class="cont">
+  <h3>سجل نسخ المشروع — «آلة الزمن»</h3>
+  <p>كل مرة تحفظ فيها بيتعمل نسخة من ملف المشروع وقاعدة بياناته. من <span class="ui">الرئيسية ← سجل نسخ المشروع</span> ترجّع المشروع زي ما كان من ساعة أو يوم أو أسبوع.</p>
+  <ul>
+    <li>بيحتفظ بكل النسخ لآخر 24 ساعة، وبعدين نسخة كل يوم لمدة 30 يوم، وبعدها نسخة كل أسبوع.</li>
+    <li>قبل الاسترجاع بيحفظ الحالة الحالية كنسخة، يعني ولا حاجة بتضيع.</li>
+    <li>ملفات مجلد <code>data</code> مش بتتنسخ لأنها بيانات داخلة وممكن تكون كبيرة.</li>
+  </ul>
+  </section>
+</section>
+
+<!-- ============ 5. open data / arcgis ============ -->
+<section>
+  <h2><span class="n">5</span>فتح بياناتك ومشاريع ArcGIS</h2>
+  <p class="lead">زرار <span class="ui">إضافة بيانات</span> بيفتح أي صيغة تقريبًا: Shapefile وGeoPackage وFile Geodatabase وDXF/DWG وCSV وGeoTIFF وKML، وكمان PostGIS وWMS/WMTS وWFS وبلاطات XYZ.</p>
+  <figure><img src="images/ribbon_data.png" alt="" style="width:64%"><figcaption>تبويب «البيانات»</figcaption></figure>
+  <h3>مشاريع ArcGIS Pro وArcMap</h3>
+  <p>من <span class="ui">البيانات ← فتح مشروع ArcGIS</span> أو من صفحة البداية. البرنامج بيفتح ملفات <code>.aprx</code> و<code>.mapx</code> و<code>.lyrx</code> بالطبقات والمجموعات والألوان والتسميات (Labels) وشروط العرض (Definition Queries)، وبيوصّلها بالبيانات اللي بتشاور عليها.</p>
+  <p><b>File Geodatabase:</b> بيقراها ويكتب فيها كمان، فتقدر ترجّع شغلك لزميل شغّال على ArcGIS.</p>
+  <p><b>ملفات ArcMap بامتداد mxd</b> بتتفتح بنفس الزرار: الإطارات ونظام الإحداثيات، والطبقات بترتيبها ومجموعاتها، والظاهر والمخفي، وشروط العرض، ومصادر البيانات (gdb وshp والرستر والكاد).</p>
+  <div class="warn"><b>ألوان ورموز ملفات mxd ما بتتنقلش</b> (صيغتها مقفولة): الطبقات بتيجي بالألوان الافتراضية. وطبقات الـ Annotation وخرائط Esri والسيرفرات بتتعدّى مع رسالة بالسبب.</div>
+</section>
+
+<!-- ============ 6. excel ============ -->
+<section class="cont">
+  <h2><span class="n">6</span>من Excel لنقاط</h2>
+  <p class="lead">عندك جدول فيه إحداثيات؟ <span class="ui">Excel / CSV إلى نقاط</span> بيلاقي أعمدة الإحداثيات لوحده — زي XY Table To Point في ArcGIS، بس من غير ما تحدّد الأعمدة بإيدك.</p>
+  <ol class="steps">
+    <li>من <span class="ui">البيانات ← Excel / CSV إلى نقاط</span> اختار الملف (xlsx أو csv).</li>
+    <li>البرنامج بيتعرّف على شكل الإحداثيات لوحده، وتقدر تراجع اختياره قبل الإضافة.</li>
+    <li>اضغط إضافة، وهتلاقي النقط على الخريطة ومعاها كل أعمدة الجدول.</li>
+  </ol>
+  <table>
+    <tr><th style="width:40%">شكل الإحداثيات</th><th>مثال</th></tr>
+    <tr><td>درجات عشرية</td><td><code>30.0444 , 31.2357</code></td></tr>
+    <tr><td>درجات ودقائق وثواني</td><td><code>30°02'40"N 31°14'09"E</code></td></tr>
+    <tr><td>UTM</td><td>شرقيات وشماليات + المنطقة</td></tr>
+    <tr><td>روابط الخرائط</td><td>لينك Google Maps أو لوكيشن واتساب</td></tr>
+    <tr><td>أرقام وعناوين عربي</td><td>٣٠٫٠٤٤٤ — وعناوين أعمدة زي «خط العرض»</td></tr>
+  </table>
+  <p><b>محوّل الإحداثيات</b> (<span class="ui">الرئيسية ← الإحداثيات</span>): اكتب إحداثي بأي شكل (درجات، DMS، UTM، MGRS، لينك خريطة) وهيظهر لك بكل الأشكال التانية. تقدر تروح له على الخريطة أو تحفظه نقطة.</p>
+</section>
+
+<!-- ============ 7. CAD & survey ============ -->
+<section>
+  <h2><span class="n">7</span>الأوتوكاد والمساحة</h2>
+  <p class="lead">أدوات معمولة للمساحين: من رسمة الكاد لطبقات GIS نضيفة، وكمان رسم من الصك أو دفتر الحقل.</p>
+  <h3>من الكاد إلى GIS</h3>
+  <p><span class="ui">البيانات ← من الكاد إلى GIS</span> بيحوّل ملف DXF لطبقات جاهزة:</p>
+  <ul>
+    <li>البولي لاين المقفولة بتبقى مضلعات (قطع أراضي، مباني).</li>
+    <li>النصوص بتبقى تسميات، والبلوكات بتبقى نقط ومعاها خصائصها.</li>
+    <li>الأقواس بتفضل أقواس حقيقية، والخطوط العربية من نوع SHX بتتقري صح.</li>
+  </ul>
+  <h3>النقل إلى الإحداثيات الحقيقية</h3>
+  <p>لو الرسمة مرسومة على إحداثيات محلية، <span class="ui">النقل إلى الإحداثيات الحقيقية</span> بيحرّكها بنقطتين، أو بتحويل هلمرت، أو بتحويل Affine.</p>
+  <h3>COGO — الانحرافات والمسافات</h3>
+  <p><span class="ui">تحرير ← COGO</span>: بتكتب نقطة البداية وبعدها الأضلاع (انحراف ومسافة، وتقدر تضيف نصف قطر للأقواس) وبتشوف الشكل على الخريطة وانت بتكتب. اللوحة بتحسب خطأ القفل والدقة، وبتوزّع الخطأ بطريقة البوصلة (Compass Rule). وتقدر تلزّق الأضلاع من Excel على طول.</p>
+  <h3>تقسيم قطعة أرض والترافرس</h3>
+  <ul>
+    <li><span class="ui">تقسيم قطعة أرض</span>: بيقسّم القطعة لأجزاء متساوية أو بمساحة محددة لكل جزء.</li>
+    <li><span class="ui">ترافرس من جدول</span>: بيرسم الترافرس من جدول انحرافات ومسافات.</li>
+    <li><span class="ui">المساحة والطول والإحداثيات</span>: بيضيف المساحة والطول وX/Y بأي وحدة، ومحسوبة على الإهليلج بقيمها الحقيقية.</li>
+  </ul>
+</section>
+
+<!-- ============ 8. open data ============ -->
+<section class="cont">
+  <h2><span class="n">8</span>البيانات المفتوحة</h2>
+  <p class="lead">بيانات مجانية لأي مكان في العالم في دقيقة: حدّد المنطقة على الخريطة واختار.</p>
+  <table>
+    <tr><th style="width:34%">الأداة</th><th>بتجيب إيه</th></tr>
+    <tr><td><span class="ui">OpenStreetMap…</span></td><td>مباني، طرق، أماكن، مياه، استعمالات أراضي، سكك حديد — من OpenStreetMap.</td></tr>
+    <tr><td><span class="ui">صورة قمر صناعي (Sentinel-2)…</span></td><td>صورة حديثة بدقة 10 م ومعاها مؤشر الغطاء النباتي NDVI.</td></tr>
+    <tr><td><span class="ui">الارتفاعات (DEM 30 م)…</span></td><td>نموذج ارتفاعات رقمي بدقة 30 م، ومعاه تظليل للتضاريس (Hillshade).</td></tr>
+    <tr><td><span class="ui">الغطاء الأرضي (10 م)…</span></td><td>تصنيف الغطاء الأرضي بدقة 10 م، ومعاه مساحة كل فئة.</td></tr>
+    <tr><td><span class="ui">الحدود الإدارية…</span></td><td>حدود الدول والمحافظات والمراكز.</td></tr>
+  </table>
+  <p>الأدوات دي في <span class="ui">البيانات ← بيانات مفتوحة</span>، وكمان في صندوق الأدوات. ولخلفية الخريطة (OpenStreetMap أو OpenTopoMap) استخدم زرار <span class="ui">خريطة أساس</span>. وللتدريب من غير إنترنت: <span class="ui">بيانات العالم التجريبية</span> بتضيف خريطة للعالم فيها الدول والمدن والأنهار والبحيرات.</p>
+</section>
+
+<!-- ============ 9. toolbox ============ -->
+<section>
+  <h2><span class="n">9</span>صندوق الأدوات والتحليل</h2>
+  <div class="side">
+    <div>
+      <p class="lead">صندوق Biruni فيه حوالي 125 أداة مختارة في 18 قسم، متقسّمة حسب الشغل اللي عايز تعمله بدل أسماء المكتبات.</p>
+      <ul>
+        <li>افتحه من <span class="ui">التحليل ← صندوق الأدوات</span>.</li>
+        <li>ابحث بالعربي أو بالإنجليزي، واختار الأداة تشوف وصفها قبل ما تفتحها.</li>
+        <li>الأدوات اللي بتستخدمها كتير بتظهر في المفضّلة وآخر المستخدَم.</li>
+        <li><span class="ui">كل الأدوات (QGIS)</span> بيفتح الكتالوج الكامل: حوالي 1370 أداة من QGIS وGDAL وGRASS وSAGA.</li>
+      </ul>
+      <h3>أقسام الصندوق</h3>
+      <p>المشروع · البيانات المفتوحة · الاستيراد · المساحة والكاد · التحويل · التراكب · القرب والمسافات · التحديد والاستخلاص · الربط والسمات · القياس والأشكال · الإحصاءات والأنماط · الجودة والطوبولوجيا · الشبكيات والتضاريس · الهيدرولوجي (المياه والأحواض) · الشبكات · GPS والعمل الميداني · المشاركة · الشبكات والخرائط.</p>
+      <h3>الهيدرولوجيا</h3>
+      <p>قسم <span class="ui">الهيدرولوجي (المياه والأحواض)</span> في الصندوق أوله أداة <span class="ui">المجاري والأحواض من نموذج الارتفاعات</span>: تديها نموذج الارتفاعات (مثلاً اللي نزّلته من <span class="ui">تنزيل الارتفاعات (DEM 30 م)</span>) وأقل مساحة تصريف بالكيلومتر المربع، وهي تملا الحُفَر وتطلّع شبكة المجاري بترتيب Strahler وطولها، والحوض الفرعي لكل مجرى بمساحته، وكمان طبقة تراكم السريان.</p>
+      <p>وفي نفس القسم أدوات GRASS وSAGA بأسماء مفهومة: ملء الحفر (<code>r.fill.dir</code> وWang &amp; Liu)، اتجاه السريان وتراكمه، استخراج المجاري، الحوض اللي فوق نقطة مخرج، مؤشر الرطوبة TWI، ومعامل LS لانجراف التربة. والـ 590 أداة بتوع SAGA كلهم في <span class="ui">كل الأدوات (QGIS)</span>.</p>
+    </div>
+    <figure style="margin:0"><img src="images/toolbox.png" alt="" style="max-height:150mm"><figcaption>صندوق الأدوات</figcaption></figure>
+  </div>
+  <h3>التحليل الأشهر في سطر</h3>
+  <table>
+    <tr><th style="width:30%">عايز تعمل</th><th>استخدم</th></tr>
+    <tr><td>نطاق حوالين معالم</td><td><span class="ui">نطاق عازل</span> (أو حلقات متعددة من الصندوق)</td></tr>
+    <tr><td>قص / تقاطع / اتحاد / طرح</td><td><span class="ui">اقتطاع</span> · <span class="ui">تقاطع</span> · <span class="ui">اتحاد</span> · <span class="ui">الفرق</span></td></tr>
+    <tr><td>نقل بيانات طبقة لطبقة بالموقع</td><td><span class="ui">ربط مكاني</span></td></tr>
+    <tr><td>أقرب مستشفى / مدرسة على الطرق</td><td><span class="ui">أقرب منشأة</span> · <span class="ui">مصفوفة المسافات (OD)</span> · <span class="ui">منطقة الخدمة</span> — مع الشوارع الاتجاه الواحد والسرعات</td></tr>
+    <tr><td>انحدار، تظليل، كنتور</td><td>قسم <span class="ui">الشبكيات والتضاريس</span> و<span class="ui">حاسبة الشبكيات</span></td></tr>
+    <tr><td>تكرار نفس الخطوات</td><td><span class="ui">مصمم النماذج</span> (زي ModelBuilder)</td></tr>
+  </table>
+</section>
+
+<!-- ============ 10. edit & quality ============ -->
+<section>
+  <h2><span class="n">10</span>التحرير وجودة البيانات</h2>
+  <figure><img src="images/ribbon_edit.png" alt="" style="width:88%"><figcaption>تبويب «تحرير»</figcaption></figure>
+  <ol class="steps">
+    <li>اختار الطبقة واضغط <span class="ui">تحرير</span> عشان تبدأ جلسة التحرير.</li>
+    <li>ارسم بـ <span class="ui">إضافة معلم</span>، وعدّل بـ <span class="ui">أداة الرؤوس</span>، وقسّم أو ادمج من مجموعة الأشكال.</li>
+    <li>شغّل <span class="ui">الالتقاط</span> و<span class="ui">التحرير الطوبولوجي</span> عشان الحدود المشتركة تتحرك مع بعض.</li>
+    <li>اضغط <span class="ui">حفظ التعديلات</span>. ولو غلطت عندك <span class="ui">تراجع</span>.</li>
+  </ol>
+  <h3>قواعد الخصائص (زي Domains وAttribute Rules)</h3>
+  <p><span class="ui">تحرير ← قواعد الخصائص</span>: لكل حقل تحدّد هو إجباري ولا لأ، ولازم يكون مش متكرر ولا لأ، ولو ليه قائمة قيم مسموحة أو مدى أرقام. وكمان قيم بتتملي لوحدها: المساحة، الطول، X/Y، تاريخ النهارده، اسم المستخدم، الرقم التالي. القواعد بتتحفظ مع المشروع وبتشتغل كمان في QField.</p>
+  <h3>تبويب الجودة</h3>
+  <figure><img src="images/ribbon_quality.png" alt="" style="width:80%"></figure>
+  <ul>
+    <li><span class="ui">افحص بياناتي</span>: فحص واحد لكل طبقات المشروع. بيطلّع الطبقات المكسورة، ونظام الإحداثيات الناقص أو المختلف، والأشكال الغلط أو الفاضية أو المكررة، والشرايح الرفيعة، والتداخلات، والحقول الفاضية. الإصلاحات الآمنة بتتعمل في جلسة تحرير، فتراجعها قبل ما تحفظ.</li>
+    <li><span class="ui">التداخلات والفراغات</span>: بيطلّع أماكن تداخل القطع والفراغات اللي بينها كطبقة تقدر تراجعها.</li>
+    <li><span class="ui">قواعد الطوبولوجيا</span>: قواعد زي «ما يتداخلش» و«ما يكونش فيه فراغات» و«لازم يكون جوّه»، وكل خطأ ليه مكانه على الخريطة.</li>
+    <li><span class="ui">فحص الصلاحية</span> و<span class="ui">إصلاح الأشكال</span> و<span class="ui">إزالة المكرر</span>.</li>
+  </ul>
+</section>
+
+<!-- ============ 11. map sheet & share ============ -->
+<section>
+  <h2><span class="n">11</span>لوحة الخريطة والمشاركة</h2>
+  <p class="lead"><span class="ui">المشاركة ← لوحة خريطة</span>: لوحة جاهزة للطباعة بضغطة واحدة — إطار بإحداثيات، وسهم شمال، ومقياس رسم، ومفتاح للخريطة، وبيانات اللوحة. ولو محدّد قطعة أرض، بيضيف جدول إحداثيات الأركان.</p>
+  <figure><img src="images/mapsheet.png" alt="" style="width:80%"><figcaption>لوحة خريطة عربية متعملة بضغطة واحدة</figcaption></figure>
+  <ul>
+    <li>اللوحة العربية بتطلع من اليمين للشمال وبالأرقام العربية، والإنجليزية من الشمال لليمين.</li>
+    <li>لو محتاج تحكّم كامل: <span class="ui">تخطيط جديد</span> بيفتح محرّر التخطيطات بتاع QGIS.</li>
+    <li>التصدير: <span class="ui">صورة</span> · <span class="ui">PDF</span> · <span class="ui">DXF</span> للأوتوكاد.</li>
+  </ul>
+  <h3>انشر شغلك</h3>
+  <div class="two">
+    <div class="card"><h4>خريطة ويب</h4><p>ملف HTML واحد بيتفتح في أي متصفح، حتى على الموبايل، ومن غير سيرفر. ابعته على واتساب أو بالإيميل.</p></div>
+    <div class="card"><h4>Google Earth ‏(KMZ)</h4><p>طبقاتك بألوانها في ملف KMZ واحد للعميل.</p></div>
+    <div class="card"><h4>إرسال للميدان (QField)</h4><p>نسخة من المشروع لتطبيق QField المجاني على أندرويد وآيفون، تشتغل من غير نت ومعاها خريطة أساس أوفلاين.</p></div>
+    <div class="card"><h4>استرجاع من الميدان</h4><p>بيقارن الشغل اللي رجع: الإضافات والتعديلات والحذف ولو فيه تعارض، وتراجعه قبل ما تحفظه.</p></div>
+  </div>
+</section>
+
+<!-- ============ 12. GPS ============ -->
+<section>
+  <h2><span class="n">12</span>GPS الموبايل والعمل الميداني</h2>
+  <p class="lead"><span class="ui">البيانات ← GPS الهاتف</span>: موبايلك جنب اللابتوب يبقى جهاز GPS، والمكان والمسار بيظهروا على الخريطة على طول.</p>
+  <ol class="steps">
+    <li>الموبايل واللابتوب على نفس شبكة الواي فاي.</li>
+    <li>على أندرويد: تطبيق <b>GPSd Forwarder</b>. على آيفون: <b>GPS2IP</b>. ابعت منه بيانات NMEA للعنوان والبورت اللي ظاهرين في اللوحة.</li>
+    <li>اضغط اتصال، وبعدها تسجيل.</li>
+  </ol>
+  <p>التسجيل بيتحفظ في المشروع كنقط، وخط مسار عليه المسافة والسرعة، وأماكن الوقوف. وينفع كمان التوصيل بالبلوتوث أو USB أو بجهاز GNSS خارجي.</p>
+  <div class="note"><b>تجريبي — من غير تطبيق:</b> اختار «متصفح الهاتف» وامسح كود QR بكاميرا الموبايل، والمتصفح يبعت المكان على طول.</div>
+  <p><span class="ui">استيراد مسار GPS</span>: بيحلّل ملف GPX موجود — المسافة، والسرعات، والوقفات.</p>
+
+  <section class="cont">
+  <h2><span class="n">13</span>أمان الشغل وتقارير الساعات</h2>
+  <p class="lead">البرنامج بيسجّل شغلك على المشروع لوحده: الوقت والتعديلات والأدوات.</p>
+  <ul>
+    <li><span class="ui">تقرير النشاط</span>: ملف Excel فيه جلسات الشغل، والوقت الفعلي، والمعالم اللي اتضافت أو اتعدّلت أو اتحذفت لكل طبقة ولكل يوم، والأدوات اللي اشتغلت، ومعاه رسوم بيانية.</li>
+    <li><span class="ui">كشف الساعات</span>: ساعات الشغل الفعلية لكل يوم، واللي اتعمل فيه، والمبلغ بسعر الساعة بتاعك، في شيت Excel جاهز للعميل.</li>
+    <li><span class="ui">سجل نسخ المشروع</span>: ارجع لأي نسخة قديمة (شوف الجزء 4). سجل النشاط نفسه عمره ما بيرجع لورا.</li>
+  </ul>
+  <h3>اتعلّم جوّه البرنامج</h3>
+  <div class="side">
+    <div>
+      <p><span class="ui">الرئيسية ← تعلّم</span> بيفتح لوحة فيها 7 دروس قصيرة، كل درس خطوات بزراير بتعملها معاك:</p>
+      <ol>
+        <li>خريطتك الأولى</li><li>اسأل البيانات سؤال</li><li>نسّق خريطة</li><li>نقاط من Excel</li>
+        <li>خريطة جاهزة للطباعة</li><li>حافظ على شغلك</li><li>بيانات من الإنترنت</li>
+      </ol>
+      <p>وفي تبويب <b>ArcGIS ← البيروني</b> قاموس فيه حوالي 90 أداة من ArcGIS والمقابل بتاعها هنا.</p>
+    </div>
+    <figure style="margin:0"><img src="images/learn.png" alt=""><figcaption>لوحة «تعلّم»</figcaption></figure>
+  </div>
+  </section>
+</section>
+
+<!-- ============ 14. dictionary ============ -->
+<section>
+  <h2><span class="n">14</span>قاموس ArcGIS ← Biruni</h2>
+  <p class="lead">الأسماء اللي تعرفها، والمقابل بتاعها في الواجهة العربية.</p>
+  <table class="dense">
+    <tr><th style="width:34%">في ArcGIS Pro</th><th>في Biruni GIS</th></tr>
+    <tr><td>Contents pane</td><td>لوحة <span class="ui">الطبقات</span></td></tr>
+    <tr><td>Catalog pane</td><td>لوحة <span class="ui">المستعرض</span></td></tr>
+    <tr><td>Geoprocessing pane</td><td><span class="ui">صندوق الأدوات</span></td></tr>
+    <tr><td>Symbology pane</td><td>لوحة <span class="ui">التنسيق</span></td></tr>
+    <tr><td>Attribute Table</td><td><span class="ui">جدول السمات</span></td></tr>
+    <tr><td>Feature Class</td><td>طبقة متجهية (في قاعدة بيانات المشروع GeoPackage)</td></tr>
+    <tr><td>File Geodatabase</td><td>GeoPackage للمشروع — وFile Geodatabase بيتقري ويتكتب برضه</td></tr>
+    <tr><td>Select By Attributes / Location</td><td>تحديد <span class="ui">حسب السمات</span> / <span class="ui">حسب الموقع</span></td></tr>
+    <tr><td>Calculate Field</td><td><span class="ui">حاسبة الحقول</span></td></tr>
+    <tr><td>Calculate Geometry Attributes</td><td><span class="ui">المساحة والطول والإحداثيات</span></td></tr>
+    <tr><td>XY Table To Point</td><td><span class="ui">Excel / CSV إلى نقاط</span></td></tr>
+    <tr><td>Buffer · Clip · Intersect · Union</td><td><span class="ui">نطاق عازل</span> · <span class="ui">اقتطاع</span> · <span class="ui">تقاطع</span> · <span class="ui">اتحاد</span></td></tr>
+    <tr><td>Erase · Dissolve · Merge</td><td><span class="ui">الفرق</span> · <span class="ui">إذابة</span> · <span class="ui">دمج الطبقات</span></td></tr>
+    <tr><td>Spatial Join · Project</td><td><span class="ui">ربط مكاني</span> · <span class="ui">إعادة الإسقاط</span></td></tr>
+    <tr><td>Domains / Attribute Rules</td><td><span class="ui">قواعد الخصائص</span></td></tr>
+    <tr><td>Topology</td><td><span class="ui">قواعد الطوبولوجيا</span></td></tr>
+    <tr><td>Georeference</td><td><span class="ui">الإسناد الجغرافي</span></td></tr>
+    <tr><td>Layout</td><td><span class="ui">لوحة خريطة</span> (سريعة) أو <span class="ui">تخطيط جديد</span></td></tr>
+    <tr><td>ModelBuilder</td><td><span class="ui">مصمم النماذج</span></td></tr>
+    <tr><td>Raster Calculator</td><td><span class="ui">حاسبة الشبكيات</span></td></tr>
+    <tr><td>Closest Facility · OD Cost Matrix · Service Area</td><td><span class="ui">أقرب منشأة</span> · <span class="ui">مصفوفة المسافات (OD)</span> · <span class="ui">منطقة الخدمة</span></td></tr>
+    <tr><td>Editor Tracking</td><td><span class="ui">تقرير النشاط</span> (وأكتر منه)</td></tr>
+    <tr><td>Package Project</td><td><span class="ui">حزم المشروع كملف ZIP</span></td></tr>
+    <tr><td>Field Maps</td><td><span class="ui">إرسال للميدان</span> (QField)</td></tr>
+    <tr><td>Python window</td><td><span class="ui">طرفية بايثون</span></td></tr>
+  </table>
+  <div class="tip"><b>مش لاقي أداة؟</b> اكتب اسمها بالإنجليزي زي ما هو في ArcGIS في خانة البحث <kbd>Ctrl+K</kbd>.</div>
+</section>
+
+<!-- ============ 15. FAQ ============ -->
+<section>
+  <h2><span class="n">15</span>أسئلة شائعة</h2>
+  <h3>البرنامج مجاني فعلًا؟ فيه اشتراك بعدين؟</h3>
+  <p>مجاني بالكامل ومفتوح المصدر برخصة GPL. مفيش اشتراك ولا حساب ولا ميزات مقفولة.</p>
+  <h3>بيعمل تحليلات ولا عرض بس؟</h3>
+  <p>تحليلات كاملة: تراكب، وقرب ومسافات، وإحصاءات، وشبكات طرق، وتضاريس ورستر، وطوبولوجيا — حوالي 790 أداة.</p>
+  <h3>هل بيفتح ملفات ArcMap ‏(mxd)؟</h3>
+  <p>أيوه، بالطبقات والمجموعات وشروط العرض ومصادر البيانات، بس بالألوان الافتراضية (رموز ملفات mxd بصيغة مقفولة). ومشاريع ArcGIS Pro ‏(‎.aprx / ‎.mapx / ‎.lyrx) بتتفتح بألوانها وتسمياتها كمان.</p>
+  <h3>بيفتح صور ECW وMrSID؟</h3>
+  <p>مش جاية مع البرنامج، لأن رخصتها بتمنع توزيعها مع برامج الديسك توب. حوّلها لـ GeoTIFF، أو ضيف الدعم بنفسك لو معاك رخصة.</p>
+  <h3>محتاج إنترنت؟</h3>
+  <p>لأ للشغل العادي. الإنترنت مطلوب بس لخرائط الأساس والبيانات المفتوحة والتحقق من التحديثات.</p>
+  <h3>عندي QGIS متثبّت، هيحصل تعارض؟</h3>
+  <p>لأ. Biruni ليه إعداداته في مجلد لوحده، ومشاريعه (‎.qgz) بتتفتح في QGIS عادي.</p>
+  <h3>بيدعم إضافات QGIS؟</h3>
+  <p>أيوه، من <span class="ui">عرض ← الإضافات</span>، وأدوات الإضافة بتظهر في تبويب <span class="ui">الإضافات</span>.</p>
+  <h3>لقيت مشكلة، أعمل إيه؟</h3>
+  <p><span class="ui">عرض ← الإبلاغ عن مشكلة</span>: اكتب اللي حصل، والبرنامج يعمل ملف ZIP على سطح المكتب فيه بيانات النسخة والجهاز وآخر الرسائل (من غير بياناتك نفسها). ابعته لنا مع وصف المشكلة.</p>
+  <h3>إزاي أعرف إن فيه تحديث؟</h3>
+  <p><span class="ui">عرض ← البحث عن تحديثات</span>. والبرنامج بيبلّغك برسالة لما ينزل إصدار جديد، والتثبيت دايمًا بإيدك.</p>
+
+  <div class="tm">
+    <b>Biruni GIS 0.2.0</b> · مبني على QGIS · مفتوح المصدر (GNU GPL v2 أو أحدث).<br>
+    سُمّي البرنامج على اسم العالم <b>أبو الريحان البيروني</b> (973–1048)، اللي قاس نصف قطر الأرض من فوق جبل بزاوية انخفاض الأفق، ودي فكرة الشعار.<br>
+    الأسماء ArcGIS, Excel, AutoCAD, Windows, QGIS علامات تجارية لأصحابها. البرنامج مستقل، وغير تابع لهم ولا معتمد منهم.
+  </div>
+</section>
+
+</body>
+</html>

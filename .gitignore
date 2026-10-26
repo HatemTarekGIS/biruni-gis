@@ -1,0 +1,12 @@
+# engine binaries and downloads are not source
+/engine/
+/_downloads/
+/_vendor/
+/_tools/
+/_excluded_backup/
+/build/
+/dist/
+dist-build.log
+
+__pycache__/
+*.pyc

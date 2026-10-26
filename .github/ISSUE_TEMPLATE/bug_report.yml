@@ -1,0 +1,26 @@
+name: Problem report
+description: Something does not work as expected
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks! The fastest way: in Biruni GIS use **View ▸ Help ▸ Report a Problem** - it fills this in and
+        saves a report file to attach. شكرًا! أسرع طريقة: من داخل البرنامج «العرض ▸ المساعدة ▸ الإبلاغ عن مشكلة».
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened? / ماذا حدث؟
+      description: What you did, what you expected, what happened instead.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Biruni GIS version / الإصدار
+      placeholder: "0.2.0"
+  - type: textarea
+    id: report
+    attributes:
+      label: Report file / ملف التقرير
+      description: Drag the Biruni-GIS-report-*.zip here (it contains no map data).

@@ -1,0 +1,11 @@
+Visibility Analysis|6
+ta_lighting
+QgsProcessingParameterRasterLayer|ELEVATION|Elevation|None|False
+QgsProcessingParameterRasterDestination|VISIBILITY|Visibility|None|False
+QgsProcessingParameterEnum|METHOD|Output|[0] Visibility;[1] Shade;[2] Distance;[3] Size|False|3
+QgsProcessingParameterEnum|UNIT|Unit|[0] radians;[1] degree|False|1
+QgsProcessingParameterBoolean|CUMULATIVE|Cumulative|False
+QgsProcessingParameterBoolean|NODATA|Ignore No-Data|False
+QgsProcessingParameterFeatureSource|POINTS|Points|0|None|False
+QgsProcessingParameterField|HEIGHT|Height|None|POINTS|-1|False|False
+QgsProcessingParameterNumber|HEIGHT_DEFAULT|Default|QgsProcessingParameterNumber.Double|10.000000|False|0.000000|None

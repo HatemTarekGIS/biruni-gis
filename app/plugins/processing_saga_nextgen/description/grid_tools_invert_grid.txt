@@ -1,0 +1,4 @@
+Invert Grid|34
+grid_tools
+QgsProcessingParameterRasterLayer|GRID|Grid|None|False
+QgsProcessingParameterRasterDestination|INVERSE|Inverse Grid|None|True

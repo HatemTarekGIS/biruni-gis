@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>Biruni GIS poster</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=block" rel="stylesheet">
+<style>
+  :root { --bg1:#0b1f2a; --bg2:#0f2f3a; --teal:#1fc2ad; --teal2:#7fe3d4; --ink:#eef6f7; --muted:#a9c3c8; --card:rgba(255,255,255,.055); --line:rgba(127,227,212,.18); }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html, body { width:1080px; height:1350px; background:var(--bg1); }
+  body { font-family:'Cairo', 'Segoe UI', Tahoma, sans-serif; color:var(--ink); position:relative; overflow:hidden;
+         background: radial-gradient(1200px 700px at 85% -10%, #15505a 0%, transparent 60%), radial-gradient(900px 600px at 0% 110%, #12424c 0%, transparent 55%), linear-gradient(160deg, var(--bg2), var(--bg1)); }
+  .contours { position:absolute; inset:0; opacity:.16; pointer-events:none; }
+  .wrap { position:relative; padding:40px 60px 0; }
+  header { display:flex; align-items:center; gap:22px; }
+  header img { width:104px; height:104px; filter:drop-shadow(0 6px 18px rgba(31,194,173,.35)); }
+  .brand { display:flex; flex-direction:column; }
+  .name { font-family:'Segoe UI', 'Cairo', sans-serif; font-size:58px; font-weight:800; letter-spacing:.5px; line-height:1; direction:ltr; text-align:right; }
+  .name span { color:var(--teal); }
+  .tag { margin-top:8px; font-size:22px; color:var(--muted); font-weight:600; }
+  .free { margin-inline-start:auto; align-self:flex-start; background:var(--teal); color:#062a2a; font-weight:900; font-size:26px; padding:10px 26px; border-radius:40px; box-shadow:0 8px 24px rgba(31,194,173,.35); }
+  h1 { margin-top:24px; font-size:52px; line-height:1.25; font-weight:900; }
+  h1 em { font-style:normal; color:var(--teal); }
+  .sub { margin-top:8px; font-size:22px; line-height:1.6; color:#cfe2e5; font-weight:600; }
+  .shot { margin-top:22px; border-radius:16px; overflow:hidden; border:1px solid rgba(255,255,255,.12);
+          box-shadow:0 30px 60px rgba(0,0,0,.5), 0 0 0 6px rgba(31,194,173,.08); background:#111; }
+  .shot .bar { height:26px; background:#1b2a30; display:flex; gap:8px; align-items:center; padding:0 12px; direction:ltr; }
+  .shot .bar i { width:11px; height:11px; border-radius:50%; background:#ff5f57; display:block; }
+  .shot .bar i:nth-child(2){ background:#febc2e } .shot .bar i:nth-child(3){ background:#28c840 }
+  .shot img { display:block; width:100%; height:446px; object-fit:cover; object-position:top right; }
+  .grid { margin-top:22px; display:grid; grid-template-columns:1fr 1fr; gap:12px 16px; }
+  .f { display:flex; gap:14px; align-items:flex-start; background:var(--card); border:1px solid var(--line); border-radius:16px; padding:13px 16px; }
+  .f svg { flex:none; width:40px; height:40px; }
+  .f b { display:block; font-size:21px; font-weight:800; line-height:1.35; }
+  .f small { display:block; font-size:16px; white-space:nowrap; color:var(--muted); font-weight:600; line-height:1.5; margin-top:2px; }
+  .chips { margin-top:20px; display:flex; gap:12px; justify-content:center; flex-wrap:wrap; }
+  .chips span { font-size:20px; font-weight:700; padding:8px 20px; border-radius:30px; border:1.5px solid rgba(127,227,212,.45); color:var(--teal2); background:rgba(31,194,173,.07); }
+  .tm { position:absolute; bottom:72px; left:60px; right:60px; text-align:center; font-size:13.5px; color:#7f9ca2; font-weight:600; }
+  footer { position:absolute; bottom:0; left:0; right:0; height:64px; display:flex; align-items:center; justify-content:space-between; padding:0 60px;
+           background:rgba(0,0,0,.28); border-top:1px solid rgba(255,255,255,.08); font-size:18px; color:var(--muted); font-weight:600; }
+  footer .soon { color:var(--ink); font-weight:800; font-size:21px; }
+  footer .soon b { color:var(--teal); }
+</style>
+</head>
+<body>
+<svg class="contours" viewBox="0 0 1080 1350" preserveAspectRatio="none" aria-hidden="true">
+  <g fill="none" stroke="#7fe3d4" stroke-width="1.4">
+    <path d="M-40 210 C 180 140, 360 260, 560 200 S 900 120, 1120 190"/>
+    <path d="M-40 250 C 170 185, 370 305, 570 245 S 910 165, 1120 235"/>
+    <path d="M-40 290 C 160 230, 380 350, 580 290 S 920 210, 1120 280"/>
+    <path d="M-40 1060 C 200 1000, 420 1120, 640 1060 S 940 990, 1120 1050"/>
+    <path d="M-40 1100 C 210 1040, 430 1160, 650 1100 S 950 1030, 1120 1090"/>
+    <path d="M-40 1140 C 220 1080, 440 1200, 660 1140 S 960 1070, 1120 1130"/>
+  </g>
+</svg>
+
+<div class="wrap">
+  <header>
+    <img src="logo.png" alt="">
+    <div class="brand">
+      <div class="name">Biruni <span>GIS</span></div>
+      <div class="tag">برنامج نظم معلومات جغرافية للمكتب</div>
+    </div>
+    <div class="free">مجاني بالكامل</div>
+  </header>
+
+  <h1>شغل الـ GIS كله…<br><em>بالعربي، ومن غير اشتراك</em></h1>
+  <p class="sub">واجهة حديثة ببساطة الشريط اللي متعوّد عليه، بالعربي والإنجليزي،<br>ومبني على محرّك QGIS العالمي المجرَّب.</p>
+
+  <div class="shot"><div class="bar"><i></i><i></i><i></i></div><img src="shot.png" alt=""></div>
+
+  <div class="grid">
+    <div class="f">
+      <svg viewBox="0 0 40 40"><rect x="2" y="2" width="36" height="36" rx="10" fill="#1fc2ad" opacity=".16"/><path d="M11 13h12l6 6v8a2 2 0 0 1-2 2H11a2 2 0 0 1-2-2V15a2 2 0 0 1 2-2z" fill="none" stroke="#1fc2ad" stroke-width="2.4" stroke-linejoin="round"/><path d="M14 22h12M14 26h8" stroke="#1fc2ad" stroke-width="2.4" stroke-linecap="round"/></svg>
+      <div><b>بيفتح طبقات مشاريع ArcGIS Pro</b><small>بطبقاته وألوانه، ويكتب File Geodatabase</small></div>
+    </div>
+    <div class="f">
+      <svg viewBox="0 0 40 40"><rect x="2" y="2" width="36" height="36" rx="10" fill="#1fc2ad" opacity=".16"/><rect x="9" y="10" width="22" height="20" rx="2" fill="none" stroke="#1fc2ad" stroke-width="2.4"/><path d="M9 17h22M9 23h22M17 10v20" stroke="#1fc2ad" stroke-width="2"/></svg>
+      <div><b>من Excel لنقاط على الخريطة</b><small>درجات، UTM، لينك جوجل ماب… بيفهمها لوحده</small></div>
+    </div>
+    <div class="f">
+      <svg viewBox="0 0 40 40"><rect x="2" y="2" width="36" height="36" rx="10" fill="#1fc2ad" opacity=".16"/><path d="M10 29 L16 12 L24 20 L30 11" fill="none" stroke="#1fc2ad" stroke-width="2.4" stroke-linejoin="round"/><circle cx="10" cy="29" r="2.6" fill="#1fc2ad"/><circle cx="16" cy="12" r="2.6" fill="#1fc2ad"/><circle cx="24" cy="20" r="2.6" fill="#1fc2ad"/><circle cx="30" cy="11" r="2.6" fill="#1fc2ad"/></svg>
+      <div><b>من الأوتوكاد للـ GIS</b><small>COGO، تقسيم أراضي، وإحداثيات حقيقية</small></div>
+    </div>
+    <div class="f">
+      <svg viewBox="0 0 40 40"><rect x="2" y="2" width="36" height="36" rx="10" fill="#1fc2ad" opacity=".16"/><circle cx="20" cy="20" r="10" fill="none" stroke="#1fc2ad" stroke-width="2.4"/><path d="M10 20h20M20 10c4 4 4 16 0 20M20 10c-4 4-4 16 0 20" fill="none" stroke="#1fc2ad" stroke-width="2"/></svg>
+      <div><b>بيانات مفتوحة بضغطة</b><small>OSM، صور Sentinel-2، ارتفاعات 30 م</small></div>
+    </div>
+    <div class="f">
+      <svg viewBox="0 0 40 40"><rect x="2" y="2" width="36" height="36" rx="10" fill="#1fc2ad" opacity=".16"/><rect x="9" y="9" width="22" height="22" rx="2" fill="none" stroke="#1fc2ad" stroke-width="2.4"/><path d="M13 26l5-7 4 4 5-8" fill="none" stroke="#1fc2ad" stroke-width="2.2" stroke-linejoin="round"/><path d="M27 12l-2 4h4z" fill="#1fc2ad"/></svg>
+      <div><b>لوحة خريطة جاهزة للطباعة</b><small>إطار وشمال ومقياس وإحداثيات… بضغطة</small></div>
+    </div>
+    <div class="f">
+      <svg viewBox="0 0 40 40"><rect x="2" y="2" width="36" height="36" rx="10" fill="#1fc2ad" opacity=".16"/><rect x="14" y="8" width="12" height="24" rx="3" fill="none" stroke="#1fc2ad" stroke-width="2.4"/><circle cx="20" cy="27" r="1.6" fill="#1fc2ad"/><path d="M20 13a4 4 0 0 1 0 8a4 4 0 0 1 0-8z" fill="none" stroke="#1fc2ad" stroke-width="2"/></svg>
+      <div><b>GPS الموبايل وأمان المشروع</b><small>مسار حيّ، وكل حفظة نسخة ترجع لها</small></div>
+    </div>
+  </div>
+
+  <div class="chips"><span>من غير حساب</span><span>الشغل الأساسي من غير إنترنت</span><span>عربي + English</span><span>Windows 10 / 11</span></div>
+</div>
+
+<div class="tm">الأسماء <bdi dir="ltr">ArcGIS, Excel, AutoCAD, Windows, QGIS</bdi> علامات تجارية لأصحابها. البرنامج مستقل، وغير تابع لهم ولا معتمد منهم.</div>
+
+<footer>
+  <div class="soon">التحميل المجاني <b>قريبًا</b> — تابعونا</div>
+  <div>مفتوح المصدر · مبني على QGIS</div>
+</footer>
+</body>
+</html>

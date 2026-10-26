@@ -1,0 +1,21 @@
+UTM Projection (Grid List)|23
+pj_proj4
+QgsProcessingParameterEnum|CRS_METHOD|Get CRS Definition from...|[0] Proj4 Parameters;[1] EPSG Code;[2] Well Known Text File|False|0
+QgsProcessingParameterString|CRS_PROJ4|Proj4 Parameters|
+QgsProcessingParameterFile|CRS_FILE|Well Known Text File|QgsProcessingParameterFile.File|None|False
+QgsProcessingParameterNumber|CRS_EPSG|Authority Code|QgsProcessingParameterNumber.Integer|-1|False|None|None
+QgsProcessingParameterString|CRS_EPSG_AUTH|Authority|EPSG
+QgsProcessingParameterMultipleLayers|SOURCE|Source|3|None|False
+QgsProcessingParameterEnum|RESAMPLING|Resampling|[0] Nearest Neighbour;[1] Bilinear Interpolation;[2] Bicubic Spline Interpolation;[3] B-Spline Interpolation|False|3
+QgsProcessingParameterBoolean|BYTEWISE|Bytewise Interpolation|False
+QgsProcessingParameterEnum|DATA_TYPE|Data Type|[0] unsigned 1 byte integer;[1] signed 1 byte integer;[2] unsigned 2 byte integer;[3] signed 2 byte integer;[4] unsigned 4 byte integer;[5] signed 4 byte integer;[6] unsigned 8 byte integer;[7] signed 8 byte integer;[8] 4 byte floating point number;[9] 8 byte floating point number;[10] Preserve|False|10
+QgsProcessingParameterBoolean|TARGET_AREA|Use Target Area Polygon|False
+Hardcoded|-TARGET_DEFINITION 0
+QgsProcessingParameterExtent|TARGET_USER_XMIN TARGET_USER_XMAX TARGET_USER_YMIN TARGET_USER_YMAX|Output extent|None|True
+QgsProcessingParameterNumber|TARGET_USER_SIZE|Cellsize|QgsProcessingParameterNumber.Double|100.0|False|None|None
+QgsProcessingParameterEnum|TARGET_USER_FITS|Fit|[0] nodes;[1] cells|False|0
+QgsProcessingParameterRasterDestination|GRIDS|Target|None|True
+QgsProcessingParameterRasterDestination|OUT_X|X Coordinates|None|True
+QgsProcessingParameterRasterDestination|OUT_Y|Y Coordinates|None|True
+QgsProcessingParameterNumber|UTM_ZONE|Zone|QgsProcessingParameterNumber.Integer|1|False|1|60
+QgsProcessingParameterBoolean|UTM_SOUTH|South|False

@@ -1,0 +1,5 @@
+Geographic Coordinate Grids|17
+pj_proj4
+QgsProcessingParameterRasterLayer|GRID|Grid|None|False
+QgsProcessingParameterRasterDestination|LON|Longitude|None|False
+QgsProcessingParameterRasterDestination|LAT|Latitude|None|False

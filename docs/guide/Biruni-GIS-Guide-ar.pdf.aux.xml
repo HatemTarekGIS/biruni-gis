@@ -1,0 +1,51 @@
+<PAMDataset>
+  <Subdataset name="Page 8">
+    <PAMDataset>
+      <Metadata domain="IMAGE_STRUCTURE">
+        <MDI key="INTERLEAVE">PIXEL</MDI>
+      </Metadata>
+    </PAMDataset>
+  </Subdataset>
+  <Subdataset name="Page 9">
+    <PAMDataset>
+      <Metadata domain="IMAGE_STRUCTURE">
+        <MDI key="INTERLEAVE">PIXEL</MDI>
+      </Metadata>
+    </PAMDataset>
+  </Subdataset>
+  <Subdataset name="Page 10">
+    <PAMDataset>
+      <Metadata domain="IMAGE_STRUCTURE">
+        <MDI key="INTERLEAVE">PIXEL</MDI>
+      </Metadata>
+    </PAMDataset>
+  </Subdataset>
+  <Subdataset name="Page 3">
+    <PAMDataset>
+      <Metadata domain="IMAGE_STRUCTURE">
+        <MDI key="INTERLEAVE">PIXEL</MDI>
+      </Metadata>
+    </PAMDataset>
+  </Subdataset>
+  <Subdataset name="Page 5">
+    <PAMDataset>
+      <Metadata domain="IMAGE_STRUCTURE">
+        <MDI key="INTERLEAVE">PIXEL</MDI>
+      </Metadata>
+    </PAMDataset>
+  </Subdataset>
+  <Subdataset name="Page 6">
+    <PAMDataset>
+      <Metadata domain="IMAGE_STRUCTURE">
+        <MDI key="INTERLEAVE">PIXEL</MDI>
+      </Metadata>
+    </PAMDataset>
+  </Subdataset>
+  <Subdataset name="Page 7">
+    <PAMDataset>
+      <Metadata domain="IMAGE_STRUCTURE">
+        <MDI key="INTERLEAVE">PIXEL</MDI>
+      </Metadata>
+    </PAMDataset>
+  </Subdataset>
+</PAMDataset>

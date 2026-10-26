@@ -1,0 +1,23 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.9.0.schema.json
+# Fill InstallerUrl when the GitHub release exists; InstallerSha256 comes from dist\*.sha256.
+PackageIdentifier: BiruniGIS.BiruniGIS
+PackageVersion: 0.2.0
+InstallerType: inno
+Scope: machine
+InstallModes:
+  - interactive
+  - silent
+  - silentWithProgress
+UpgradeBehavior: install
+FileExtensions:
+  - qgz
+  - qgs
+  - aprx
+  - mapx
+  - lyrx
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/HatemTarekGIS/biruni-gis/releases/download/v0.2.0/Biruni-GIS-0.2.0-Setup.exe
+    InstallerSha256: 1FAF3607B88A32E477AF6E7EC827479BB8D826B7AD6F4911B796C2EA0C7F7B7A
+ManifestType: installer
+ManifestVersion: 1.9.0

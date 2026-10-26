@@ -1,0 +1,25 @@
+Focal Statistics|1
+statistics_grid
+QgsProcessingParameterRasterLayer|GRID|Grid|None|False
+QgsProcessingParameterRasterDestination|MEAN|Mean Value|None|True
+QgsProcessingParameterRasterDestination|MIN|Minimum Value|None|True
+QgsProcessingParameterRasterDestination|MAX|Maximum Value|None|True
+QgsProcessingParameterRasterDestination|RANGE|Value Range|None|True
+QgsProcessingParameterRasterDestination|STDDEV|Standard Deviation|None|True
+QgsProcessingParameterRasterDestination|VARIANCE|Variance|None|True
+QgsProcessingParameterRasterDestination|SUM|Sum|None|True
+QgsProcessingParameterRasterDestination|DIFF|Difference from Mean Value|None|True
+QgsProcessingParameterRasterDestination|DEVMEAN|Deviation from Mean Value|None|True
+QgsProcessingParameterRasterDestination|PERCENT|Percentile|None|True
+QgsProcessingParameterRasterDestination|MEDIAN|Median|None|True
+QgsProcessingParameterRasterDestination|MINORITY|Minority|None|True
+QgsProcessingParameterRasterDestination|MAJORITY|Majority|None|True
+QgsProcessingParameterBoolean|BCENTER|Include Center Cell|True
+QgsProcessingParameterEnum|KERNEL_TYPE|Kernel Type|[0] Square;[1] Circle;[2] Annulus;[3] Sector|False|1
+QgsProcessingParameterNumber|KERNEL_INNER|Inner Radius|QgsProcessingParameterNumber.Integer|0|False|0|None
+QgsProcessingParameterNumber|KERNEL_RADIUS|Radius|QgsProcessingParameterNumber.Integer|2|False|0|None
+QgsProcessingParameterNumber|KERNEL_DIRECTION|Direction|QgsProcessingParameterNumber.Double|0.000000|False|-360.000000|360.000000
+QgsProcessingParameterNumber|KERNEL_TOLERANCE|Tolerance|QgsProcessingParameterNumber.Double|5.000000|False|0.000000|180.000000
+QgsProcessingParameterEnum|DW_WEIGHTING|Weighting Function|[0] no distance weighting;[1] inverse distance to a power;[2] exponential;[3] gaussian|False|0
+QgsProcessingParameterNumber|DW_IDW_POWER|Power|QgsProcessingParameterNumber.Double|2.000000|False|0.000000|None
+QgsProcessingParameterNumber|DW_BANDWIDTH|Bandwidth|QgsProcessingParameterNumber.Double|1.000000|False|0.000000|None

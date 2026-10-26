@@ -1,0 +1,8 @@
+Geodesic Morphological Reconstruction|12
+grid_filter
+QgsProcessingParameterRasterLayer|INPUT_GRID|Input Grid|None|False
+QgsProcessingParameterRasterDestination|DIFFERENCE_GRID|Morphological Reconstruction|None|False
+QgsProcessingParameterRasterDestination|OBJECT_GRID|Objects|None|True
+QgsProcessingParameterNumber|SHIFT_VALUE|Shift Value|QgsProcessingParameterNumber.Double|5.000000|False|None|None
+QgsProcessingParameterBoolean|BORDER_YES_NO|Preserve 1px border|True
+QgsProcessingParameterNumber|THRESHOLD|Threshold|QgsProcessingParameterNumber.Double|1.000000|False|0.000000|None

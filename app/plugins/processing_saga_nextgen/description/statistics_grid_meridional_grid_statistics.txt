@@ -1,0 +1,4 @@
+Meridional Grid Statistics|12
+statistics_grid
+QgsProcessingParameterRasterLayer|GRID|Grid|None|False
+QgsProcessingParameterVectorDestination|STATS|Meridional Statistics|5|None|False

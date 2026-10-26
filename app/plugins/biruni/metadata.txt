@@ -1,0 +1,14 @@
+[general]
+name=Biruni GIS
+qgisMinimumVersion=4.0
+qgisMaximumVersion=4.99
+description=Biruni GIS application shell: ribbon interface, start page, light/dark themes and English/Arabic UI.
+about=The user-interface layer of Biruni GIS, a free and open-source desktop GIS based on QGIS. Disabling it switches Biruni GIS back to the classic QGIS interface.
+version=0.1.0
+author=Biruni GIS contributors
+email=
+category=Plugins
+icon=resources/branding/logo.svg
+experimental=False
+deprecated=False
+supportsQt6=True

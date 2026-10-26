@@ -1,0 +1,8 @@
+Profile from Points|5
+ta_profiles
+QgsProcessingParameterRasterLayer|GRID|Elevation|None|False
+QgsProcessingParameterMultipleLayers|VALUES|Values|3|None|True
+QgsProcessingParameterFeatureSource|TABLE|Coordinates Table|5|None|False
+QgsProcessingParameterField|X|X Coordinate|None|TABLE|-1|False|False
+QgsProcessingParameterField|Y|Y Coordinate|None|TABLE|-1|False|False
+QgsProcessingParameterVectorDestination|RESULT|Profile|5|None|False

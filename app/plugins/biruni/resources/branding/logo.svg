@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <!-- Biruni GIS mark: Al-Biruni measured the Earth from a mountain top using the
+       dip angle between the horizontal and the line of sight to the horizon.
+       Shapes are pre-clipped to the rounded tile (Qt SVG has no clipPath). -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0B4F4A"/>
+      <stop offset="1" stop-color="#14A394"/>
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="58" fill="url(#bg)"/>
+  <!-- the Earth: circle c=(128,420) r=248 intersected with the tile -->
+  <path d="M0.8 207.6 A248 248 0 0 1 255.2 207.6 A58 58 0 0 1 198 256 L58 256 A58 58 0 0 1 0.8 207.6 Z"
+        fill="#FFFFFF" fill-opacity="0.14"/>
+  <path d="M6 204.1 A248 248 0 0 1 250 204.1" fill="none" stroke="#FFFFFF" stroke-opacity="0.85" stroke-width="7"/>
+  <!-- the mountain -->
+  <path d="M40 186 L92 92 L140 176 Z" fill="#FFFFFF"/>
+  <!-- horizontal reference -->
+  <line x1="92" y1="92" x2="226" y2="92" stroke="#FFFFFF" stroke-opacity="0.75" stroke-width="7"
+        stroke-linecap="round" stroke-dasharray="2 16"/>
+  <!-- line of sight to the horizon and the dip angle -->
+  <line x1="92" y1="92" x2="246" y2="196" stroke="#FBBF24" stroke-width="10" stroke-linecap="round"/>
+  <path d="M140 92 A48 48 0 0 1 131.8 118.9" fill="none" stroke="#FBBF24" stroke-width="7" stroke-linecap="round"/>
+  <circle cx="92" cy="92" r="11" fill="#FBBF24" stroke="#FFFFFF" stroke-width="5"/>
+</svg>

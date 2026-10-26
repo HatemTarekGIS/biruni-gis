@@ -1,0 +1,16 @@
+name: Idea / feature request
+description: A tool or improvement that would help your work
+labels: [enhancement]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What do you need to do? / ما الذي تحتاج إلى فعله؟
+      description: Describe the task in your work (survey, planning, utilities, study…), not only the button.
+    validations:
+      required: true
+  - type: textarea
+    id: today
+    attributes:
+      label: How do you do it today? / كيف تفعله اليوم؟
+      description: In ArcGIS, AutoCAD, Excel, by hand…
