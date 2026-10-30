@@ -1,0 +1,257 @@
+<!doctype html><html lang="en" dir="ltr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#F4F6F8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0E1114" media="(prefers-color-scheme: dark)">
+<meta name="color-scheme" content="light dark"><meta name="robots" content="noindex">
+<meta name="referrer" content="strict-origin-when-cross-origin"><title>Biruni GIS</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" integrity="sha512-h9FcoyWjHcOcmEVkxOfTLnmZFWIH0iZhZT1H2TbOq55xssQGEJHEaIm+PgoUaZbRvQTNTluNOEfb1ZRy6D3BOw==" crossorigin="anonymous" referrerpolicy="no-referrer">
+<style>
+:root{--bg:#F4F6F8;--card:#FFFFFF;--text:#14181D;--dim:#5F6B76;--line:#E1E6EB;--accent:#12A594;--ink:#FFFFFF;
+ --soft:#E1F4F1;--good:#12A36E;--fair:#C98A12;--poor:#D24B4B;--feat:#E8590C;--me:#2B7CF6;
+ --shadow:0 1px 2px rgba(16,24,32,.05),0 6px 20px rgba(16,24,32,.06)}
+@media (prefers-color-scheme:dark){:root{--bg:#0E1114;--card:#171B20;--text:#E8ECEF;--dim:#97A3AE;--line:#262C33;
+ --accent:#2CC5B4;--ink:#05201C;--soft:#11302C;--good:#3DD39A;--fair:#E8B04B;--poor:#F07070;--feat:#FF8A4C;--me:#4C93FF;
+ --shadow:none}
+ .leaflet-tile-pane{filter:brightness(.78) contrast(1.08) saturate(.85)}
+ .leaflet-container{background:#1B2026}
+ .leaflet-bar a,.leaflet-control-attribution{background:var(--card)!important;color:var(--text)!important;border-color:var(--line)!important}
+ .leaflet-control-attribution a{color:var(--accent)!important}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--text);height:100%}
+body{font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans Arabic","Noto Sans",Tahoma,sans-serif;
+ display:flex;flex-direction:column;height:100vh;height:100dvh;overflow:hidden;-webkit-font-smoothing:antialiased}
+.top svg,.card svg,.bad svg{width:1em;height:1em;flex:none}
+button{font:inherit;cursor:pointer}
+.top{display:flex;align-items:center;justify-content:space-between;gap:10px;z-index:5;
+ padding:calc(10px + env(safe-area-inset-top)) 16px 10px;background:var(--bg)}
+.brand{display:flex;align-items:center;gap:9px;font-weight:700;font-size:17px;letter-spacing:-.01em;min-width:0}
+.logo{width:30px;height:30px;border-radius:10px;background:var(--accent);color:var(--ink);display:grid;place-items:center;font-size:18px;flex:none}
+.tools{display:flex;gap:8px;align-items:center}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;padding:6px 11px;border-radius:999px;
+ background:var(--card);border:1px solid var(--line);color:var(--dim);white-space:nowrap}
+.pill svg{font-size:15px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--dim)}
+.dot.on{background:var(--good)}.dot.out{background:var(--fair)}.dot.off{background:var(--poor)}
+.dot.wait{background:var(--fair);animation:pulse 1.2s infinite}
+@keyframes pulse{50%{opacity:.3}}
+.banner{margin:0 16px 8px;padding:10px 13px;border-radius:14px;font-size:14px;line-height:1.45;
+ background:var(--card);border:1px solid var(--line);border-inline-start:4px solid var(--fair)}
+#map{flex:1;min-height:0;background:var(--line);z-index:1}
+.card{background:var(--card);border-top:1px solid var(--line);padding:14px 16px calc(14px + env(safe-area-inset-bottom));
+ box-shadow:0 -6px 20px rgba(16,24,32,.06);z-index:2}
+.card .in{max-width:560px;margin:0 auto}
+.lbl{font-size:13px;font-weight:600;color:var(--dim)}
+h1{font-size:20px;line-height:1.25;margin:2px 0 10px;letter-spacing:-.01em;display:-webkit-box;-webkit-line-clamp:2;
+ -webkit-box-orient:vertical;overflow:hidden}
+.where{display:flex;align-items:center;gap:11px;padding:11px 13px;border-radius:15px;background:var(--bg);
+ font-weight:700;font-size:16px;line-height:1.35;min-height:52px}
+.where .ic{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-size:17px;flex:none;
+ background:var(--line);color:var(--dim);transition:transform .35s}
+.where.in .ic{background:var(--good);color:#fff}.where.out .ic{background:var(--fair);color:#fff}
+.where.idle{color:var(--dim);font-weight:600}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:9px}
+.acc{font-weight:700;font-variant-numeric:tabular-nums;unicode-bidi:isolate}
+.primary{width:100%;margin-top:12px;padding:15px;border:0;border-radius:16px;background:var(--accent);color:var(--ink);
+ font-size:17px;font-weight:700;box-shadow:var(--shadow);transition:transform .12s;display:flex;align-items:center;
+ justify-content:center;gap:9px}
+.primary:active,.second:active{transform:scale(.98)}
+.acts{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.second{display:flex;align-items:center;justify-content:center;gap:8px;padding:13px 10px;border-radius:15px;
+ border:1px solid var(--line);background:var(--bg);color:var(--text);font-weight:700;font-size:15px;transition:transform .12s}
+.second svg{font-size:18px;color:var(--accent)}
+.note{margin:10px 0 0;font-size:12.5px;color:var(--dim);display:flex;gap:6px;align-items:center}
+.note svg{font-size:14px;color:var(--good)}
+.bad{flex:1;display:flex;align-items:center;justify-content:center;padding:24px}
+.bad .box{max-width:400px;text-align:center}
+.hero{position:relative;width:118px;height:118px;margin:0 auto 22px;border-radius:34px;background:var(--soft);
+ color:var(--accent);display:grid;place-items:center;font-size:54px}
+.bad h2{font-size:25px;line-height:1.2;margin:0 0 10px;letter-spacing:-.02em}
+.bad p{color:var(--dim);margin:0 auto}
+.me{position:relative}
+.me .pt{position:absolute;left:50%;top:50%;width:18px;height:18px;margin:-9px 0 0 -9px;border-radius:50%;
+ background:var(--me);border:3px solid #fff;box-shadow:0 1px 6px rgba(0,0,0,.35)}
+.me .cone{position:absolute;inset:0;border-radius:50%;
+ background:conic-gradient(from -28deg,rgba(43,124,246,.5) 0deg 56deg,transparent 56deg);
+ -webkit-mask:radial-gradient(circle,#000 0 62%,transparent 63%);mask:radial-gradient(circle,#000 0 62%,transparent 63%);
+ transition:transform .3s}
+.leaflet-tooltip.tip{background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:9px;
+ font:600 12.5px/1.3 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans Arabic",Tahoma,sans-serif;padding:3px 8px;
+ box-shadow:var(--shadow);white-space:nowrap}
+.leaflet-tooltip.tip::before{display:none}
+.sheet{position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,.42);display:flex;align-items:flex-end;animation:fade .2s}
+.panel{width:100%;max-width:520px;margin:0 auto;background:var(--card);border-radius:24px 24px 0 0;
+ padding:10px 12px calc(14px + env(safe-area-inset-bottom));animation:up .25s ease-out}
+.grab{width:40px;height:5px;border-radius:3px;background:var(--line);margin:0 auto 10px}
+.panel .lbl{padding:0 12px 6px}
+.panel button{display:flex;justify-content:space-between;align-items:center;width:100%;font-size:17px;padding:13px 12px;
+ border:0;border-radius:13px;background:transparent;color:var(--text);text-align:start}
+.panel button.sel{background:var(--soft);font-weight:700}.panel button.sel::after{content:"✓";color:var(--accent)}
+@keyframes up{from{transform:translateY(48px);opacity:0}}@keyframes fade{from{opacity:0}}
+.hide{display:none!important}
+@media (min-height:760px){h1{font-size:22px}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style></head><body>
+<header class="top">
+ <div class="brand"><span class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7l6-3 6 3 6-3v13l-6 3-6-3-6 3z"/><path d="M9 4v13M15 7v13"/></svg></span><span>Biruni GIS</span></div>
+ <div class="tools"><span class="pill hide" id="chip"><i class="dot wait" id="dot"></i><span id="chipText"></span></span>
+ <button class="pill" id="langBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3.6 9h16.8M3.6 15h16.8M11.5 3a17 17 0 0 0 0 18M12.5 3a17 17 0 0 1 0 18"/></svg><span id="langCode"></span></button></div>
+</header>
+<div class="banner hide" id="noBase"></div>
+<div id="map" dir="ltr"></div>
+<section class="card" id="card"><div class="in">
+ <span class="lbl" id="scale"></span>
+ <h1 id="mapTitle"></h1>
+ <div class="where idle" id="where"><span class="ic" id="whereIc"><svg id="icIn" class="hide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg><svg id="icOut" class="hide" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l7.5 19L12 16.8 4.5 21z"/></svg><svg id="icIdle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="7"/></svg></span><span id="whereText"></span></div>
+ <div class="row hide" id="accRow"><span class="lbl" id="lAcc"></span><bdi class="acc" id="acc"></bdi></div>
+ <button class="primary" id="go" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="11" r="3"/><path d="M17.66 16.66L13.41 20.9a2 2 0 0 1-2.83 0l-4.24-4.24a8 8 0 1 1 11.32 0z"/></svg><span id="goText"></span></button>
+ <div class="acts hide" id="acts">
+  <button class="second" id="me" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="7"/></svg><span id="meText"></span></button>
+  <button class="second" id="fit" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/></svg><span id="fitText"></span></button>
+ </div>
+ <p class="note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6z"/><path d="M9 12l2 2 4-4"/></svg><span id="private"></span></p>
+</div></section>
+<section class="bad hide" id="bad"><div class="box">
+ <div class="hero"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4z"/><path d="M14 14h2v2h-2zM18 18h2v2h-2zM14 18h2M18 14h2"/></svg></div>
+ <h2 id="badTitle"></h2><p id="badText"></p></div></section>
+<div class="sheet hide" id="sheet"><div class="panel"><div class="grab"></div><div class="lbl" id="lLang"></div><div id="langs"></div></div></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" integrity="sha512-puJW3E/qXDqYp9IfhAI54BJEaWIfloJ7JWs7OeD5i6ruC9JZL1gERT1wjtwXFlh7CjE7ZJ+/vcRZRkIYIb6p4g==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script id="decoder">
+const B43='0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ$*+-./:';
+function b43(s){if(s.length%3===1)throw new Error('bad');const out=[];
+ const v=i=>{const k=B43.indexOf(s[i]);if(k<0)throw new Error('bad');return k};
+ for(let i=0;i+2<s.length;i+=3){const n=v(i)+v(i+1)*43+v(i+2)*1849;if(n>65535)throw new Error('bad');out.push(n>>8,n&255)}
+ if(s.length%3===2){const n=v(s.length-2)+v(s.length-1)*43;if(n>255)throw new Error('bad');out.push(n)}
+ return new Uint8Array(out)}
+async function inflateRaw(u){if(typeof DecompressionStream==='undefined')throw new Error('old');
+ const s=new Blob([u]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+ return new Uint8Array(await new Response(s).arrayBuffer())}
+function unpackMap(u){let i=0;const td=new TextDecoder('utf-8',{fatal:true});
+ const u8=()=>{if(i>=u.length)throw new Error('bad');return u[i++]};
+ const uv=()=>{let n=0,m=1;for(;;){const b=u8();n+=(b&127)*m;if(!(b&128))return n;m*=128;if(m>2**56)throw new Error('bad')}};
+ const sv=()=>{const n=uv();return n%2?-(n+1)/2:n/2};
+ const str=()=>{const n=uv();if(i+n>u.length)throw new Error('bad');const s=td.decode(u.subarray(i,i+n));i+=n;return s};
+ const dec=u8();if(dec>9)throw new Error('bad');const f=10**dec;
+ const d={decimals:dec,lang:str(),title:str(),scale:str()};let px=0,py=0;
+ const xy=()=>{px+=sv();py+=sv();return [px/f,py/f]};
+ d.corners=[xy()];const fx=px,fy=py;for(let k=0;k<3;k++)d.corners.push(xy());px=fx;py=fy;
+ let n=uv();if(n>10000)throw new Error('bad');d.points=[];
+ for(let k=0;k<n;k++){const p=xy();p.push(str());d.points.push(p)}
+ n=uv();if(n>1000)throw new Error('bad');d.shapes=[];
+ for(let k=0;k<n;k++){const kind=u8();if(kind!==1&&kind!==2)throw new Error('bad');const m=uv();if(m>100000)throw new Error('bad');
+  const c=[];for(let j=0;j<m;j++)c.push(xy());d.shapes.push({kind:kind===1?'line':'polygon',coords:c})}
+ for(const c of d.corners)if(!(c[0]>=-180&&c[0]<=180&&c[1]>=-90&&c[1]<=90))throw new Error('bad');
+ return d}
+/* the map from the address: everything after "#" (never sent to any server) */
+async function decodeHash(h){h=String(h||'').replace(/^[^#]*#/,'').trim();
+ if(h[0]==='a'||h[0]==='b')h=h.toUpperCase();
+ if(h.length<2||(h[0]!=='A'&&h[0]!=='B'))throw new Error('bad');
+ let u=b43(h.slice(1));
+ if(h[0]==='B'){try{u=await inflateRaw(u)}catch(e){throw new Error(e.message==='old'?'old':'bad')}}
+ if(!u.length||u[0]!==1)throw new Error(u.length&&u[0]>1?'newer':'bad');
+ try{return unpackMap(u.subarray(1))}catch(e){throw new Error('bad')}}
+</script>
+<script id="ui">
+const ALL={"en": {"title": "Biruni GIS - live map", "language": "Language", "locate": "Show where I am", "center": "Center on me", "frame": "Show the map", "inside": "You are inside the map", "outside": "You are {d} {dir} of the map", "dirs": ["north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west"], "m": "{n} m", "km": "{n} km", "locating": "Finding your position…", "denied": "Location not allowed. The map still works without it.", "nogps": "This browser cannot give the location.", "accuracy": "Accuracy", "scale": "Printed at {s}", "area": "Printed area", "toMap": "Way to the map", "pinIn": "Inside the map", "pinOut": "Outside the map", "pinWait": "Locating…", "pinOff": "No location", "badTitle": "This link has no map", "badText": "Scan the QR code printed on a Biruni GIS map. If you did, the code may have been read only in part: scan it again, closer and steadier.", "newer": "This map was made by a newer Biruni GIS than this page knows. Reload the page.", "old": "This browser is too old to open the map. Update it or use Chrome or Safari.", "noBase": "The background map could not load (no internet?). Your position and the way to the map still work.", "private": "Your position stays on this phone: nothing is sent anywhere.", "untitled": "Printed map", "made": "Made with Biruni GIS"}, "ar": {"title": "Biruni GIS - الخريطة الحية", "language": "اللغة", "locate": "أظهر مكاني", "center": "انتقل إلى موقعي", "frame": "اعرض الخريطة", "inside": "أنت داخل حدود الخريطة", "outside": "أنت على بُعد {d} {dir} الخريطة", "dirs": ["شمال", "شمال شرق", "شرق", "جنوب شرق", "جنوب", "جنوب غرب", "غرب", "شمال غرب"], "m": "{n} م", "km": "{n} كم", "locating": "جارٍ تحديد موقعك…", "denied": "لم يُسمح بالموقع. الخريطة تعمل بدونه.", "nogps": "هذا المتصفح لا يستطيع تحديد الموقع.", "accuracy": "الدقة", "scale": "مطبوعة بمقياس {s}", "area": "المنطقة المطبوعة", "toMap": "اتجاه الخريطة", "pinIn": "داخل الخريطة", "pinOut": "خارج الخريطة", "pinWait": "جارٍ التحديد…", "pinOff": "بلا موقع", "badTitle": "هذا الرابط لا يحمل خريطة", "badText": "امسح رمز QR المطبوع على خريطة من Biruni GIS. إن كنت فعلت، فربما قُرئ الرمز ناقصًا: امسحه مرة أخرى من مسافة أقرب وبثبات.", "newer": "صُنعت هذه الخريطة بإصدار أحدث من Biruni GIS مما تعرفه هذه الصفحة. أعد تحميل الصفحة.", "old": "هذا المتصفح قديم ولا يستطيع فتح الخريطة. حدّثه أو استخدم Chrome أو Safari.", "noBase": "تعذّر تحميل الخريطة الأساسية (لا يوجد إنترنت؟). موقعك واتجاه الخريطة يعملان رغم ذلك.", "private": "موقعك يبقى على هذا الهاتف ولا يُرسَل إلى أي مكان.", "untitled": "خريطة مطبوعة", "made": "صُنعت باستخدام Biruni GIS"}, "es": {"title": "Biruni GIS - mapa en vivo", "language": "Idioma", "locate": "Mostrar dónde estoy", "center": "Centrar en mí", "frame": "Ver el mapa", "inside": "Estás dentro del mapa", "outside": "Estás a {d} {dir} del mapa", "dirs": ["al norte", "al noreste", "al este", "al sureste", "al sur", "al suroeste", "al oeste", "al noroeste"], "m": "{n} m", "km": "{n} km", "locating": "Buscando tu posición…", "denied": "Ubicación no permitida. El mapa funciona igual sin ella.", "nogps": "Este navegador no puede dar la ubicación.", "accuracy": "Precisión", "scale": "Impreso a {s}", "area": "Zona impresa", "toMap": "Hacia el mapa", "pinIn": "Dentro del mapa", "pinOut": "Fuera del mapa", "pinWait": "Buscando…", "pinOff": "Sin ubicación", "badTitle": "Este enlace no trae ningún mapa", "badText": "Escanea el código QR impreso en un mapa de Biruni GIS. Si ya lo hiciste, puede que se haya leído solo en parte: vuelve a escanearlo, más cerca y sin moverte.", "newer": "Este mapa se hizo con una versión de Biruni GIS más nueva que esta página. Recarga la página.", "old": "Este navegador es demasiado antiguo para abrir el mapa. Actualízalo o usa Chrome o Safari.", "noBase": "No se pudo cargar el mapa de fondo (¿sin internet?). Tu posición y el camino al mapa siguen funcionando.", "private": "Tu posición se queda en este teléfono: no se envía a ningún sitio.", "untitled": "Mapa impreso", "made": "Hecho con Biruni GIS"}, "pt_BR": {"title": "Biruni GIS - mapa ao vivo", "language": "Idioma", "locate": "Mostrar onde estou", "center": "Centralizar em mim", "frame": "Ver o mapa", "inside": "Você está dentro do mapa", "outside": "Você está a {d} {dir} do mapa", "dirs": ["ao norte", "a nordeste", "a leste", "a sudeste", "ao sul", "a sudoeste", "a oeste", "a noroeste"], "m": "{n} m", "km": "{n} km", "locating": "Buscando sua posição…", "denied": "Localização não permitida. O mapa funciona mesmo sem ela.", "nogps": "Este navegador não consegue fornecer a localização.", "accuracy": "Precisão", "scale": "Impresso em {s}", "area": "Área impressa", "toMap": "Rumo ao mapa", "pinIn": "Dentro do mapa", "pinOut": "Fora do mapa", "pinWait": "Localizando…", "pinOff": "Sem localização", "badTitle": "Este link não traz nenhum mapa", "badText": "Escaneie o código QR impresso em um mapa do Biruni GIS. Se já fez isso, o código pode ter sido lido só em parte: escaneie de novo, mais perto e com a mão firme.", "newer": "Este mapa foi feito com uma versão do Biruni GIS mais nova que esta página. Recarregue a página.", "old": "Este navegador é antigo demais para abrir o mapa. Atualize-o ou use o Chrome ou o Safari.", "noBase": "Não foi possível carregar o mapa de fundo (sem internet?). Sua posição e o rumo até o mapa continuam funcionando.", "private": "Sua posição fica neste celular: nada é enviado.", "untitled": "Mapa impresso", "made": "Feito com o Biruni GIS"}, "fr": {"title": "Biruni GIS - carte en direct", "language": "Langue", "locate": "Afficher ma position", "center": "Me centrer", "frame": "Voir la carte", "inside": "Vous êtes dans la carte", "outside": "Vous êtes à {d} {dir} de la carte", "dirs": ["au nord", "au nord-est", "à l’est", "au sud-est", "au sud", "au sud-ouest", "à l’ouest", "au nord-ouest"], "m": "{n} m", "km": "{n} km", "locating": "Recherche de votre position…", "denied": "Position non autorisée. La carte fonctionne quand même.", "nogps": "Ce navigateur ne peut pas donner la position.", "accuracy": "Précision", "scale": "Imprimée au {s}", "area": "Zone imprimée", "toMap": "Direction de la carte", "pinIn": "Dans la carte", "pinOut": "Hors de la carte", "pinWait": "Localisation…", "pinOff": "Pas de position", "badTitle": "Ce lien ne contient pas de carte", "badText": "Scannez le code QR imprimé sur une carte Biruni GIS. Si c’est déjà fait, le code n’a peut-être été lu qu’en partie : scannez-le à nouveau, de plus près et sans bouger.", "newer": "Cette carte a été faite avec une version de Biruni GIS plus récente que cette page. Rechargez la page.", "old": "Ce navigateur est trop ancien pour ouvrir la carte. Mettez-le à jour ou utilisez Chrome ou Safari.", "noBase": "Le fond de carte n’a pas pu se charger (pas d’internet ?). Votre position et la direction de la carte fonctionnent quand même.", "private": "Votre position reste sur ce téléphone : rien n’est envoyé.", "untitled": "Carte imprimée", "made": "Réalisé avec Biruni GIS"}, "tr": {"title": "Biruni GIS - canlı harita", "language": "Dil", "locate": "Konumumu göster", "center": "Beni ortala", "frame": "Haritayı göster", "inside": "Haritanın içindesiniz", "outside": "Haritanın {d} {dir}", "dirs": ["kuzeyindesiniz", "kuzeydoğusundasınız", "doğusundasınız", "güneydoğusundasınız", "güneyindesiniz", "güneybatısındasınız", "batısındasınız", "kuzeybatısındasınız"], "m": "{n} m", "km": "{n} km", "locating": "Konumunuz bulunuyor…", "denied": "Konum izni verilmedi. Harita yine de çalışır.", "nogps": "Bu tarayıcı konum veremiyor.", "accuracy": "Doğruluk", "scale": "Basım ölçeği {s}", "area": "Basılı alan", "toMap": "Haritaya yön", "pinIn": "Haritanın içinde", "pinOut": "Haritanın dışında", "pinWait": "Konum bulunuyor…", "pinOff": "Konum yok", "badTitle": "Bu bağlantıda harita yok", "badText": "Bir Biruni GIS haritasına basılmış QR kodunu tarayın. Taradıysanız kod eksik okunmuş olabilir: daha yakından ve sabit tutarak yeniden tarayın.", "newer": "Bu harita, bu sayfanın bildiğinden daha yeni bir Biruni GIS sürümüyle yapılmış. Sayfayı yenileyin.", "old": "Bu tarayıcı haritayı açmak için çok eski. Güncelleyin ya da Chrome veya Safari kullanın.", "noBase": "Altlık harita yüklenemedi (internet yok mu?). Konumunuz ve haritaya yön yine de çalışır.", "private": "Konumunuz bu telefonda kalır: hiçbir yere gönderilmez.", "untitled": "Basılı harita", "made": "Biruni GIS ile yapıldı"}, "fa": {"title": "Biruni GIS - نقشهٔ زنده", "language": "زبان", "locate": "جای من را نشان بده", "center": "رفتن به جای من", "frame": "نمایش نقشه", "inside": "شما داخل نقشه هستید", "outside": "شما {d} {dir} نقشه هستید", "dirs": ["در شمال", "در شمال شرقی", "در شرق", "در جنوب شرقی", "در جنوب", "در جنوب غربی", "در غرب", "در شمال غربی"], "m": "{n} متر", "km": "{n} کیلومتر", "locating": "در حال یافتن موقعیت شما…", "denied": "اجازهٔ موقعیت داده نشد. نقشه بدون آن هم کار می‌کند.", "nogps": "این مرورگر نمی‌تواند موقعیت را بدهد.", "accuracy": "دقت", "scale": "چاپ‌شده در مقیاس {s}", "area": "محدودهٔ چاپ‌شده", "toMap": "سمت نقشه", "pinIn": "داخل نقشه", "pinOut": "بیرون نقشه", "pinWait": "در حال یافتن…", "pinOff": "بدون موقعیت", "badTitle": "این پیوند نقشه‌ای ندارد", "badText": "کد QR چاپ‌شده روی یک نقشهٔ Biruni GIS را اسکن کنید. اگر این کار را کرده‌اید، شاید کد ناقص خوانده شده: دوباره، از نزدیک‌تر و بی‌حرکت اسکن کنید.", "newer": "این نقشه با نسخه‌ای تازه‌تر از Biruni GIS ساخته شده که این صفحه نمی‌شناسد. صفحه را دوباره بارگذاری کنید.", "old": "این مرورگر برای باز کردن نقشه خیلی قدیمی است. آن را به‌روز کنید یا از Chrome یا Safari استفاده کنید.", "noBase": "نقشهٔ زمینه بارگذاری نشد (اینترنت ندارید؟). موقعیت شما و سمت نقشه همچنان کار می‌کند.", "private": "موقعیت شما روی همین تلفن می‌ماند و به جایی فرستاده نمی‌شود.", "untitled": "نقشهٔ چاپی", "made": "ساخته‌شده با Biruni GIS"}},$=i=>document.getElementById(i);
+const NAMES={en:'English',ar:'العربية',es:'Español',pt_BR:'Português',fr:'Français',tr:'Türkçe',fa:'فارسی'};
+let T={},LANG='en',D=null,ERR=null,map=null,meDot=null,accCircle=null,fix=null,heading=null,compass=false,started=false,
+ fitted=false,state='';
+function pick(l){if(!l)return null;l=String(l).replace('-','_');if(ALL[l])return l;const b=l.split('_')[0].toLowerCase();
+ return Object.keys(ALL).find(k=>k.split('_')[0].toLowerCase()===b)||null}
+function keep(k,v){try{if(v==null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(e){}}
+function kept(k){try{return localStorage.getItem(k)}catch(e){return null}}
+function fmt(n,d){try{return new Intl.NumberFormat(LANG.replace('_','-'),{maximumFractionDigits:d}).format(n)}catch(e){return n.toFixed(d)}}
+function dist(m){if(m<1000){const r=m<100?Math.max(1,Math.round(m)):Math.round(m/10)*10;return T.m.replace('{n}',fmt(r,0))}
+ const k=m/1000;return T.km.replace('{n}',fmt(k,k<10?1:0))}
+/* geometry on a local flat approximation around the phone (good to a few km, plenty for "which way") */
+const RAD=Math.PI/180,RE=6371008.8;
+function local(o){const kx=Math.cos(o[1]*RAD)*RAD*RE,ky=RAD*RE;return p=>[(p[0]-o[0])*kx,(p[1]-o[1])*ky]}
+function inside(p,ring){let c=false;for(let i=0,j=ring.length-1;i<ring.length;j=i++){const a=ring[i],b=ring[j];
+ if((a[1]>p[1])!==(b[1]>p[1])&&p[0]<(b[0]-a[0])*(p[1]-a[1])/(b[1]-a[1])+a[0])c=!c}return c}
+function nearest(p,ring){const f=local(p);let best=null;for(let i=0;i<ring.length;i++){const a=f(ring[i]),b=f(ring[(i+1)%ring.length]);
+ const dx=b[0]-a[0],dy=b[1]-a[1],n=dx*dx+dy*dy,t=n?Math.max(0,Math.min(1,(-a[0]*dx-a[1]*dy)/n)):0;
+ const x=a[0]+t*dx,y=a[1]+t*dy,d=Math.hypot(x,y);if(!best||d<best.d)best={d:d,x:x,y:y}}return best}
+const bearing=(dx,dy)=>(Math.atan2(dx,dy)/RAD+360)%360;
+function where(p){if(inside(p,D.corners))return {inside:true};const n=nearest(p,D.corners);
+ return {inside:false,d:n.d,dir:Math.round(bearing(-n.x,-n.y)/45)%8,toMap:bearing(n.x,n.y)}}
+function setPin(s){state=s;$('chip').classList.remove('hide');$('dot').className='dot '+({in:'on',out:'out',wait:'wait',off:'off'}[s]);
+ $('chipText').textContent=T[{in:'pinIn',out:'pinOut',wait:'pinWait',off:'pinOff'}[s]]}
+function icon(k){['In','Out','Idle'].forEach(x=>$('ic'+x).classList.toggle('hide',x!==k))}
+let errKey=null;
+function update(){if(!D)return;const w=$('where'),t=$('whereText');
+ if(!fix){w.className='where idle'+(!started&&!errKey?' hide':'');icon('Idle');$('whereIc').style.transform='';
+  t.textContent=errKey?T[errKey]:started?T.locating:'';if(started)setPin(errKey?'off':'wait');return}
+ const r=where([fix.lon,fix.lat]);
+ if(r.inside){w.className='where in';icon('In');$('whereIc').style.transform='';t.textContent=T.inside;setPin('in')}
+ else{w.className='where out';icon('Out');t.textContent=T.outside.replace('{d}',dist(r.d)).replace('{dir}',T.dirs[r.dir]);
+  $('whereIc').style.transform='rotate('+Math.round(r.toMap-(compass&&heading!=null?heading:0))+'deg)';
+  $('whereIc').title=T.toMap;setPin('out')}
+ $('accRow').classList.remove('hide');$('acc').textContent='± '+dist(fix.acc)}
+function label(){const h=document.documentElement;h.lang=LANG.replace('_','-');h.dir=(LANG==='ar'||LANG==='fa')?'rtl':'ltr';
+ $('langCode').textContent=LANG.split('_')[0].toUpperCase();$('langBtn').setAttribute('aria-label',T.language);
+ $('lLang').textContent=T.language;
+ if(ERR){document.title=T.title;$('badTitle').textContent=T.badTitle;$('badText').textContent=T[ERR]||T.badText;return}
+ const title=D.title||T.untitled;document.title=title+' · Biruni GIS';$('mapTitle').textContent=title;
+ $('scale').textContent=D.scale?T.scale.replace('{s}','⁦'+D.scale+'⁩'):T.area;
+ $('goText').textContent=T.locate;$('meText').textContent=T.center;$('fitText').textContent=T.frame;
+ $('lAcc').textContent=T.accuracy;$('private').textContent=T.private;$('noBase').textContent=T.noBase;
+ if(started&&state)setPin(state);update()}
+function setLang(l){LANG=l;T=Object.assign({},ALL.en,ALL[l]||{});label()}
+/* the map: OpenStreetMap, the printed area framed and the rest dimmed, the features that came with the code */
+function draw(){if(typeof L==='undefined'){$('noBase').classList.remove('hide');$('map').classList.add('hide');return}
+ const css=getComputedStyle(document.documentElement),c=k=>css.getPropertyValue(k).trim(),ll=p=>[p[1],p[0]];
+ map=L.map('map',{zoomSnap:.25,zoomControl:true,attributionControl:true});
+ L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,
+  attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}).addTo(map);
+ const fr=D.corners.map(ll);
+ L.polygon([[[85,-180],[85,180],[-85,180],[-85,-180]],fr],{stroke:false,fillColor:'#0E1114',fillOpacity:.3,interactive:false}).addTo(map);
+ L.polygon(fr,{color:c('--accent')||'#12A594',weight:3,dashArray:'9 6',fill:false,interactive:false}).addTo(map);
+ const feat=c('--feat')||'#E8590C';
+ D.shapes.forEach(s=>{const k=s.coords.map(ll);(s.kind==='polygon'?L.polygon(k,{color:feat,weight:2.5,fillOpacity:.1}):
+  L.polyline(k,{color:feat,weight:3})).addTo(map)});
+ D.points.forEach(p=>{const m=L.circleMarker(ll(p),{radius:6,color:'#fff',weight:2,fillColor:feat,fillOpacity:1}).addTo(map);
+  if(p[2]){const e=document.createElement('bdi');e.textContent=p[2];
+   m.bindTooltip(e,{permanent:true,direction:'top',offset:[0,-7],className:'tip'})}});
+ showFrame(false)}
+function showFrame(anim){if(map)map.fitBounds(D.corners.map(p=>[p[1],p[0]]),{padding:[22,22],animate:anim})}
+function placeMe(){if(!map||!fix)return;const p=[fix.lat,fix.lon];
+ if(!meDot){accCircle=L.circle(p,{radius:fix.acc,color:'#2B7CF6',weight:1,fillOpacity:.12,interactive:false}).addTo(map);
+  meDot=L.marker(p,{icon:L.divIcon({className:'me',html:'<i class="cone"></i><i class="pt"></i>',iconSize:[64,64]}),
+   interactive:false,keyboard:false,zIndexOffset:1000}).addTo(map)}
+ else{accCircle.setLatLng(p).setRadius(fix.acc);meDot.setLatLng(p)}
+ const e=meDot.getElement(),k=e&&e.querySelector('.cone');
+ if(k){k.style.display=heading==null?'none':'';if(heading!=null)k.style.transform='rotate('+Math.round(heading)+'deg)'}
+ if(!fitted){fitted=true;if(!where([fix.lon,fix.lat]).inside)
+  map.fitBounds(D.corners.map(q=>[q[1],q[0]]).concat([p]),{padding:[36,36]})}}
+function onFix(pos){const c=pos.coords;fix={lat:c.latitude,lon:c.longitude,acc:c.accuracy||0};errKey=null;
+ if(!compass&&c.heading!=null&&!isNaN(c.heading)&&c.speed>0.7)heading=c.heading;placeMe();update()}
+function onErr(e){if(e.code===1){errKey='denied';$('go').classList.remove('hide');$('acts').classList.add('hide');started=false;
+ setPin('off')}update()}
+function onCompass(e){let h=null;if(typeof e.webkitCompassHeading==='number')h=e.webkitCompassHeading;
+ else if(e.absolute&&e.alpha!=null)h=(360-e.alpha)%360;if(h!=null){compass=true;heading=h;placeMe();update()}}
+/* iPhones (and some browsers) give the compass only after a tap: asked on the first tap that can */
+let asked=false;async function askCompass(){if(asked||compass)return;asked=true;
+ try{if(window.DeviceOrientationEvent&&DeviceOrientationEvent.requestPermission)await DeviceOrientationEvent.requestPermission()}catch(e){}}
+async function start(gesture){if(started)return;
+ if(!navigator.geolocation||!window.isSecureContext){errKey='nogps';setPin('off');update();return}
+ if(gesture)await askCompass();
+ addEventListener('deviceorientationabsolute',onCompass);addEventListener('deviceorientation',onCompass);
+ started=true;errKey=null;navigator.geolocation.watchPosition(onFix,onErr,{enableHighAccuracy:true,maximumAge:5000,timeout:30000});
+ $('go').classList.add('hide');$('acts').classList.remove('hide');setPin('wait');update()}
+$('go').onclick=()=>start(true);
+$('me').onclick=()=>{askCompass();if(map&&fix)map.setView([fix.lat,fix.lon],Math.max(map.getZoom(),17));else start(true)};
+$('fit').onclick=()=>showFrame(true);
+$('langBtn').onclick=()=>{const box=$('langs');box.textContent='';Object.keys(ALL).forEach(k=>{const b=document.createElement('button');
+ b.type='button';b.textContent=NAMES[k]||k;b.lang=k.replace('_','-');b.classList.toggle('sel',k===LANG);
+ b.onclick=()=>{keep('biruni-lang',k);setLang(k);$('sheet').classList.add('hide')};box.appendChild(b)});
+ $('sheet').classList.remove('hide')};
+$('sheet').onclick=e=>{if(e.target===$('sheet'))$('sheet').classList.add('hide')};
+addEventListener('hashchange',()=>location.reload());
+(async()=>{try{D=await decodeHash(location.hash)}catch(e){ERR=e.message==='newer'?'newer':e.message==='old'?'old':'badText'}
+ setLang(pick(kept('biruni-lang'))||pick(navigator.language)||pick(D&&D.lang)||'en');
+ if(ERR){['map','card'].forEach(i=>$(i).classList.add('hide'));$('bad').classList.remove('hide');return}
+ draw();
+ /* already allowed on this phone: show the position at once (the compass is asked on the next tap) */
+ try{if(navigator.permissions){const p=await navigator.permissions.query({name:'geolocation'});
+  if(p.state==='granted')start(false)}}catch(e){}})();
+addEventListener('click',()=>{if(started)askCompass()},{once:true});
+</script></body></html>

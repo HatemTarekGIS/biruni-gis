@@ -1,0 +1,245 @@
+<!doctype html><html lang="en" dir="ltr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#F4F6F8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0E1114" media="(prefers-color-scheme: dark)">
+<meta name="color-scheme" content="light dark"><meta name="robots" content="noindex">
+<meta name="referrer" content="no-referrer"><title>Biruni GIS</title>
+<style>
+:root{--bg:#F4F6F8;--card:#FFFFFF;--text:#14181D;--dim:#5F6B76;--line:#E1E6EB;--accent:#12A594;--ink:#FFFFFF;
+ --soft:#E1F4F1;--good:#12A36E;--fair:#C98A12;--poor:#D24B4B;--goodbg:#E3F6EE;--poorbg:#FBE9E9;--fairbg:#FBF1DE;
+ --shadow:0 1px 2px rgba(16,24,32,.05),0 6px 20px rgba(16,24,32,.06)}
+@media (prefers-color-scheme:dark){:root{--bg:#0E1114;--card:#171B20;--text:#E8ECEF;--dim:#97A3AE;--line:#262C33;
+ --accent:#2CC5B4;--ink:#05201C;--soft:#11302C;--good:#3DD39A;--fair:#E8B04B;--poor:#F07070;--goodbg:#10291F;
+ --poorbg:#331A1A;--fairbg:#30260F;--shadow:none}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--text)}
+body{font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans Arabic","Noto Sans",Tahoma,sans-serif;
+ min-height:100vh;-webkit-font-smoothing:antialiased}
+svg{width:1em;height:1em;flex:none}
+button{font:inherit;cursor:pointer}
+.top{position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:10px;
+ padding:calc(10px + env(safe-area-inset-top)) 16px 10px;background:var(--bg)}
+.brand{display:flex;align-items:center;gap:9px;font-weight:700;font-size:17px;letter-spacing:-.01em}
+.logo{width:30px;height:30px;border-radius:10px;background:var(--accent);color:var(--ink);display:grid;place-items:center;font-size:18px}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;padding:6px 11px;border-radius:999px;
+ background:var(--card);border:1px solid var(--line);color:var(--dim);white-space:nowrap}
+.pill svg{font-size:15px}
+.banner{margin:0 0 12px;padding:10px 13px;border-radius:14px;font-size:14px;line-height:1.45;
+ background:var(--card);border:1px solid var(--line);border-inline-start:4px solid var(--fair)}
+main{max-width:520px;margin:0 auto;padding:10px 16px calc(24px + env(safe-area-inset-bottom))}
+.intro{text-align:center;padding:18px 6px 6px}
+.hero{width:96px;height:96px;margin:6px auto 18px;border-radius:30px;background:var(--soft);
+ color:var(--accent);display:grid;place-items:center;font-size:48px}
+h1{font-size:26px;line-height:1.2;margin:0 0 8px;letter-spacing:-.02em}
+.intro p{color:var(--dim);margin:0 auto 20px;max-width:34ch}
+.card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:6px 15px;margin-bottom:12px;box-shadow:var(--shadow)}
+.kv{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:9px 0;border-bottom:1px solid var(--line)}
+.kv:last-child{border-bottom:0}
+.lbl{font-size:13px;font-weight:600;color:var(--dim);flex:none}
+.val{font-weight:600;text-align:end;overflow-wrap:anywhere;min-width:0}
+.mono{font:600 14px/1.4 ui-monospace,"SF Mono",Menlo,Consolas,monospace;direction:ltr;unicode-bidi:isolate;letter-spacing:.02em}
+.drop{display:block;text-align:center;padding:20px 16px;border:2px dashed var(--line);border-radius:20px;background:var(--card);
+ margin-bottom:12px;transition:border-color .15s,background .15s;cursor:pointer}
+.drop.over{border-color:var(--accent);background:var(--soft)}
+.primary{display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:15px;border:0;border-radius:16px;
+ background:var(--accent);color:var(--ink);font-size:17px;font-weight:700;box-shadow:var(--shadow);transition:transform .12s;pointer-events:none}
+.drop:active .primary{transform:scale(.98)}
+.drop small{display:block;color:var(--dim);font-size:13px;margin-top:10px}
+.meter{height:6px;border-radius:6px;background:var(--line);overflow:hidden;margin:0 4px 12px}
+.meter i{display:block;height:100%;width:0;border-radius:6px;background:var(--accent);transition:width .2s}
+.result{display:flex;gap:13px;align-items:flex-start;padding:16px;border-radius:20px;margin-bottom:12px;border:1px solid var(--line);
+ background:var(--card);animation:pop .3s ease-out}
+@keyframes pop{from{transform:scale(.96);opacity:0}}
+.result .ic{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;font-size:24px;flex:none;color:#fff;background:var(--dim)}
+.result b{display:block;font-size:18px;line-height:1.3;margin-bottom:3px}
+.result span{display:block;font-size:14px;color:var(--text)}
+.result.ok{background:var(--goodbg);border-color:var(--good)}.result.ok .ic{background:var(--good)}.result.ok b{color:var(--good)}
+.result.bad{background:var(--poorbg);border-color:var(--poor)}.result.bad .ic{background:var(--poor)}.result.bad b{color:var(--poor)}
+.result.busy .ic{background:transparent;border:3px solid var(--line);border-top-color:var(--accent);animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+details{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px 15px;font-size:14px}
+summary{font-weight:600;cursor:pointer}
+details p{color:var(--dim);margin:8px 0 0}
+.foot{text-align:center;font-size:12px;color:var(--dim);margin-top:18px}.foot a{color:var(--dim)}
+.sheet{position:fixed;inset:0;z-index:10;background:rgba(0,0,0,.42);display:flex;align-items:flex-end;animation:fade .2s}
+.panel{width:100%;max-width:520px;margin:0 auto;background:var(--card);border-radius:24px 24px 0 0;
+ padding:10px 12px calc(14px + env(safe-area-inset-bottom));animation:up .25s ease-out}
+.grab{width:40px;height:5px;border-radius:3px;background:var(--line);margin:0 auto 10px}
+.panel .lbl{display:block;padding:0 12px 6px}
+.panel button{display:flex;justify-content:space-between;align-items:center;width:100%;font-size:17px;padding:13px 12px;
+ border:0;border-radius:13px;background:transparent;color:var(--text);text-align:start}
+.panel button.sel{background:var(--soft);font-weight:700}.panel button.sel::after{content:"✓";color:var(--accent)}
+@keyframes up{from{transform:translateY(48px);opacity:0}}@keyframes fade{from{opacity:0}}
+.hide{display:none!important}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style></head><body>
+<header class="top">
+ <div class="brand"><span class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a12 12 0 0 0 8.5 3a12 12 0 0 1-8.5 15a12 12 0 0 1-8.5-15a12 12 0 0 0 8.5-3"/><path d="M9 12l2 2l4-4"/></svg></span><span>Biruni GIS</span></div>
+ <button class="pill" id="langBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3.6 9h16.8M3.6 15h16.8M11.5 3a17 17 0 0 0 0 18M12.5 3a17 17 0 0 1 0 18"/></svg><span id="langCode"></span></button>
+</header>
+<main>
+<section class="intro"><div class="hero"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a12 12 0 0 0 8.5 3a12 12 0 0 1-8.5 15a12 12 0 0 1-8.5-15a12 12 0 0 0 8.5-3"/><path d="M9 12l2 2l4-4"/></svg></div><h1 id="hero"></h1><p id="lead"></p></section>
+<div class="banner hide" id="note"></div>
+<div class="card hide" id="sealCard">
+ <div class="kv"><span class="lbl" id="lOffice"></span><bdi class="val" id="vOffice"></bdi></div>
+ <div class="kv"><span class="lbl" id="lFile"></span><bdi class="val" id="vFile"></bdi></div>
+ <div class="kv"><span class="lbl" id="lSize"></span><bdi class="val" id="vSize"></bdi></div>
+ <div class="kv"><span class="lbl" id="lDate"></span><bdi class="val" id="vDate"></bdi></div>
+ <div class="kv"><span class="lbl" id="lKey"></span><span class="val mono" id="vKey"></span></div>
+</div>
+<label class="drop" id="drop"><input id="file" type="file" multiple class="hide">
+ <span class="primary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/><path d="M9 14l2 2l4-4"/></svg><span id="pickT"></span></span>
+ <small id="dropT"></small></label>
+<div class="meter hide" id="meter"><i id="bar"></i></div>
+<div class="result hide" id="res" role="status" aria-live="polite"><span class="ic" id="resIc"></span><div><b id="resT"></b><span id="resD"></span></div></div>
+<details><summary id="aboutS"></summary><p id="aboutP"></p></details>
+<p class="foot"><a href="https://github.com/HatemTarekGIS/biruni-gis" rel="noopener" id="made"></a></p>
+</main>
+<div class="sheet hide" id="sheet"><div class="panel"><div class="grab"></div><span class="lbl" id="lLang"></span><div id="langs"></div></div></div>
+<script>
+/*CORE{*/
+/* hashing, Ed25519 signature checking (RFC 8032) and the seal record, with no library */
+const cat=(...a)=>{const o=new Uint8Array(a.reduce((s,x)=>s+x.length,0));let i=0;for(const x of a){o.set(x,i);i+=x.length}return o};
+const hex=b=>Array.from(b,x=>x.toString(16).padStart(2,'0')).join('');
+function unb64(s){s=String(s).trim().replace(/-/g,'+').replace(/_/g,'/');while(s.length%4)s+='=';
+ const b=atob(s),o=new Uint8Array(b.length);for(let i=0;i<b.length;i++)o[i]=b.charCodeAt(i);return o}
+/* the SHA-2 constants are the fractions of square and cube roots of the first primes, computed exactly */
+function iroot(n,k){const K=BigInt(k);let x=1n<<BigInt(Math.ceil(n.toString(2).length/k)+1);
+ for(;;){const y=((K-1n)*x+n/x**(K-1n))/K;if(y>=x)return x;x=y}}
+const PRIMES=[];for(let n=2;PRIMES.length<80;n++)if(PRIMES.every(p=>n%p))PRIMES.push(n);
+const frac=(p,k,bits)=>iroot(BigInt(p)<<BigInt(bits*k),k)&((1n<<BigInt(bits))-1n);
+const K256=Uint32Array.from(PRIMES.slice(0,64),p=>Number(frac(p,3,32))),H256=Uint32Array.from(PRIMES.slice(0,8),p=>Number(frac(p,2,32)));
+const K512=PRIMES.map(p=>frac(p,3,64)),H512=PRIMES.slice(0,8).map(p=>frac(p,2,64));
+class Sha256{
+ constructor(){this.s=H256.slice();this.b=new Uint8Array(64);this.n=0;this.len=0;this.w=new Uint32Array(64)}
+ update(d){let i=0;this.len+=d.length;
+  if(this.n){i=Math.min(64-this.n,d.length);this.b.set(d.subarray(0,i),this.n);this.n+=i;if(this.n<64)return this;this.block(this.b,0);this.n=0}
+  for(;i+64<=d.length;i+=64)this.block(d,i);
+  if(i<d.length){this.b.set(d.subarray(i),0);this.n=d.length-i}return this}
+ block(x,o){const w=this.w,S=this.s;
+  for(let i=0;i<16;i++,o+=4)w[i]=x[o]<<24|x[o+1]<<16|x[o+2]<<8|x[o+3];
+  for(let i=16;i<64;i++){const p=w[i-15],q=w[i-2];
+   w[i]=w[i-16]+((p>>>7|p<<25)^(p>>>18|p<<14)^(p>>>3))+w[i-7]+((q>>>17|q<<15)^(q>>>19|q<<13)^(q>>>10))}
+  let a=S[0],b=S[1],c=S[2],d=S[3],e=S[4],f=S[5],g=S[6],h=S[7];
+  for(let i=0;i<64;i++){
+   const t1=(h+((e>>>6|e<<26)^(e>>>11|e<<21)^(e>>>25|e<<7))+((e&f)^(~e&g))+K256[i]+w[i])|0;
+   const t2=(((a>>>2|a<<30)^(a>>>13|a<<19)^(a>>>22|a<<10))+((a&b)^(a&c)^(b&c)))|0;
+   h=g;g=f;f=e;e=(d+t1)|0;d=c;c=b;b=a;a=(t1+t2)|0}
+  S[0]+=a;S[1]+=b;S[2]+=c;S[3]+=d;S[4]+=e;S[5]+=f;S[6]+=g;S[7]+=h}
+ digest(){const L=this.len,r=L%64,pad=new Uint8Array((r<56?56-r:120-r)+8),v=new DataView(pad.buffer);
+  pad[0]=0x80;v.setUint32(pad.length-8,Math.floor(L/0x20000000));v.setUint32(pad.length-4,(L*8)%0x100000000);this.update(pad);
+  const o=new Uint8Array(32),ov=new DataView(o.buffer);this.s.forEach((x,i)=>ov.setUint32(4*i,x));return o}}
+/* SHA-512 with BigInt: only for the few bytes of a signature check */
+function sha512(m){const M=(1n<<64n)-1n,r=(x,n)=>(x>>n|x<<(64n-n))&M,L=m.length,p=new Uint8Array(Math.ceil((L+17)/128)*128);
+ p.set(m);p[L]=0x80;let bits=BigInt(L)*8n;for(let i=p.length-1;bits>0n;i--,bits>>=8n)p[i]=Number(bits&255n);
+ const S=H512.slice(),w=new Array(80);
+ for(let o=0;o<p.length;o+=128){
+  for(let i=0;i<16;i++){let v=0n;for(let j=0;j<8;j++)v=v<<8n|BigInt(p[o+8*i+j]);w[i]=v}
+  for(let i=16;i<80;i++){const x=w[i-15],y=w[i-2];
+   w[i]=(w[i-16]+(r(x,1n)^r(x,8n)^(x>>7n))+w[i-7]+(r(y,19n)^r(y,61n)^(y>>6n)))&M}
+  let [a,b,c,d,e,f,g,h]=S;
+  for(let i=0;i<80;i++){
+   const t1=(h+(r(e,14n)^r(e,18n)^r(e,41n))+((e&f)^(~e&M&g))+K512[i]+w[i])&M;
+   const t2=((r(a,28n)^r(a,34n)^r(a,39n))+((a&b)^(a&c)^(b&c)))&M;
+   h=g;g=f;f=e;e=(d+t1)&M;d=c;c=b;b=a;a=(t1+t2)&M}
+  [a,b,c,d,e,f,g,h].forEach((x,i)=>S[i]=(S[i]+x)&M)}
+ const out=new Uint8Array(64);S.forEach((x,i)=>{for(let j=7;j>=0;j--,x>>=8n)out[8*i+j]=Number(x&255n)});return out}
+const P=2n**255n-19n,LQ=2n**252n+27742317777372353535851937790883648493n;
+const md=a=>{a%=P;return a<0n?a+P:a};
+function pw(b,e){let r=1n;b=md(b);while(e>0n){if(e&1n)r=r*b%P;b=b*b%P;e>>=1n}return r}
+const inv=x=>pw(x,P-2n),DC=md(-121665n*inv(121666n)),SQRTM1=pw(2n,(P-1n)/4n);
+function padd(p,q){const a=md((p[1]-p[0])*(q[1]-q[0])),b=md((p[1]+p[0])*(q[1]+q[0])),c=md(2n*p[3]*q[3]*DC),d=md(2n*p[2]*q[2]);
+ const e=b-a,f=d-c,g=d+c,h=b+a;return [md(e*f),md(g*h),md(f*g),md(e*h)]}
+function pmul(s,p){let q=[0n,1n,1n,0n];while(s>0n){if(s&1n)q=padd(q,p);p=padd(p,p);s>>=1n}return q}
+function xrec(y,sign){if(y>=P)return null;const x2=md((y*y-1n)*inv(DC*y*y+1n));if(x2===0n)return sign?null:0n;
+ let x=pw(x2,(P+3n)/8n);if(md(x*x-x2)!==0n)x=md(x*SQRTM1);if(md(x*x-x2)!==0n)return null;
+ if(Number(x&1n)!==sign)x=P-x;return x}
+const le=b=>{let v=0n;for(let i=b.length-1;i>=0;i--)v=v<<8n|BigInt(b[i]);return v};
+function penc(p){const z=inv(p[2]),x=md(p[0]*z);let v=md(p[1]*z)|(x&1n)<<255n;const o=new Uint8Array(32);
+ for(let i=0;i<32;i++,v>>=8n)o[i]=Number(v&255n);return o}
+function pdec(b){if(b.length!==32)return null;let y=le(b);const s=Number(y>>255n);y&=(1n<<255n)-1n;
+ const x=xrec(y,s);return x===null?null:[x,y,1n,md(x*y)]}
+const GY=md(4n*inv(5n)),GX=xrec(GY,0),G=[GX,GY,1n,md(GX*GY)];
+function edVerify(pub,sig,msg){if(pub.length!==32||sig.length!==64)return false;
+ const A=pdec(pub),R=sig.subarray(0,32),s=le(sig.subarray(32));if(!A||s>=LQ||!pdec(R))return false;
+ const k=le(sha512(cat(R,pub,msg)))%LQ,got=penc(padd(pmul(s,G),pmul(k,[md(-A[0]),A[1],A[2],md(-A[3])])));
+ return got.every((v,i)=>v===R[i])}
+/* the seal after the "#": version, time, size, start of the SHA-256, key, name, office, signature (seal/core.py) */
+const MAGIC=new TextEncoder().encode('BIRUNI-SEAL');
+function unpack(text){const b=unb64(text),dec=new TextDecoder('utf-8',{fatal:true});if(b[0]!==1)throw new Error('version');
+ const t=b[1]*16777216+(b[2]<<16)+(b[3]<<8)+b[4];let i=5,size=0,mul=1;
+ for(;;){const x=b[i++];if(x===undefined||mul>2**49)throw new Error('size');size+=(x&127)*mul;mul*=128;if(!(x&128))break}
+ const head=b.slice(0,i),start=b.slice(i,i+8);i+=8;const pub=b.slice(i,i+32);i+=32;
+ const nn=b[i],name=b.slice(i+1,i+1+nn);i+=1+nn;const no=b[i],office=b.slice(i+1,i+1+no);i+=1+no;const sig=b.slice(i);
+ if(start.length!==8||pub.length!==32||nn===undefined||name.length!==nn||no===undefined||office.length!==no||sig.length!==64)throw new Error('short');
+ return {t,size,start:hex(start),pub,sig,name:dec.decode(name),office:dec.decode(office),
+  message:h=>cat(MAGIC,head,h,pub,Uint8Array.of(nn),name,Uint8Array.of(no),office)}}
+function fingerprint(pub){const h=hex(new Sha256().update(pub).digest()).slice(0,16).toUpperCase();return h.match(/.{4}/g).join(' ')}
+/*}CORE*/
+const ALL={"ar": {"about": "ماذا يثبت الختم؟", "abouttext": "يثبت الختم أن الملف لم يتغير ولو بايتًا واحدًا منذ ختمه بهذا المفتاح. أما اسم المكتب فيكتبه من ختم الملف: للتأكد ممن ختمه قارن بصمة المفتاح بالبصمة التي ينشرها المكتب.", "badlink": "رابط الختم هذا تالف أو ناقص. امسح الرمز مرة أخرى أو اطلب رابطًا جديدًا.", "badsig": "التوقيع غير صالح", "badsigd": "الختم لا يطابق توقيعه: تم التلاعب بالختم أو أنه غير أصلي. لا تعتمد على هذا الملف.", "changed": "تم تغيير هذا الملف", "changedd": "ليس هو الملف الذي خُتم: إما أنه عُدّل بعد الختم أو أنه ملف آخر.", "checking": "جارٍ التحقق…", "date": "تاريخ الختم", "drop": "أو أفلته هنا. يبقى الملف على هذا الجهاز ولا يُرفع إلى أي مكان.", "file": "الملف", "hero": "التحقق من ملف مختوم", "key": "بصمة المفتاح", "language": "اللغة", "lead": "اختر الملف الذي استلمته للتأكد من أنه هو نفسه الملف الذي خُتم تمامًا.", "made": "Biruni GIS - نظم معلومات جغرافية مجانية", "noname": "(بدون اسم)", "noseal": "افتح هذه الصفحة من رمز QR أو رابط ختم Biruni، أو أفلت هنا ملف ‎.seal.json‎ المرفق بالملف.", "office": "خُتم بواسطة", "ok": "لم يتغير منذ ختمه", "okd": "هذا الملف مطابق بايتًا ببايت للملف الذي ختمه {office} في {date}.", "pick": "اختر الملف", "sealread": "تمت قراءة الختم من {name}.", "size": "الحجم", "sizediff": "حجمه {got}، وكان حجم الملف المختوم {want}.", "title": "Biruni GIS - التحقق من ملف مختوم"}, "en": {"about": "What does the seal prove?", "abouttext": "The seal proves that the file has not changed by a single byte since it was sealed with this key. The office name is written by whoever sealed the file: to be sure who sealed it, compare the key fingerprint with the one the office publishes.", "badlink": "This seal link is damaged or incomplete. Scan the code again or ask for a new link.", "badsig": "Signature invalid", "badsigd": "The seal does not match its signature: the seal was altered or is not genuine. Do not rely on this file.", "changed": "This file was changed", "changedd": "It is not the file that was sealed: it was changed after sealing, or it is a different file.", "checking": "Checking…", "date": "Sealed on", "drop": "or drop it here. It stays on this device: nothing is uploaded.", "file": "File", "hero": "Check a sealed file", "key": "Key fingerprint", "language": "Language", "lead": "Choose the file you received to check that it is exactly the file that was sealed.", "made": "Biruni GIS - free desktop GIS", "noname": "(no name given)", "noseal": "Open this page from the QR code or the link of a Biruni seal, or drop here the .seal.json file that came with the file.", "office": "Sealed by", "ok": "Unchanged since it was sealed", "okd": "This file is byte-for-byte the one sealed on {date} by {office}.", "pick": "Choose the file", "sealread": "Seal read from {name}.", "size": "Size", "sizediff": "Its size is {got}; the sealed file was {want}.", "title": "Biruni GIS - check a sealed file"}, "es": {"about": "¿Qué demuestra el sello?", "abouttext": "El sello demuestra que el archivo no ha cambiado ni un solo byte desde que se selló con esta clave. El nombre de la oficina lo escribe quien selló el archivo: para saber con certeza quién lo selló, compare la huella de la clave con la que publica la oficina.", "badlink": "Este enlace de sello está dañado o incompleto. Escanee el código de nuevo o pida un enlace nuevo.", "badsig": "Firma no válida", "badsigd": "El sello no coincide con su firma: el sello fue alterado o no es auténtico. No confíe en este archivo.", "changed": "Este archivo fue modificado", "changedd": "No es el archivo que se selló: se modificó después de sellarlo o es otro archivo.", "checking": "Comprobando…", "date": "Sellado el", "drop": "o suéltelo aquí. Se queda en este dispositivo: no se sube nada.", "file": "Archivo", "hero": "Comprobar un archivo sellado", "key": "Huella de la clave", "language": "Idioma", "lead": "Elija el archivo que recibió para comprobar que es exactamente el archivo que se selló.", "made": "Biruni GIS - SIG de escritorio gratuito", "noname": "(sin nombre)", "noseal": "Abra esta página desde el código QR o el enlace de un sello de Biruni, o suelte aquí el archivo .seal.json que acompaña al archivo.", "office": "Sellado por", "ok": "Sin cambios desde que se selló", "okd": "Este archivo es, byte a byte, el que selló {office} el {date}.", "pick": "Elegir el archivo", "sealread": "Sello leído de {name}.", "size": "Tamaño", "sizediff": "Su tamaño es {got}; el archivo sellado tenía {want}.", "title": "Biruni GIS - comprobar un archivo sellado"}, "fa": {"about": "مهر چه چیزی را ثابت می‌کند؟", "abouttext": "مهر ثابت می‌کند که فایل از زمانی که با این کلید مهر شده حتی یک بایت هم تغییر نکرده است. نام دفتر را کسی می‌نویسد که فایل را مهر کرده است: برای اطمینان از اینکه چه کسی آن را مهر کرده، اثر انگشت کلید را با آنچه دفتر منتشر می‌کند مقایسه کنید.", "badlink": "این پیوند مهر خراب یا ناقص است. کد را دوباره اسکن کنید یا پیوند تازه‌ای بخواهید.", "badsig": "امضا نامعتبر است", "badsigd": "مهر با امضای خود مطابقت ندارد: مهر دستکاری شده یا اصل نیست. به این فایل اعتماد نکنید.", "changed": "این فایل تغییر کرده است", "changedd": "این همان فایل مهرشده نیست: پس از مهر تغییر کرده یا فایل دیگری است.", "checking": "در حال بررسی…", "date": "تاریخ مهر", "drop": "یا آن را اینجا رها کنید. فایل روی همین دستگاه می‌ماند و چیزی بارگذاری نمی‌شود.", "file": "فایل", "hero": "بررسی فایل مهرشده", "key": "اثر انگشت کلید", "language": "زبان", "lead": "فایلی را که دریافت کرده‌اید انتخاب کنید تا مطمئن شوید دقیقاً همان فایلی است که مهر شده است.", "made": "Biruni GIS - GIS رومیزی رایگان", "noname": "(بدون نام)", "noseal": "این صفحه را از کد QR یا پیوند مهر Biruni باز کنید، یا فایل ‎.seal.json‎ همراه فایل را اینجا رها کنید.", "office": "مهرشده توسط", "ok": "از زمان مهر تغییری نکرده است", "okd": "این فایل بایت به بایت همان فایلی است که {office} در {date} مهر کرده است.", "pick": "انتخاب فایل", "sealread": "مهر از {name} خوانده شد.", "size": "حجم", "sizediff": "حجم آن {got} است؛ حجم فایل مهرشده {want} بود.", "title": "Biruni GIS - بررسی فایل مهرشده"}, "fr": {"about": "Que prouve le sceau ?", "abouttext": "Le sceau prouve que le fichier n'a pas changé d'un seul octet depuis qu'il a été scellé avec cette clé. Le nom du bureau est écrit par la personne qui a scellé le fichier : pour savoir avec certitude qui l'a scellé, comparez l'empreinte de la clé avec celle que publie le bureau.", "badlink": "Ce lien de sceau est endommagé ou incomplet. Scannez de nouveau le code ou demandez un nouveau lien.", "badsig": "Signature non valide", "badsigd": "Le sceau ne correspond pas à sa signature : il a été altéré ou n'est pas authentique. Ne vous fiez pas à ce fichier.", "changed": "Ce fichier a été modifié", "changedd": "Ce n'est pas le fichier scellé : il a été modifié après le scellement, ou c'est un autre fichier.", "checking": "Vérification…", "date": "Scellé le", "drop": "ou déposez-le ici. Il reste sur cet appareil : rien n'est envoyé.", "file": "Fichier", "hero": "Vérifier un fichier scellé", "key": "Empreinte de la clé", "language": "Langue", "lead": "Choisissez le fichier reçu pour vérifier qu'il est exactement le fichier qui a été scellé.", "made": "Biruni GIS - SIG bureautique gratuit", "noname": "(aucun nom)", "noseal": "Ouvrez cette page depuis le code QR ou le lien d'un sceau Biruni, ou déposez ici le fichier .seal.json fourni avec le fichier.", "office": "Scellé par", "ok": "Inchangé depuis le scellement", "okd": "Ce fichier est, octet par octet, celui scellé le {date} par {office}.", "pick": "Choisir le fichier", "sealread": "Sceau lu dans {name}.", "size": "Taille", "sizediff": "Sa taille est de {got} ; le fichier scellé faisait {want}.", "title": "Biruni GIS - vérifier un fichier scellé"}, "pt_BR": {"about": "O que o selo comprova?", "abouttext": "O selo comprova que o arquivo não mudou nem um byte desde que foi selado com esta chave. O nome do escritório é escrito por quem selou o arquivo: para ter certeza de quem o selou, compare a impressão digital da chave com a que o escritório publica.", "badlink": "Este link de selo está danificado ou incompleto. Leia o código de novo ou peça um link novo.", "badsig": "Assinatura inválida", "badsigd": "O selo não confere com a sua assinatura: o selo foi alterado ou não é autêntico. Não confie neste arquivo.", "changed": "Este arquivo foi alterado", "changedd": "Não é o arquivo que foi selado: foi alterado depois de selado ou é outro arquivo.", "checking": "Verificando…", "date": "Selado em", "drop": "ou solte-o aqui. Ele fica neste aparelho: nada é enviado.", "file": "Arquivo", "hero": "Verificar um arquivo selado", "key": "Impressão digital da chave", "language": "Idioma", "lead": "Escolha o arquivo que você recebeu para verificar se ele é exatamente o arquivo que foi selado.", "made": "Biruni GIS - SIG de desktop gratuito", "noname": "(sem nome)", "noseal": "Abra esta página pelo código QR ou pelo link de um selo do Biruni, ou solte aqui o arquivo .seal.json que veio com o arquivo.", "office": "Selado por", "ok": "Sem alterações desde que foi selado", "okd": "Este arquivo é, byte a byte, o que {office} selou em {date}.", "pick": "Escolher o arquivo", "sealread": "Selo lido de {name}.", "size": "Tamanho", "sizediff": "O tamanho dele é {got}; o arquivo selado tinha {want}.", "title": "Biruni GIS - verificar um arquivo selado"}, "tr": {"about": "Mühür neyi kanıtlar?", "abouttext": "Mühür, dosyanın bu anahtarla mühürlendiğinden beri tek bir bayt bile değişmediğini kanıtlar. Büro adını dosyayı mühürleyen kişi yazar: kimin mühürlediğinden emin olmak için anahtar parmak izini büronun yayımladığıyla karşılaştırın.", "badlink": "Bu mühür bağlantısı bozuk veya eksik. Kodu yeniden tarayın ya da yeni bir bağlantı isteyin.", "badsig": "İmza geçersiz", "badsigd": "Mühür imzasıyla uyuşmuyor: mühür değiştirilmiş veya gerçek değil. Bu dosyaya güvenmeyin.", "changed": "Bu dosya değiştirilmiş", "changedd": "Mühürlenen dosya bu değil: mühürlendikten sonra değiştirilmiş ya da başka bir dosya.", "checking": "Doğrulanıyor…", "date": "Mühür tarihi", "drop": "veya buraya bırakın. Dosya bu cihazda kalır: hiçbir şey yüklenmez.", "file": "Dosya", "hero": "Mühürlü dosyayı doğrula", "key": "Anahtar parmak izi", "language": "Dil", "lead": "Aldığınız dosyanın mühürlenen dosyanın tam olarak aynısı olduğunu doğrulamak için dosyayı seçin.", "made": "Biruni GIS - ücretsiz masaüstü CBS", "noname": "(ad verilmemiş)", "noseal": "Bu sayfayı bir Biruni mührünün QR kodundan veya bağlantısından açın ya da dosyayla gelen .seal.json dosyasını buraya bırakın.", "office": "Mühürleyen", "ok": "Mühürlendiğinden beri değişmedi", "okd": "Bu dosya, {office} tarafından {date} tarihinde mühürlenen dosyanın bayt bayt aynısıdır.", "pick": "Dosyayı seç", "sealread": "Mühür {name} dosyasından okundu.", "size": "Boyut", "sizediff": "Boyutu {got}; mühürlenen dosya {want} idi.", "title": "Biruni GIS - mühürlü dosyayı doğrula"}},$=i=>document.getElementById(i);let T={},LANG='en',SEAL=null,BADLINK=false,LAST=null,NOTE=null,busy=false;
+const NAMES={en:'English',ar:'العربية',es:'Español',pt_BR:'Português',fr:'Français',tr:'Türkçe',fa:'فارسی'};
+function pick(l){if(!l)return null;l=String(l).replace('-','_');if(ALL[l])return l;const b=l.split('_')[0].toLowerCase();
+ return Object.keys(ALL).find(k=>k.split('_')[0].toLowerCase()===b)||null}
+function keep(k,v){try{localStorage.setItem(k,v)}catch(e){}}
+function kept(k){try{return localStorage.getItem(k)}catch(e){return null}}
+const fill=(s,o)=>String(s).replace(/\{(\w+)\}/g,(m,k)=>k in o?o[k]:m);
+const loc=()=>LANG.replace('_','-');
+function when(t){const d=new Date(t*1000);try{return new Intl.DateTimeFormat(loc(),{dateStyle:'long',timeStyle:'short'}).format(d)}
+ catch(e){return d.toISOString().slice(0,16).replace('T',' ')}}
+function bytes(n){const u=['bytes','KB','MB','GB','TB'];let i=0,v=n;while(v>=1024&&i<4){v/=1024;i++}
+ let s;try{s=new Intl.NumberFormat(loc(),{maximumFractionDigits:i?1:0}).format(v)}catch(e){s=String(Math.round(v*10)/10)}return s+' '+u[i]}
+const ICONS={ok:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg>',
+ bad:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>'};
+function label(){document.title=T.title;$('hero').textContent=T.hero;$('lead').textContent=T.lead;
+ $('lOffice').textContent=T.office;$('lFile').textContent=T.file;$('lSize').textContent=T.size;$('lDate').textContent=T.date;
+ $('lKey').textContent=T.key;$('pickT').textContent=T.pick;$('dropT').textContent=T.drop;$('aboutS').textContent=T.about;
+ $('aboutP').textContent=T.abouttext;$('lLang').textContent=T.language;$('made').textContent=T.made;
+ $('langBtn').setAttribute('aria-label',T.language);$('langCode').textContent=LANG.split('_')[0].toUpperCase();
+ showSeal();if(LAST)result(...LAST)}
+function setLang(l){LANG=l;T=Object.assign({},ALL.en,ALL[l]||{});const h=document.documentElement;
+ h.lang=loc();h.dir=(l==='ar'||l==='fa')?'rtl':'ltr';label()}
+function showSeal(){$('sealCard').classList.toggle('hide',!SEAL);const n=$('note');
+ const msg=BADLINK?T.badlink:!SEAL?T.noseal:NOTE?fill(T.sealread,{name:NOTE}):'';n.textContent=msg;n.classList.toggle('hide',!msg);
+ if(!SEAL)return;$('vOffice').textContent=SEAL.office||T.noname;$('vFile').textContent=SEAL.name;
+ $('vSize').textContent=bytes(SEAL.size);$('vDate').textContent=when(SEAL.t);$('vKey').textContent=fingerprint(SEAL.pub)}
+/* kind: busy | ok | changed | badsig; extra: the received file's size when it differs */
+function result(kind,extra){LAST=[kind,extra];const r=$('res');r.classList.remove('hide');
+ r.className='result '+(kind==='ok'?'ok':kind==='busy'?'busy':'bad');$('resIc').innerHTML=kind==='ok'?ICONS.ok:kind==='busy'?'':ICONS.bad;
+ if(kind==='busy'){$('resT').textContent=T.checking;$('resD').textContent='';return}
+ if(kind==='ok'){$('resT').textContent=T.ok;$('resD').textContent=fill(T.okd,{date:when(SEAL.t),office:SEAL.office||T.noname});return}
+ if(kind==='badsig'){$('resT').textContent=T.badsig;$('resD').textContent=T.badsigd;return}
+ $('resT').textContent=T.changed;let got=bytes(extra),want=bytes(SEAL.size);
+ if(got===want){const n=x=>{try{return new Intl.NumberFormat(loc()).format(x)}catch(e){return String(x)}};got=n(extra)+' bytes';want=n(SEAL.size)+' bytes'}
+ $('resD').textContent=T.changedd+(extra!=null?' '+fill(T.sizediff,{got,want}):'')}
+function loadSeal(frag,from){LAST=null;$('res').classList.add('hide');NOTE=from||null;
+ try{SEAL=frag?unpack(frag):null;BADLINK=false}catch(e){SEAL=null;BADLINK=!!frag}showSeal()}
+/* the file is read here, in pieces, and never sent anywhere */
+async function digest(f){const meter=$('meter'),bar=$('bar');meter.classList.remove('hide');bar.style.width='0';
+ try{if(window.crypto&&crypto.subtle&&f.size<=256*1048576)return new Uint8Array(await crypto.subtle.digest('SHA-256',await f.arrayBuffer()));
+  const h=new Sha256(),step=4*1048576;
+  for(let o=0;o<f.size;o+=step){h.update(new Uint8Array(await f.slice(o,o+step).arrayBuffer()));
+   bar.style.width=Math.round(100*Math.min(o+step,f.size)/f.size)+'%'}
+  return h.digest()}finally{bar.style.width='100%';setTimeout(()=>meter.classList.add('hide'),300)}}
+async function signed(pub,sig,msg){
+ try{const k=await crypto.subtle.importKey('raw',pub,{name:'Ed25519'},false,['verify']);
+  return await crypto.subtle.verify({name:'Ed25519'},k,sig,msg)}catch(e){return edVerify(pub,sig,msg)}}
+async function check(f){if(!SEAL||busy)return;busy=true;result('busy');
+ try{if(f.size!==SEAL.size){result('changed',f.size);return}
+  const h=await digest(f);if(hex(h).slice(0,16)!==SEAL.start){result('changed');return}
+  result(await signed(SEAL.pub,SEAL.sig,SEAL.message(h))?'ok':'badsig')}
+ catch(e){result('changed')}finally{busy=false}}
+async function take(list){const files=[...list],sj=files.find(f=>/\.seal\.json$/i.test(f.name)&&f.size<65536);
+ if(sj){let frag='-';try{frag=String(JSON.parse(await sj.text()).url||'').split('#')[1]||'-'}catch(e){}loadSeal(frag,sj.name)}
+ const f=files.find(x=>x!==sj);if(f)check(f)}
+$('file').onchange=()=>{const l=$('file').files;take(l).then(()=>{$('file').value=''})};
+['dragenter','dragover'].forEach(n=>document.addEventListener(n,e=>{e.preventDefault();$('drop').classList.add('over')}));
+['dragleave','drop'].forEach(n=>document.addEventListener(n,e=>{e.preventDefault();if(n==='drop'||!e.relatedTarget)$('drop').classList.remove('over')}));
+document.addEventListener('drop',e=>{if(e.dataTransfer&&e.dataTransfer.files.length)take(e.dataTransfer.files)});
+window.addEventListener('hashchange',()=>loadSeal(location.hash.slice(1)));
+$('langBtn').onclick=()=>{const box=$('langs');box.textContent='';Object.keys(NAMES).filter(k=>ALL[k]).forEach(k=>{
+ const b=document.createElement('button');b.type='button';b.textContent=NAMES[k];b.lang=k.replace('_','-');b.classList.toggle('sel',k===LANG);
+ b.onclick=()=>{keep('biruni-lang',k);setLang(k);$('sheet').classList.add('hide')};box.appendChild(b)});$('sheet').classList.remove('hide')};
+$('sheet').onclick=e=>{if(e.target===$('sheet'))$('sheet').classList.add('hide')};
+setLang(pick(kept('biruni-lang'))||pick(navigator.language)||'en');
+loadSeal(location.hash.slice(1));
+</script></body></html>

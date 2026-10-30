@@ -1,0 +1,365 @@
+<!doctype html><html lang="en" dir="ltr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#F4F6F8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0E1114" media="(prefers-color-scheme: dark)">
+<meta name="color-scheme" content="light dark"><meta name="robots" content="noindex">
+<meta name="referrer" content="no-referrer"><title>Biruni GIS</title>
+<style>
+:root{--bg:#F4F6F8;--card:#FFFFFF;--text:#14181D;--dim:#5F6B76;--line:#E1E6EB;--accent:#12A594;--ink:#FFFFFF;
+ --soft:#E1F4F1;--good:#12A36E;--fair:#C98A12;--poor:#D24B4B;--shadow:0 1px 2px rgba(16,24,32,.05),0 6px 20px rgba(16,24,32,.08)}
+@media (prefers-color-scheme:dark){:root{--bg:#0E1114;--card:#171B20;--text:#E8ECEF;--dim:#97A3AE;--line:#262C33;
+ --accent:#2CC5B4;--ink:#05201C;--soft:#11302C;--good:#3DD39A;--fair:#E8B04B;--poor:#F07070;--shadow:0 2px 10px rgba(0,0,0,.4)}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);overflow:hidden}
+body{font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans Arabic","Noto Sans",Tahoma,sans-serif;
+ display:flex;flex-direction:column;height:100vh;height:100dvh;-webkit-font-smoothing:antialiased}
+svg{width:1em;height:1em;flex:none}
+button{font:inherit;cursor:pointer}
+.top{flex:none;display:flex;align-items:center;justify-content:space-between;gap:10px;
+ padding:calc(10px + env(safe-area-inset-top)) 14px 10px;background:var(--bg);border-bottom:1px solid var(--line);z-index:5}
+.brand{display:flex;align-items:center;gap:9px;font-weight:700;font-size:17px;letter-spacing:-.01em;min-width:0}
+.brand #title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.logo{width:30px;height:30px;border-radius:10px;background:var(--accent);color:var(--ink);display:grid;place-items:center;font-size:18px;flex:none}
+.tools{display:flex;gap:8px;align-items:center;flex:none}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;padding:6px 11px;border-radius:999px;
+ background:var(--card);border:1px solid var(--line);color:var(--dim);white-space:nowrap}
+.pill svg{font-size:15px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--dim)}
+.dot.on{background:var(--good);box-shadow:0 0 0 3px color-mix(in srgb,var(--good) 25%,transparent)}
+.dot.off{background:var(--poor)}.dot.wait{background:var(--fair);animation:pulse 1.2s infinite}
+@keyframes pulse{50%{opacity:.3}}
+.stage{position:relative;flex:1;min-height:0}
+#map{position:absolute;inset:0;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;
+ cursor:grab;background:#fff;direction:ltr;outline:none}
+#map.drag{cursor:grabbing}
+#tiles{position:absolute;inset:0}
+#tiles img{position:absolute;left:0;top:0;transform-origin:0 0;max-width:none;pointer-events:none;-webkit-user-drag:none}
+#me,#acc,#pin{position:absolute;left:0;top:0;pointer-events:none}
+#acc{border-radius:50%;background:rgba(47,123,245,.14);border:1px solid rgba(47,123,245,.55)}
+#me{width:18px;height:18px;margin:-9px 0 0 -9px;border-radius:50%;background:#2F7BF5;border:3px solid #fff;
+ box-shadow:0 0 0 1px rgba(0,0,0,.15),0 2px 6px rgba(0,0,0,.3)}
+#pin{width:26px;height:26px;margin:-13px 0 0 -13px;border-radius:50%;border:3px solid var(--accent);
+ background:color-mix(in srgb,var(--accent) 18%,transparent);animation:pop .25s ease-out}
+@keyframes pop{from{transform:scale(.5);opacity:0}}
+.load{position:absolute;top:0;left:0;right:0;height:3px;overflow:hidden;z-index:3;opacity:0;transition:opacity .2s;pointer-events:none}
+.load.on{opacity:1}.load i{position:absolute;top:0;bottom:0;width:30%;background:var(--accent);animation:slide 1.1s linear infinite}
+@keyframes slide{from{left:-30%}to{left:100%}}
+.banner{position:absolute;top:10px;left:12px;right:12px;z-index:4;max-width:520px;margin:0 auto;padding:10px 13px;
+ border-radius:14px;font-size:14px;line-height:1.45;background:var(--card);border:1px solid var(--line);
+ border-inline-start:4px solid var(--fair);box-shadow:var(--shadow)}
+.banner.end{border-inline-start-color:var(--poor)}
+.waitbox{position:absolute;inset:0;display:grid;place-items:center;z-index:2;pointer-events:none}
+.waitbox div{display:flex;gap:10px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:18px;
+ padding:12px 18px;color:var(--dim);font-weight:600;box-shadow:var(--shadow)}
+.spin{width:18px;height:18px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--accent);animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.fabs{position:absolute;inset-inline-end:12px;bottom:calc(18px + env(safe-area-inset-bottom));z-index:4;display:flex;
+ flex-direction:column;gap:10px}
+.grp{display:flex;flex-direction:column;border-radius:14px;overflow:hidden;border:1px solid var(--line);
+ background:var(--card);box-shadow:var(--shadow)}
+.fab{width:46px;height:46px;padding:0;border:0;background:var(--card);color:var(--text);display:grid;place-items:center;font-size:21px}
+.grp .fab+.fab{border-top:1px solid var(--line)}
+.fab:active{background:var(--soft)}.fab.on{color:var(--accent)}
+.by{position:absolute;inset-inline-start:10px;bottom:calc(10px + env(safe-area-inset-bottom));z-index:3;font-size:11px;
+ font-weight:600;padding:3px 9px;border-radius:999px;background:var(--card);color:var(--dim);border:1px solid var(--line);opacity:.9;
+ max-width:60vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;pointer-events:none}
+.sheet{position:fixed;inset:0;z-index:10;background:rgba(0,0,0,.42);display:flex;align-items:flex-end;animation:fade .2s}
+.sheet.light{background:rgba(0,0,0,.12)}
+.panel{width:100%;max-width:520px;max-height:72vh;overflow:auto;margin:0 auto;background:var(--card);border-radius:24px 24px 0 0;
+ padding:10px 12px calc(14px + env(safe-area-inset-bottom));animation:up .25s ease-out}
+.grab{width:40px;height:5px;border-radius:3px;background:var(--line);margin:0 auto 10px}
+.lbl{font-size:13px;font-weight:600;color:var(--dim)}
+.head{display:flex;justify-content:space-between;align-items:center;padding:0 12px 6px}
+.panel button.opt{display:flex;justify-content:space-between;align-items:center;width:100%;font-size:17px;padding:13px 12px;
+ border:0;border-radius:13px;background:transparent;color:var(--text);text-align:start}
+.panel button.opt.sel{background:var(--soft);font-weight:700}.panel button.opt.sel::after{content:"✓";color:var(--accent)}
+.x{border:0;background:transparent;color:var(--accent);font-weight:700;font-size:14px;padding:6px 4px}
+.lyr{display:flex;gap:11px;align-items:center;padding:11px 12px;font-size:16px;border-radius:12px}
+.lyr i{width:11px;height:11px;border-radius:3px;background:var(--accent);flex:none;opacity:.8}
+.note{padding:8px 12px 2px;color:var(--dim);font-size:13px}
+.feat{padding:8px 12px 14px}.feat+.feat{border-top:1px solid var(--line)}
+.feat h3{margin:2px 0 0;font-size:18px;line-height:1.3;word-break:break-word}
+.feat .of{font-size:12px;font-weight:600;color:var(--accent)}
+dl{display:grid;grid-template-columns:minmax(84px,38%) 1fr;gap:7px 14px;margin:10px 0 0;font-size:14px}
+dt{color:var(--dim);word-break:break-word}dd{margin:0;word-break:break-word;font-weight:500}
+@keyframes up{from{transform:translateY(48px);opacity:0}}@keyframes fade{from{opacity:0}}
+.toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom));z-index:8;transform:translate(-50%,16px);
+ opacity:0;background:var(--text);color:var(--bg);padding:10px 18px;border-radius:999px;font-size:14px;font-weight:600;
+ transition:opacity .25s,transform .25s;pointer-events:none;white-space:nowrap;max-width:90vw;overflow:hidden;text-overflow:ellipsis}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.hide{display:none!important}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style></head><body>
+<header class="top">
+ <div class="brand"><span class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7l6-3 6 3 6-3v13l-6 3-6-3-6 3z"/><path d="M9 4v13M15 7v13"/></svg></span><span id="title">Biruni GIS</span></div>
+ <div class="tools"><span class="pill" id="chip"><i class="dot wait" id="dot"></i><span id="chipText"></span></span>
+ <button class="pill" id="langBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3.6 9h16.8M3.6 15h16.8M11.5 3a17 17 0 0 0 0 18M12.5 3a17 17 0 0 1 0 18"/></svg><span id="langCode"></span></button></div>
+</header>
+<div class="stage">
+ <div id="map" tabindex="0"><div id="tiles"></div><div id="acc" class="hide"></div><div id="me" class="hide"></div><div id="pin" class="hide"></div></div>
+ <div class="load" id="load"><i></i></div>
+ <div class="waitbox" id="wait"><div><span class="spin"></span><span id="waitText"></span></div></div>
+ <div class="banner hide" id="st"></div>
+ <div class="fabs">
+  <div class="grp"><button class="fab" id="layersBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l8 4-8 4-8-4z"/><path d="M4 12l8 4 8-4M4 16l8 4 8-4"/></svg></button>
+   <button class="fab" id="home" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4"/></svg></button></div>
+  <div class="grp"><button class="fab" id="locBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2"/></svg></button></div>
+  <div class="grp"><button class="fab" id="zin" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+   <button class="fab" id="zout" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14"/></svg></button></div>
+ </div>
+ <div class="by" id="by"></div>
+</div>
+<div class="sheet hide" id="langSheet"><div class="panel"><div class="grab"></div><div class="head"><span class="lbl" id="lLang"></span></div><div id="langs"></div></div></div>
+<div class="sheet hide" id="layerSheet"><div class="panel"><div class="grab"></div><div class="head"><span class="lbl" id="lLayers"></span><button class="x" type="button" data-close></button></div><div id="layerList"></div><div class="note" id="viewonly"></div></div></div>
+<div class="sheet light hide" id="identSheet"><div class="panel"><div class="grab"></div><div class="head"><span class="lbl" id="lIdent"></span><button class="x" type="button" data-close></button></div><div id="identBody"></div></div></div>
+<div class="toast" id="toast"></div>
+<script>
+
+/* ---- Biruni bridge core: shared by the phone page and the PC's hidden receiver ---- */
+const BR={relays:["wss://relay.damus.io", "wss://nos.lol", "wss://relay.primal.net", "wss://nostr.mom", "wss://relay.nostr.band"],ntfy:'https://ntfy.sh/',kind:25050,
+ ice:[{urls:['stun:stun.l.google.com:19302','stun:stun.cloudflare.com:3478']}]};
+const enc=new TextEncoder(),dec=new TextDecoder();
+const b64u={enc:b=>{let s='';const a=new Uint8Array(b);for(let i=0;i<a.length;i++)s+=String.fromCharCode(a[i]);
+  return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')},
+ dec:s=>Uint8Array.from(atob(s.replace(/-/g,'+').replace(/_/g,'/')+'==='.slice((s.length+3)%4)),c=>c.charCodeAt(0))};
+const hex=b=>[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('');
+const unhex=h=>Uint8Array.from(h.match(/../g),x=>parseInt(x,16));
+const cat=(...a)=>{const o=new Uint8Array(a.reduce((n,x)=>n+x.length,0));let i=0;for(const x of a){o.set(x,i);i+=x.length}return o};
+const sha=async b=>new Uint8Array(await crypto.subtle.digest('SHA-256',b));
+const rid=()=>b64u.enc(crypto.getRandomValues(new Uint8Array(9)));
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+/* BIP340 Schnorr signatures on secp256k1 - Nostr relays only take signed events.
+   A new throwaway identity per page; the content is what the key protects. */
+const SP=0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2Fn,
+ SN=0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n,
+ SG=[0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798n,
+     0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8n];
+const md=(a,m=SP)=>{const r=a%m;return r<0n?r+m:r};
+function minv(a,m=SP){let r0=md(a,m),r1=m,s0=1n,s1=0n;while(r1){const q=r0/r1;[r0,r1]=[r1,r0-q*r1];[s0,s1]=[s1,s0-q*s1]}
+ return md(s0,m)}
+function padd(p,q){if(!p)return q;if(!q)return p;let l;
+ if(p[0]===q[0]){if(md(p[1]+q[1])===0n)return null;l=md(3n*p[0]*p[0]*minv(2n*p[1]))}
+ else l=md((q[1]-p[1])*minv(q[0]-p[0]));
+ const x=md(l*l-p[0]-q[0]);return [x,md(l*(p[0]-x)-p[1])]}
+function pmul(k,p=SG){let r=null;while(k>0n){if(k&1n)r=padd(r,p);p=padd(p,p);k>>=1n}return r}
+const big=b=>BigInt('0x'+(hex(b)||'0')),b32=n=>unhex(n.toString(16).padStart(64,'0'));
+async function thash(tag,...parts){const t=await sha(enc.encode(tag));return sha(cat(t,t,...parts))}
+async function schnorr(sk,msg,aux){const P=pmul(sk),d=(P[1]&1n)?SN-sk:sk;
+ const ah=await thash('BIP0340/aux',aux),db=b32(d),t=db.map((x,i)=>x^ah[i]);
+ const k0=md(big(await thash('BIP0340/nonce',t,b32(P[0]),msg)),SN);if(!k0)throw new Error('nonce');
+ const R=pmul(k0),k=(R[1]&1n)?SN-k0:k0;
+ const e=md(big(await thash('BIP0340/challenge',b32(R[0]),b32(P[0]),msg)),SN);
+ return cat(b32(R[0]),b32(md(k+e*d,SN)))}
+let NID=null;
+async function nostrEvent(content,topic){if(!NID){let sk=0n;
+  while(!sk||sk>=SN)sk=big(crypto.getRandomValues(new Uint8Array(32)));NID={sk:sk,pk:hex(b32(pmul(sk)[0]))}}
+ const ev={pubkey:NID.pk,created_at:Math.floor(Date.now()/1000),kind:BR.kind,tags:[['t',topic]],content:content};
+ const id=await sha(enc.encode(JSON.stringify([0,ev.pubkey,ev.created_at,ev.kind,ev.tags,ev.content])));
+ ev.id=hex(id);ev.sig=hex(await schnorr(NID.sk,id,crypto.getRandomValues(new Uint8Array(32))));return ev}
+/* the key: AES-GCM for every message, and the meeting name the relays see */
+let BK=null;
+async function bridgeKey(k){const raw=b64u.dec(k);
+ BK={k:await crypto.subtle.importKey('raw',raw,'AES-GCM',false,['encrypt','decrypt']),
+  topic:'biruni'+hex(await sha(cat(enc.encode('biruni-bridge-1:'),raw))).slice(0,40)};return BK}
+const canZ=typeof CompressionStream!=='undefined'&&typeof DecompressionStream!=='undefined';
+async function zz(d,pack){const s=new Blob([d]).stream().pipeThrough(pack?new CompressionStream('deflate-raw'):
+ new DecompressionStream('deflate-raw'));return new Uint8Array(await new Response(s).arrayBuffer())}
+async function seal(obj,z){let d=enc.encode(JSON.stringify(obj)),f=0;
+ if(z&&canZ){const c=await zz(d,true);if(c.length<d.length){d=c;f=1}}
+ const iv=crypto.getRandomValues(new Uint8Array(12));
+ const ct=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv:iv},BK.k,cat(new Uint8Array([f]),d)));
+ return b64u.enc(cat(iv,ct))}
+async function unseal(s){try{const b=b64u.dec(s);
+  const p=new Uint8Array(await crypto.subtle.decrypt({name:'AES-GCM',iv:b.slice(0,12)},BK.k,b.slice(12)));
+  const d=p[0]===1?await zz(p.slice(1),false):p.slice(1);return JSON.parse(dec.decode(d))}catch(e){return null}}
+/* the relays: every message goes to all of them; the first copy to arrive counts */
+class NostrRelay{constructor(url,sig){this.url=url;this.sig=sig;this.up=false;this.wait=3000;this.open()}
+ open(){let ws;try{ws=new WebSocket(this.url)}catch(e){return this.later()}this.ws=ws;
+  ws.onopen=()=>{this.up=true;this.wait=3000;ws.send(JSON.stringify(['REQ','b'+rid(),
+   {kinds:[BR.kind],'#t':[BK.topic],since:Math.floor(Date.now()/1000)-60}]));this.sig.changed()};
+  ws.onmessage=e=>{try{const m=JSON.parse(e.data);if(m[0]==='EVENT'&&m[2]&&typeof m[2].content==='string')
+   this.sig.arrived(m[2].content)}catch(x){}};
+  ws.onclose=()=>{const was=this.up;this.up=false;if(was)this.sig.changed();this.later()};ws.onerror=()=>{try{ws.close()}catch(x){}}}
+ later(){setTimeout(()=>this.open(),this.wait+Math.random()*1000);this.wait=Math.min(this.wait*2,60000)}
+ send(s,ev){if(this.up&&ev)try{this.ws.send(JSON.stringify(['EVENT',ev]))}catch(e){}}}
+class NtfyRelay{constructor(sig){this.sig=sig;this.up=false;this.wait=3000;this.open()}
+ open(){let ws;try{ws=new WebSocket(BR.ntfy.replace(/^http/,'ws')+BK.topic+'/ws')}catch(e){return this.later()}this.ws=ws;
+  ws.onopen=()=>{this.up=true;this.wait=3000;this.sig.changed()};
+  ws.onmessage=e=>{try{const m=JSON.parse(e.data);if(m.event==='message'&&m.message)this.sig.arrived(m.message)}catch(x){}};
+  ws.onclose=()=>{const was=this.up;this.up=false;if(was)this.sig.changed();this.later()};ws.onerror=()=>{try{ws.close()}catch(x){}}}
+ later(){setTimeout(()=>this.open(),this.wait+Math.random()*1000);this.wait=Math.min(this.wait*2,60000)}
+ send(s){if(s.length<=4000)fetch(BR.ntfy+BK.topic+'?cache=no&firebase=no',{method:'POST',body:s}).catch(()=>{})}}
+const SIG={relays:[],seen:new Set(),on:null,onchange:null,
+ start(onMsg,onChange){this.on=onMsg;this.onchange=onChange;
+  this.relays=BR.relays.map(u=>new NostrRelay(u,this)).concat([new NtfyRelay(this)])},
+ up(){return this.relays.filter(r=>r.up).length},
+ changed(){if(this.onchange)this.onchange(this.up())},
+ async send(obj,z){obj.n=rid();obj.ts=Date.now();this.seen.add(obj.n);const s=await seal(obj,z);let ev=null;
+  try{ev=await nostrEvent(s,BK.topic)}catch(e){}for(const r of this.relays)r.send(s,ev)},
+ async arrived(s){const o=await unseal(s);if(!o||!o.n||this.seen.has(o.n))return;this.seen.add(o.n);
+  if(Math.abs(Date.now()-(o.ts||0))>15*60000)return;if(this.on)this.on(o)}};
+function gathered(pc,ms){return new Promise(r=>{if(pc.iceGatheringState==='complete')return r();
+ const t=setTimeout(r,ms);pc.addEventListener('icegatheringstatechange',()=>{if(pc.iceGatheringState==='complete'){
+ clearTimeout(t);r()}})})}
+
+/* ---- See my map: the viewer ---- */
+const ALL={"ar": {"busy": "الكمبيوتر مشغول - بيحاول تاني…", "by": "متشاركة مباشرة من بيروني GIS", "close": "قفل", "connecting": "بيتوصل بالكمبيوتر اللي بيشارك الخريطة دي…", "ended": "مشاركة الخريطة دي خلصت.", "home": "الخريطة كلها", "insecure": "المتصفح ده مش قادر يفتح ربط مباشر. استخدم نسخة حديثة من Chrome أو Safari أو Edge أو Firefox.", "language": "اللغة", "layers": "الطبقات", "linking": "بيتوصل…", "locate": "مكاني", "lost": "الاتصال اتقطع. بيتوصل تاني…", "more": "فيه عناصر تانية هنا - كبّر علشان تختار واحد.", "noattrs": "تفاصيل العناصر مش متشاركة.", "nogps": "مكانك مش متاح.", "nokey": "افتح الصفحة دي من اللينك أو كود QR اللي ظاهر في بيروني GIS.", "nolayers": "مفيش طبقات معروضة.", "nothing": "مفيش حاجة هنا", "offline": "مش متوصل", "online": "مباشر", "p2pfail": "الشبكة دي مش بتسمح بربط مباشر بالكمبيوتر. جرّب شبكة تانية أو Wi-Fi.", "pcoff": "الكمبيوتر مش بيرد. ممكن تكون مشاركة الخريطة وقفت - اطلب لينك جديد.", "title": "خريطة مباشرة", "updated": "الخريطة اتحدّثت", "viewonly": "للعرض بس - التعديل بيتعمل على الكمبيوتر.", "waiting": "مستني الخريطة…", "zoomin": "تكبير", "zoomout": "تصغير"}, "en": {"busy": "The computer is busy - trying again…", "by": "Shared live from Biruni GIS", "close": "Close", "connecting": "Connecting to the computer that shares this map…", "ended": "Sharing of this map has ended.", "home": "Whole map", "insecure": "This browser cannot open a direct link. Use a recent Chrome, Safari, Edge or Firefox.", "language": "Language", "layers": "Layers", "linking": "Connecting…", "locate": "My location", "lost": "The connection was lost. Reconnecting…", "more": "More features here - zoom in to pick one.", "noattrs": "Feature details are not shared.", "nogps": "Your location is not available.", "nokey": "Open this page with the link or QR code shown in Biruni GIS.", "nolayers": "No layers are shown.", "nothing": "Nothing here", "offline": "Not connected", "online": "Live", "p2pfail": "This network does not allow a direct link to the computer. Try another network or Wi-Fi.", "pcoff": "The computer is not answering. The map may no longer be shared - ask for a new link.", "title": "Live map", "updated": "The map was updated", "viewonly": "View only - changes are made on the computer.", "waiting": "Waiting for the map…", "zoomin": "Zoom in", "zoomout": "Zoom out"}, "es": {"busy": "El equipo está ocupado; reintentando…", "by": "Compartido en vivo desde Biruni GIS", "close": "Cerrar", "connecting": "Conectando con el equipo que comparte este mapa…", "ended": "Se dejó de compartir este mapa.", "home": "Mapa completo", "insecure": "Este navegador no puede abrir una conexión directa. Use un Chrome, Safari, Edge o Firefox reciente.", "language": "Idioma", "layers": "Capas", "linking": "Conectando…", "locate": "Mi ubicación", "lost": "Se perdió la conexión. Reconectando…", "more": "Hay más elementos aquí: acerque el mapa para elegir uno.", "noattrs": "Los detalles de los elementos no se comparten.", "nogps": "Su ubicación no está disponible.", "nokey": "Abra esta página con el enlace o el código QR que muestra Biruni GIS.", "nolayers": "No se muestra ninguna capa.", "nothing": "Nada aquí", "offline": "Sin conexión", "online": "En vivo", "p2pfail": "Esta red no permite una conexión directa con el equipo. Pruebe otra red o Wi-Fi.", "pcoff": "El equipo no responde. Puede que el mapa ya no se comparta: pida un enlace nuevo.", "title": "Mapa en vivo", "updated": "El mapa se actualizó", "viewonly": "Solo lectura: los cambios se hacen en el equipo.", "waiting": "Esperando el mapa…", "zoomin": "Acercar", "zoomout": "Alejar"}, "fa": {"busy": "رایانه مشغول است - تلاش دوباره…", "by": "اشتراک زنده از Biruni GIS", "close": "بستن", "connecting": "در حال اتصال به رایانه‌ای که این نقشه را به اشتراک گذاشته…", "ended": "اشتراک این نقشه پایان یافت.", "home": "کل نقشه", "insecure": "این مرورگر نمی‌تواند اتصال مستقیم برقرار کند. از نسخهٔ تازهٔ Chrome، Safari، Edge یا Firefox استفاده کنید.", "language": "زبان", "layers": "لایه‌ها", "linking": "در حال اتصال…", "locate": "موقعیت من", "lost": "اتصال قطع شد. در حال اتصال دوباره…", "more": "عوارض دیگری هم اینجا هست - برای انتخاب یکی بزرگ‌نمایی کنید.", "noattrs": "جزئیات عوارض به اشتراک گذاشته نمی‌شود.", "nogps": "موقعیت شما در دسترس نیست.", "nokey": "این صفحه را با پیوند یا کد QR نمایش‌داده‌شده در Biruni GIS باز کنید.", "nolayers": "هیچ لایه‌ای نمایش داده نمی‌شود.", "nothing": "اینجا چیزی نیست", "offline": "متصل نیست", "online": "زنده", "p2pfail": "این شبکه اجازهٔ اتصال مستقیم به رایانه را نمی‌دهد. شبکه یا Wi-Fi دیگری را امتحان کنید.", "pcoff": "رایانه پاسخ نمی‌دهد. شاید اشتراک نقشه تمام شده باشد - پیوند تازه‌ای بخواهید.", "title": "نقشهٔ زنده", "updated": "نقشه به‌روز شد", "viewonly": "فقط مشاهده - تغییرات روی رایانه انجام می‌شود.", "waiting": "در انتظار نقشه…", "zoomin": "بزرگ‌نمایی", "zoomout": "کوچک‌نمایی"}, "fr": {"busy": "L’ordinateur est occupé, nouvel essai…", "by": "Partagée en direct depuis Biruni GIS", "close": "Fermer", "connecting": "Connexion à l’ordinateur qui partage cette carte…", "ended": "Le partage de cette carte est terminé.", "home": "Carte entière", "insecure": "Ce navigateur ne peut pas ouvrir de liaison directe. Utilisez un Chrome, Safari, Edge ou Firefox récent.", "language": "Langue", "layers": "Couches", "linking": "Connexion…", "locate": "Ma position", "lost": "Connexion perdue. Reconnexion…", "more": "D’autres entités ici : zoomez pour en choisir une.", "noattrs": "Les détails des entités ne sont pas partagés.", "nogps": "Votre position n’est pas disponible.", "nokey": "Ouvrez cette page avec le lien ou le code QR affiché dans Biruni GIS.", "nolayers": "Aucune couche n’est affichée.", "nothing": "Rien ici", "offline": "Non connecté", "online": "En direct", "p2pfail": "Ce réseau n’autorise pas de liaison directe avec l’ordinateur. Essayez un autre réseau ou le Wi-Fi.", "pcoff": "L’ordinateur ne répond pas. La carte n’est peut-être plus partagée : demandez un nouveau lien.", "title": "Carte en direct", "updated": "La carte a été mise à jour", "viewonly": "Lecture seule : les modifications se font sur l’ordinateur.", "waiting": "En attente de la carte…", "zoomin": "Zoom avant", "zoomout": "Zoom arrière"}, "pt_BR": {"busy": "O computador está ocupado - tentando de novo…", "by": "Compartilhado ao vivo pelo Biruni GIS", "close": "Fechar", "connecting": "Conectando ao computador que compartilha este mapa…", "ended": "O compartilhamento deste mapa terminou.", "home": "Mapa inteiro", "insecure": "Este navegador não consegue abrir uma conexão direta. Use um Chrome, Safari, Edge ou Firefox recente.", "language": "Idioma", "layers": "Camadas", "linking": "Conectando…", "locate": "Minha localização", "lost": "A conexão caiu. Reconectando…", "more": "Há mais feições aqui - aproxime para escolher uma.", "noattrs": "Os detalhes das feições não são compartilhados.", "nogps": "Sua localização não está disponível.", "nokey": "Abra esta página pelo link ou QR code mostrado no Biruni GIS.", "nolayers": "Nenhuma camada é exibida.", "nothing": "Nada aqui", "offline": "Sem conexão", "online": "Ao vivo", "p2pfail": "Esta rede não permite uma conexão direta com o computador. Tente outra rede ou Wi-Fi.", "pcoff": "O computador não responde. O mapa pode não estar mais compartilhado - peça um novo link.", "title": "Mapa ao vivo", "updated": "O mapa foi atualizado", "viewonly": "Somente visualização - as alterações são feitas no computador.", "waiting": "Aguardando o mapa…", "zoomin": "Aproximar", "zoomout": "Afastar"}, "tr": {"busy": "Bilgisayar meşgul - yeniden deneniyor…", "by": "Biruni GIS'ten canlı paylaşılıyor", "close": "Kapat", "connecting": "Bu haritayı paylaşan bilgisayara bağlanılıyor…", "ended": "Bu haritanın paylaşımı sona erdi.", "home": "Haritanın tamamı", "insecure": "Bu tarayıcı doğrudan bağlantı açamıyor. Güncel bir Chrome, Safari, Edge veya Firefox kullanın.", "language": "Dil", "layers": "Katmanlar", "linking": "Bağlanıyor…", "locate": "Konumum", "lost": "Bağlantı koptu. Yeniden bağlanılıyor…", "more": "Burada başka öğeler de var - birini seçmek için yakınlaştırın.", "noattrs": "Öğe ayrıntıları paylaşılmıyor.", "nogps": "Konumunuz kullanılamıyor.", "nokey": "Bu sayfayı Biruni GIS'te gösterilen bağlantı veya QR kod ile açın.", "nolayers": "Gösterilen katman yok.", "nothing": "Burada bir şey yok", "offline": "Bağlı değil", "online": "Canlı", "p2pfail": "Bu ağ bilgisayarla doğrudan bağlantıya izin vermiyor. Başka bir ağ veya Wi-Fi deneyin.", "pcoff": "Bilgisayar yanıt vermiyor. Harita artık paylaşılmıyor olabilir - yeni bir bağlantı isteyin.", "title": "Canlı harita", "updated": "Harita güncellendi", "viewonly": "Yalnızca görüntüleme - değişiklikler bilgisayarda yapılır.", "waiting": "Harita bekleniyor…", "zoomin": "Yakınlaştır", "zoomout": "Uzaklaştır"}},$=i=>document.getElementById(i);let T={},LANG='en';
+const NAMES={en:'English',ar:'العربية',es:'Español',pt_BR:'Português',fr:'Français',tr:'Türkçe',fa:'فارسی'};
+function pick(l){if(!l)return null;l=String(l).replace('-','_');if(ALL[l])return l;const b=l.split('_')[0].toLowerCase();
+ return Object.keys(ALL).find(k=>k.split('_')[0].toLowerCase()===b)||null}
+function keep(k,v){try{if(v==null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(e){}}
+function kept(k){try{return localStorage.getItem(k)}catch(e){return null}}
+const HP=new URLSearchParams(location.hash.slice(1)),KEYB=HP.get('k')||'',HASHL=HP.get('l');
+let ST='',INFO=null,V=null,HOME=null,CHANGED=0,LAST=null,IDENT=null,ME=null;
+function label(){const t=INFO&&INFO.title?INFO.title:T.title;document.title=t+' - Biruni GIS';$('title').textContent=t;
+ $('lLang').textContent=T.language;$('lLayers').textContent=T.layers;$('viewonly').textContent=T.viewonly;$('by').textContent=T.by;
+ $('waitText').textContent=T.waiting;$('langCode').textContent=LANG.split('_')[0].toUpperCase();
+ document.querySelectorAll('[data-close]').forEach(b=>b.textContent=T.close);
+ [['zin','zoomin'],['zout','zoomout'],['home','home'],['layersBtn','layers'],['locBtn','locate'],['langBtn','language']]
+  .forEach(([i,k])=>{$(i).title=T[k];$(i).setAttribute('aria-label',T[k])});drawLayers()}
+function setLang(l){LANG=l;T=Object.assign({},ALL.en,ALL[l]||{});const h=document.documentElement;
+ h.lang=l.replace('_','-');h.dir=(l==='ar'||l==='fa')?'rtl':'ltr';label();if(ST)say(ST)}
+function chip(s){$('dot').className='dot '+s;$('chipText').textContent=s==='on'?T.online:s==='wait'?T.linking:T.offline}
+function say(key){ST=key;const on=key==='connected',b=$('st');chip(on?'on':(key==='connecting'||key==='lost')?'wait':'off');
+ if(on)b.classList.add('hide');else{b.textContent=T[key]||key;b.classList.toggle('end',key==='ended');b.classList.remove('hide')}}
+let tt=null;function toast(s){const t=$('toast');t.textContent=s;t.classList.add('show');clearTimeout(tt);
+ tt=setTimeout(()=>t.classList.remove('show'),2200)}
+function busy(on){$('load').classList.toggle('on',!!on)}
+/* ---- the view: centre and metres per CSS pixel in EPSG:3857 ---- */
+const R=20037508.342789244;
+function size(){const r=$('map').getBoundingClientRect();return [r.width||innerWidth||360,r.height||innerHeight||640]}
+const clampRes=r=>Math.min(Math.max(r,0.01),2*R/256);
+function toScreen(x,y){const [w,h]=size();return [(x-V.cx)/V.res+w/2,(V.cy-y)/V.res+h/2]}
+function toMap(px,py){const [w,h]=size();return [V.cx+(px-w/2)*V.res,V.cy-(py-h/2)*V.res]}
+function extentOf(w,h){return [V.cx-V.res*w/2,V.cy-V.res*h/2,V.cx+V.res*w/2,V.cy+V.res*h/2]}
+function fit(e){const [w,h]=size();V={cx:(e[0]+e[2])/2,cy:(e[1]+e[3])/2,res:clampRes(Math.max((e[2]-e[0])/w,(e[3]-e[1])/h)*1.02||1)};place()}
+function merc(lon,lat){lat=Math.max(-85.05,Math.min(85.05,lat));return [lon*R/180,Math.log(Math.tan((90+lat)*Math.PI/360))*R/Math.PI]}
+function spot(el,x,y){const p=toScreen(x,y);el.style.transform='translate('+p[0]+'px,'+p[1]+'px)'}
+function place(){if(!V)return;for(const img of $('tiles').children){const e=img._ext,s=(e[2]-e[0])/img._w/V.res,p=toScreen(e[0],e[3]);
+  img.style.transform='translate('+p[0]+'px,'+p[1]+'px) scale('+s+')'}
+ if(ME){spot($('me'),ME.x,ME.y);const a=$('acc'),r=Math.max(ME.acc/V.res,9);a.style.width=a.style.height=2*r+'px';
+  a.style.margin=(-r)+'px 0 0 '+(-r)+'px';spot(a,ME.x,ME.y)}
+ if(PIN)spot($('pin'),PIN[0],PIN[1])}
+function zoomAt(px,py,f){const m=toMap(px,py),[w,h]=size();V.res=clampRes(V.res*f);V.cx=m[0]-(px-w/2)*V.res;V.cy=m[1]+(py-h/2)*V.res;place()}
+/* ---- asking the computer for the map of this view ---- */
+let reqId=0,shownId=0,identId=0,rt=null,PIN=null;const pend=new Map();
+function soon(ms){clearTimeout(rt);rt=setTimeout(request,ms==null?220:ms)}
+function request(){if(!live()||!V)return;const s=size(),w=Math.round(s[0]),h=Math.round(s[1]);if(w<8||h<8)return;
+ const d=Math.floor(Math.max(0.25,Math.min(window.devicePixelRatio||1,2,1600/w,1600/h))*1000)/1000;
+ const e=extentOf(w,h),id=++reqId;pend.set(id,{w:w,h:h,ext:e,pw:Math.round(w*d),ph:Math.round(h*d)});
+ if(pend.size>20)pend.delete(pend.keys().next().value);
+ busy(true);send({t:'render',id:id,x0:e[0],y0:e[1],x1:e[2],y1:e[3],w:w,h:h,d:d})}
+async function show(c){const q=pend.get(c.id);pend.delete(c.id);if(!q||c.id<shownId)return;
+ const blob=new Blob(c.parts,{type:c.type}),url=URL.createObjectURL(blob),img=new Image();img.alt='';img.draggable=false;
+ await new Promise(r=>{img.onload=r;img.onerror=r;img.src=url});
+ if(c.id<shownId||!img.naturalWidth){URL.revokeObjectURL(url);return}shownId=c.id;
+ img._ext=Array.isArray(c.ext)&&c.ext.length===4&&c.ext.every(Number.isFinite)?c.ext:q.ext;img._w=q.w;img._url=url;
+ img.style.width=q.w+'px';img.style.height=q.h+'px';$('tiles').appendChild(img);
+ [...$('tiles').children].slice(0,-2).forEach(x=>{URL.revokeObjectURL(x._url);x.remove()});
+ place();$('wait').classList.add('hide');if(c.id===reqId)busy(false);
+ LAST={id:c.id,size:c.size,type:c.type,w:img.naturalWidth,h:img.naturalHeight,pw:q.pw,ph:q.ph,blob:blob}}
+function onInfo(d){const first=!INFO;INFO=d;HOME=Array.isArray(d.extent)&&d.extent.length===4?d.extent:[-R,-R/2,R,R/2];
+ if(/^#[0-9a-fA-F]{6}$/.test(d.bg||''))$('map').style.background=d.bg;label();if(first&&!V)fit(HOME);request()}
+function askInfo(){send({t:'info',id:0})}
+/* ---- a tap: what is here ---- */
+function identify(p){if(!live()||!V)return;if(INFO&&INFO.attrs===false){toast(T.noattrs);return}
+ const m=toMap(p[0],p[1]);PIN=m;$('pin').classList.remove('hide');place();
+ send({t:'identify',id:++identId,x:m[0],y:m[1],r:V.res*12})}
+function el(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text!=null)e.textContent=text;return e}
+function onIdent(d){IDENT=d;if(!d||d.off||!Array.isArray(d.features)||!d.features.length){PIN=null;$('pin').classList.add('hide');
+  toast(!d?T.busy:d.off?T.noattrs:T.nothing);return}
+ const box=$('identBody');box.textContent='';$('lIdent').textContent=d.features.length>1?d.features.length+' ×':'';
+ d.features.forEach(f=>{const s=el('div','feat');s.appendChild(el('div','of',f.layer));
+  if(f.title)s.appendChild(el('h3','',f.title));const dl=el('dl');
+  (f.attrs||[]).forEach(a=>{dl.appendChild(el('dt','',a[0]));dl.appendChild(el('dd','',a[1]===''?'—':a[1]))});
+  s.appendChild(dl);box.appendChild(s)});
+ if(d.more)box.appendChild(el('div','note',T.more));openSheet('identSheet')}
+function drawLayers(){const box=$('layerList');box.textContent='';const ls=INFO&&INFO.layers||[];
+ if(!ls.length){box.appendChild(el('div','note',T.nolayers));return}
+ ls.forEach(n=>{const r=el('div','lyr');r.appendChild(el('i'));r.appendChild(el('bdi','',n));box.appendChild(r)})}
+function openSheet(id){document.querySelectorAll('.sheet').forEach(s=>s.classList.add('hide'));$(id).classList.remove('hide')}
+function closeSheet(s){s.classList.add('hide');if(s.id==='identSheet'){PIN=null;$('pin').classList.add('hide')}}
+/* ---- the link: relays to meet, then a direct channel to the computer ---- */
+let pc=null,dc=null,sid=null,linking=false,retry=null,backoff=4000,done=false,cur=null;
+const live=()=>!!(dc&&dc.readyState==='open');
+function send(o){if(live())try{dc.send(JSON.stringify(o))}catch(e){}}
+function drop(){const p=pc;pc=null;dc=null;linking=false;cur=null;busy(false);if(p)try{p.close()}catch(e){}}
+function later(){if(done)return;clearTimeout(retry);retry=setTimeout(connect,backoff);backoff=Math.min(backoff*2,60000)}
+function ended(){done=true;clearTimeout(retry);drop();say('ended')}
+function onMsg(e){if(typeof e.data!=='string'){if(cur){cur.parts.push(e.data);cur.got+=e.data.byteLength;if(cur.got>cur.size)cur=null}return}
+ let m;try{m=JSON.parse(e.data)}catch(x){return}if(!m||typeof m!=='object')return;
+ if(m.t==='img'){cur=null;if(m.status===200&&m.size>0)cur={id:m.id,size:m.size,type:String(m.type||'image/png'),ext:m.ext,parts:[],got:0};
+  else{pend.delete(m.id);if(m.id===reqId){busy(false);if(m.status===503||m.status===504){toast(T.busy);soon(2000)}}}}
+ else if(m.t==='end'){if(cur&&cur.id===m.id){const c=cur;cur=null;if(c.got===c.size)show(c)}}
+ else if(m.t==='info'){if(m.status===200&&m.data)onInfo(m.data)}
+ else if(m.t==='ident'){if(m.id===identId)onIdent(m.status===200?m.data:null)}
+ else if(m.t==='changed'){CHANGED++;toast(T.updated);askInfo()}
+ else if(m.t==='bye')ended()}
+async function connect(){if(done||!BK||linking||live())return;
+ if(!SIG.up()){if(ST!=='lost')say('connecting');return later()}
+ linking=true;if(ST!=='lost'&&ST!=='p2pfail'&&ST!=='pcoff')say('connecting');const my=sid=rid();
+ try{pc=new RTCPeerConnection({iceServers:BR.ice});const ch=dc=pc.createDataChannel('map',{ordered:true}),me=pc;
+  ch.binaryType='arraybuffer';
+  ch.onopen=()=>{linking=false;backoff=4000;send({t:'hi',ua:String(navigator.userAgent||'').slice(0,160)});say('connected');askInfo()};
+  ch.onclose=()=>{if(pc===me){drop();if(!done){say('lost');later()}}};
+  ch.onmessage=onMsg;
+  pc.oniceconnectionstatechange=()=>{if(pc!==me)return;if(me.iceConnectionState==='failed'){drop();say('p2pfail');later()}};
+  await me.setLocalDescription(await me.createOffer());await gathered(me,3000);
+  if(pc!==me)return;
+  await SIG.send({t:'offer',sid:my,sdp:me.localDescription.sdp,z:canZ},true);
+  await sleep(20000);
+  if(pc===me&&linking&&me.signalingState==='have-local-offer'){drop();say('pcoff');later()}
+ }catch(e){drop();say('lost');later()}}
+async function onSignal(o){if(o.t==='answer'&&o.sid===sid&&pc&&pc.signalingState==='have-local-offer'){
+ try{await pc.setRemoteDescription({type:'answer',sdp:o.sdp})}catch(e){drop();later()}}}
+/* ---- gestures: the image moves at once, the computer draws when the gesture ends ---- */
+const map=$('map'),P=new Map();let G=null,tapT=null,lastTap=null;
+function pt(e){const r=map.getBoundingClientRect();return [e.clientX-r.left,e.clientY-r.top]}
+function pinch(){const [a,b]=[...P.values()];return {d:Math.hypot(a[0]-b[0],a[1]-b[1])||1,x:(a[0]+b[0])/2,y:(a[1]+b[1])/2}}
+map.addEventListener('pointerdown',e=>{if(!V)return;try{map.setPointerCapture(e.pointerId)}catch(x){}const p=pt(e);P.set(e.pointerId,p);
+ clearTimeout(rt);if(P.size===1)G={start:p,last:p,t:Date.now(),moved:false};
+ else if(P.size===2){const q=pinch();G={pinch:true,moved:true,d0:q.d,res0:V.res,m:toMap(q.x,q.y)}}});
+map.addEventListener('pointermove',e=>{if(!P.has(e.pointerId)||!G)return;const p=pt(e);P.set(e.pointerId,p);
+ if(G.pinch){if(P.size<2)return;const q=pinch(),[w,h]=size();V.res=clampRes(G.res0*G.d0/q.d);
+  V.cx=G.m[0]-(q.x-w/2)*V.res;V.cy=G.m[1]+(q.y-h/2)*V.res;place();return}
+ if(!G.moved&&Math.hypot(p[0]-G.start[0],p[1]-G.start[1])>6){G.moved=true;G.last=G.start;map.classList.add('drag')}
+ if(G.moved){V.cx-=(p[0]-G.last[0])*V.res;V.cy+=(p[1]-G.last[1])*V.res;G.last=p;place()}});
+function up(e){if(!P.has(e.pointerId))return;const p=pt(e);P.delete(e.pointerId);
+ if(P.size===0){const g=G;G=null;map.classList.remove('drag');if(g&&!g.moved&&Date.now()-g.t<500)tapped(p);else soon()}
+ else if(P.size===1){const q=[...P.values()][0];G={start:q,last:q,t:0,moved:true}}}
+map.addEventListener('pointerup',up);map.addEventListener('pointercancel',up);
+function tapped(p){if(lastTap&&Date.now()-lastTap.t<300&&Math.hypot(p[0]-lastTap.p[0],p[1]-lastTap.p[1])<30){
+  clearTimeout(tapT);lastTap=null;zoomAt(p[0],p[1],0.5);soon();return}
+ lastTap={t:Date.now(),p:p};clearTimeout(tapT);tapT=setTimeout(()=>{lastTap=null;identify(p)},280)}
+map.addEventListener('wheel',e=>{e.preventDefault();if(!V)return;const k=e.deltaMode===1?33:e.deltaMode===2?400:1,p=pt(e);
+ zoomAt(p[0],p[1],Math.exp(Math.max(-300,Math.min(300,e.deltaY*k))*0.002));soon(260)},{passive:false});
+map.addEventListener('keydown',e=>{if(!V)return;const[w,h]=size(),s=V.res*80;
+ if(e.key==='+'||e.key==='=')zoomAt(w/2,h/2,0.5);else if(e.key==='-')zoomAt(w/2,h/2,2);
+ else if(e.key==='ArrowLeft')V.cx-=s;else if(e.key==='ArrowRight')V.cx+=s;else if(e.key==='ArrowUp')V.cy+=s;
+ else if(e.key==='ArrowDown')V.cy-=s;else return;e.preventDefault();place();soon()});
+$('zin').onclick=()=>{if(!V)return;const[w,h]=size();zoomAt(w/2,h/2,0.5);soon()};
+$('zout').onclick=()=>{if(!V)return;const[w,h]=size();zoomAt(w/2,h/2,2);soon()};
+$('home').onclick=()=>{if(HOME){fit(HOME);soon(0)}};
+$('layersBtn').onclick=()=>{drawLayers();openSheet('layerSheet')};
+addEventListener('resize',()=>{place();soon(300)});
+/* ---- my location: read on this device only, never sent ---- */
+let watchId=null;
+$('locBtn').onclick=()=>{if(!navigator.geolocation||!window.isSecureContext){toast(T.nogps);return}
+ if(ME&&V){V.cx=ME.x;V.cy=ME.y;place();soon(0);return}if(watchId!=null)return;$('locBtn').classList.add('on');
+ watchId=navigator.geolocation.watchPosition(p=>{const c=p.coords,q=merc(c.longitude,c.latitude),first=!ME;
+   ME={x:q[0],y:q[1],acc:(c.accuracy||0)/Math.cos(c.latitude*Math.PI/180)};$('me').classList.remove('hide');$('acc').classList.remove('hide');
+   if(first&&V){V.cx=ME.x;V.cy=ME.y;if(V.res>4)V.res=2;soon(0)}place()},
+  ()=>{toast(T.nogps);navigator.geolocation.clearWatch(watchId);watchId=null;$('locBtn').classList.remove('on')},
+  {enableHighAccuracy:true,maximumAge:10000,timeout:30000})};
+/* ---- sheets and language ---- */
+document.querySelectorAll('.sheet').forEach(s=>s.addEventListener('click',e=>{if(e.target===s||e.target.hasAttribute('data-close'))closeSheet(s)}));
+$('langBtn').onclick=()=>{const box=$('langs');box.textContent='';Object.keys(ALL).forEach(k=>{const b=el('button','opt',NAMES[k]||k);
+ b.type='button';b.lang=k.replace('_','-');b.classList.toggle('sel',k===LANG);
+ b.onclick=()=>{keep('biruni-lang',k);setLang(k);$('langSheet').classList.add('hide')};box.appendChild(b)});openSheet('langSheet')};
+setLang(pick(kept('biruni-lang'))||pick(HASHL)||pick(navigator.language)||'en');
+(async()=>{if(!KEYB||KEYB.length!==43){$('wait').classList.add('hide');say('nokey');return}
+ if(!window.isSecureContext||!window.RTCPeerConnection||!window.crypto||!crypto.subtle){$('wait').classList.add('hide');say('insecure');return}
+ say('connecting');await bridgeKey(KEYB);SIG.start(onSignal,n=>{if(n&&!linking&&!live()){backoff=4000;connect()}});
+ addEventListener('online',()=>{backoff=4000;connect()});
+ document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&!live()){backoff=4000;connect()}})})();
+</script></body></html>
