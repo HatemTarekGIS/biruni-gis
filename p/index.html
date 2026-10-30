@@ -103,6 +103,24 @@ input.in:focus{border-color:var(--accent)}
  opacity:0;background:var(--text);color:var(--bg);padding:10px 18px;border-radius:999px;font-size:14px;font-weight:600;
  transition:opacity .25s,transform .25s;pointer-events:none;white-space:nowrap;max-width:90vw;overflow:hidden;text-overflow:ellipsis}
 .toast.show{opacity:1;transform:translate(-50%,0)}
+.ghost{font-size:14px;font-weight:600;padding:8px 13px;border-radius:12px;border:1px solid var(--accent);
+ background:transparent;color:var(--accent)}
+.ghost.on{background:var(--accent);color:var(--ink)}
+.avgInfo{font-size:13px;color:var(--dim);text-align:end;flex:1}
+#avgBar{margin-top:10px}
+.mrow{display:flex;gap:10px;align-items:center;margin-top:8px}
+.sw{position:relative;flex:none;width:50px;height:30px}
+.sw input{opacity:0;width:0;height:0;position:absolute}
+.sw span{position:absolute;inset:0;border-radius:15px;background:var(--line);transition:background .2s}
+.sw span::after{content:"";position:absolute;top:3px;inset-inline-start:3px;width:24px;height:24px;border-radius:50%;
+ background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .2s}
+.sw input:checked+span{background:var(--accent)}
+.sw input:checked+span::after{transform:translateX(20px)}
+[dir=rtl] .sw input:checked+span::after{transform:translateX(-20px)}
+.sw input:focus-visible+span{outline:2px solid var(--accent);outline-offset:2px}
+#gmap{display:block;width:100%;height:190px;margin:10px 0 8px;border-radius:14px;background:var(--bg)}
+.gtext{font-size:17px;font-weight:700}
+.gtext.in{color:var(--good)}.gtext.out{color:var(--fair)}
 .hide{display:none!important}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style></head><body>
@@ -119,17 +137,27 @@ input.in:focus{border-color:var(--accent)}
  <h1 id="hero"></h1><p id="introText"></p><button class="primary" id="go" type="button"></button>
 </section>
 <section id="work" class="hide">
+ <div class="card hide" id="guideCard">
+  <div class="row"><span class="lbl" id="lGuide"></span><span class="dir"><svg id="garrow" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l7.5 19L12 16.8 4.5 21z"/></svg></span></div>
+  <canvas id="gmap"></canvas>
+  <div class="gtext" id="gtext">—</div>
+ </div>
  <div class="card">
   <div class="row"><span class="lbl" id="lPos"></span><span class="acc" id="acc"></span></div>
   <bdi class="coords" id="pos">—</bdi>
   <div class="meter"><i id="accBar"></i></div>
   <div class="row sub"><span class="lbl" id="lDir"></span><span class="dir"><svg id="arrow" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l7.5 19L12 16.8 4.5 21z"/></svg><bdi id="deg">—</bdi></span></div>
+  <div class="row sub"><button class="ghost" id="avgBtn" type="button"></button><span class="avgInfo" id="avgInfo"></span></div>
+  <div class="meter hide" id="avgBar"><i id="avgFill"></i></div>
  </div>
  <div class="card">
   <span class="lbl" id="lKind"></span><div class="kinds" id="kinds"></div>
   <div id="form"></div>
   <input type="text" class="in" id="note" enterkeyhint="done" autocomplete="off">
  </div>
+ <div class="card"><label class="lbl" for="me" id="lMe"></label>
+  <div class="mrow"><input type="text" class="in" id="me" maxlength="40" autocomplete="name">
+   <label class="sw"><input type="checkbox" id="share" checked><span></span></label></div></div>
  <div class="stats"><div class="stat"><b id="nSent">0</b><span id="lSent"></span></div>
   <div class="stat" id="waitBox"><b id="nWait">0</b><span id="lWait"></span></div></div>
  <span class="lbl" id="lRecent"></span><div id="list" class="grid"></div>
@@ -142,7 +170,7 @@ input.in:focus{border-color:var(--accent)}
 <div class="sheet hide" id="sheet"><div class="panel"><div class="grab"></div><div class="lbl" id="lLang"></div><div id="langs"></div></div></div>
 <div class="toast" id="toast"></div>
 <script>
-let ALL={"ar": {"bad": "القيمة دي مش مظبوطة.", "connected": "متوصل بالكمبيوتر", "connecting": "بيتوصل بالكمبيوتر… الصور اللي تتصور دلوقتي محفوظة وهتتبعت.", "denied": "لم يُسمح بالموقع.", "direction": "الاتجاه", "hero": "صور ميدانية", "insecure": "يمنع هذا المتصفح الموقع هنا. استخدم Chrome أو Safari واقبل تحذير الشهادة.", "intro": "اسمح بالموقع لما يطلبه. كل صورة هتظهر على خريطة الكمبيوتر على طول وتتحفظ عليه. خلّي الصفحة دي مفتوحة.", "kept": "اتحفظت على التليفون - بتتبعت…", "kind": "النوع (اختياري)", "language": "اللغة", "linking": "بيتوصل…", "lost": "مش واصل للكمبيوتر - الصور محفوظة على التليفون وهتتبعت لوحدها بعدين.", "need": "املأ الأسئلة المعلّمة الأول.", "no": "لا", "nokey": "افتح الصفحة دي بمسح الكود اللي في Biruni GIS (صور ميدانية).", "none": "صورك هتظهر هنا.", "note": "ملاحظة (اختيارية)", "offline": "غير متصل", "online": "متوصل", "p2pfail": "الشبكة دي مش بتسمح بربط مباشر بالكمبيوتر. الصور محفوظة على التليفون؛ جرّب شبكة تانية أو واي فاي.", "pcoff": "الكمبيوتر مش بيرد. هل Biruni مفتوح والصور الميدانية شغالة؟ الصور محفوظة على التليفون.", "position": "الموقع", "queued": "مستنية تتبعت:", "recent": "آخر الصور", "required": "إلزامي", "sent": "وصل للكمبيوتر:", "shoot": "صوّر", "start": "ابدأ", "title": "Biruni GIS - صور ميدانية", "waiting": "مستني الموقع…", "yes": "نعم"}, "en": {"bad": "This value is not right.", "connected": "Connected to the computer", "connecting": "Connecting to the computer… photos taken now are kept and sent.", "denied": "Location not allowed.", "direction": "Direction", "hero": "Field photos", "insecure": "This browser blocks the location here. Use Chrome or Safari and accept the certificate warning.", "intro": "Allow the location when asked. Each photo appears on the computer's map at once and is saved there. Keep this page open.", "kept": "Saved on the phone - sending…", "kind": "Kind (optional)", "language": "Language", "linking": "Connecting…", "lost": "Not reaching the computer - photos are kept on the phone and sent later.", "need": "Fill in the marked questions first.", "no": "No", "nokey": "Open this page by scanning the code in Biruni GIS (Field photos).", "none": "Your photos will appear here.", "note": "Note (optional)", "offline": "Not connected", "online": "Connected", "p2pfail": "This network does not allow a direct link to the computer. Photos are kept on the phone; try another network or Wi-Fi.", "pcoff": "The computer is not answering. Is Biruni open, with Field photos started? Photos are kept on the phone.", "position": "Position", "queued": "Waiting to send:", "recent": "Recent photos", "required": "Required", "sent": "On the computer:", "shoot": "Take a photo", "start": "Start", "title": "Biruni GIS - field photos", "waiting": "Waiting for the location…", "yes": "Yes"}, "es": {"bad": "Este valor no es correcto.", "connected": "Conectado al ordenador", "connecting": "Conectando con el equipo… las fotos que tome ahora se guardan y se envían.", "denied": "Ubicación no permitida.", "direction": "Dirección", "hero": "Fotos de campo", "insecure": "Este navegador bloquea aquí la ubicación. Use Chrome o Safari y acepte el aviso del certificado.", "intro": "Permite la ubicación cuando se solicite. Cada foto aparece al instante en el mapa del ordenador y se guarda allí. Mantén esta página abierta.", "kept": "Guardada en el teléfono - enviando…", "kind": "Tipo (opcional)", "language": "Idioma", "linking": "Conectando…", "lost": "No se alcanza el ordenador: las fotos se guardan en el teléfono y se envían más tarde.", "need": "Primero rellene las preguntas marcadas.", "no": "No", "nokey": "Abra esta página escaneando el código en Biruni GIS (Fotos de campo).", "none": "Sus fotos aparecerán aquí.", "note": "Nota (opcional)", "offline": "No conectado", "online": "Conectado", "p2pfail": "Esta red no permite un enlace directo con el equipo. Las fotos se guardan en el teléfono; pruebe otra red o Wi-Fi.", "pcoff": "El equipo no responde. ¿Está Biruni abierto, con Fotos de campo iniciado? Las fotos se guardan en el teléfono.", "position": "Posición", "queued": "Pendientes de enviar:", "recent": "Fotos recientes", "required": "Obligatorio", "sent": "En el ordenador:", "shoot": "Tomar una foto", "start": "Inicio", "title": "Biruni GIS - fotos de campo", "waiting": "Esperando la ubicación…", "yes": "Sí"}, "fa": {"bad": "این مقدار درست نیست.", "connected": "به رایانه متصل است", "connecting": "در حال اتصال به رایانه… عکس‌هایی که اکنون می‌گیرید نگه داشته و فرستاده می‌شوند.", "denied": "دسترسی به مکان مجاز نیست.", "direction": "جهت", "hero": "عکس‌های میدانی", "insecure": "این مرورگر اینجا مکان را مسدود می‌کند. از Chrome یا Safari استفاده کنید و هشدار گواهی را بپذیرید.", "intro": "هنگام درخواست، اجازهٔ موقعیت مکانی را بدهید. هر عکس بلافاصله روی نقشهٔ رایانه نمایش داده می‌شود و همان‌جا ذخیره می‌شود. این صفحه را باز نگه دارید.", "kept": "روی تلفن ذخیره شد - در حال ارسال…", "kind": "نوع (اختیاری)", "language": "زبان", "linking": "در حال اتصال…", "lost": "دسترسی به رایانه ممکن نیست؛ عکس‌ها روی تلفن نگه داشته می‌شوند و بعداً ارسال می‌شوند.", "need": "اول پرسش‌های علامت‌خورده را پر کنید.", "no": "خیر", "nokey": "این صفحه را با اسکن کد در Biruni GIS (عکس‌های میدانی) باز کنید.", "none": "عکس‌هایتان اینجا نمایش داده می‌شوند.", "note": "یادداشت (اختیاری)", "offline": "متصل نیست", "online": "وصل است", "p2pfail": "این شبکه اجازهٔ پیوند مستقیم با رایانه را نمی‌دهد. عکس‌ها روی تلفن نگه داشته می‌شوند؛ شبکهٔ دیگر یا Wi-Fi را امتحان کنید.", "pcoff": "رایانه پاسخ نمی‌دهد. آیا Biruni باز است و عکس‌های میدانی آغاز شده؟ عکس‌ها روی تلفن نگه داشته می‌شوند.", "position": "موقعیت", "queued": "در انتظار ارسال:", "recent": "عکس‌های اخیر", "required": "الزامی", "sent": "روی رایانه:", "shoot": "گرفتن عکس", "start": "شروع", "title": "Biruni GIS - عکس‌های میدانی", "waiting": "در انتظار موقعیت مکانی…", "yes": "بله"}, "fr": {"bad": "Cette valeur n'est pas correcte.", "connected": "Connecté à l'ordinateur", "connecting": "Connexion à l'ordinateur… les photos prises maintenant sont gardées et envoyées.", "denied": "Localisation non autorisée.", "direction": "Direction", "hero": "Photos de terrain", "insecure": "Ce navigateur bloque la localisation ici. Utilisez Chrome ou Safari et acceptez l'avertissement de certificat.", "intro": "Autorisez la localisation lorsqu'elle est demandée. Chaque photo apparaît aussitôt sur la carte de l'ordinateur et y est enregistrée. Gardez cette page ouverte.", "kept": "Enregistrée sur le téléphone - envoi…", "kind": "Type (facultatif)", "language": "Langue", "linking": "Connexion…", "lost": "L'ordinateur est injoignable : les photos sont conservées sur le téléphone et envoyées plus tard.", "need": "Remplissez d'abord les questions marquées.", "no": "Non", "nokey": "Ouvrez cette page en scannant le code dans Biruni GIS (Photos de terrain).", "none": "Vos photos apparaîtront ici.", "note": "Note (facultatif)", "offline": "Non connecté", "online": "Connecté", "p2pfail": "Ce réseau ne permet pas de lien direct avec l'ordinateur. Les photos sont gardées sur le téléphone ; essayez un autre réseau ou le Wi-Fi.", "pcoff": "L'ordinateur ne répond pas. Biruni est-il ouvert, avec Photos de terrain démarré ? Les photos sont gardées sur le téléphone.", "position": "Position", "queued": "En attente d'envoi :", "recent": "Photos récentes", "required": "Obligatoire", "sent": "Sur l'ordinateur :", "shoot": "Prendre une photo", "start": "Début", "title": "Biruni GIS - photos de terrain", "waiting": "En attente de la position…", "yes": "Oui"}, "pt_BR": {"bad": "Este valor não está certo.", "connected": "Conectado ao computador", "connecting": "Conectando ao computador… as fotos tiradas agora são guardadas e enviadas.", "denied": "Localização não permitida.", "direction": "Direção", "hero": "Fotos de campo", "insecure": "Este navegador bloqueia a localização aqui. Use Chrome ou Safari e aceite o aviso do certificado.", "intro": "Permita a localização quando solicitado. Cada foto aparece na hora no mapa do computador e é salva lá. Mantenha esta página aberta.", "kept": "Salva no telefone - enviando…", "kind": "Tipo (opcional)", "language": "Idioma", "linking": "Conectando…", "lost": "Sem conexão com o computador: as fotos ficam no celular e são enviadas depois.", "need": "Primeiro preencha as perguntas marcadas.", "no": "Não", "nokey": "Abra esta página lendo o código no Biruni GIS (Fotos de campo).", "none": "Suas fotos aparecerão aqui.", "note": "Nota (opcional)", "offline": "Não conectado", "online": "Conectado", "p2pfail": "Esta rede não permite uma ligação direta com o computador. As fotos ficam no telefone; tente outra rede ou Wi-Fi.", "pcoff": "O computador não responde. O Biruni está aberto, com Fotos de campo iniciado? As fotos ficam guardadas no telefone.", "position": "Posição", "queued": "Aguardando envio:", "recent": "Fotos recentes", "required": "Obrigatório", "sent": "No computador:", "shoot": "Tirar uma foto", "start": "Início", "title": "Biruni GIS - fotos de campo", "waiting": "Aguardando a localização…", "yes": "Sim"}, "tr": {"bad": "Bu değer doğru değil.", "connected": "Bilgisayara bağlı", "connecting": "Bilgisayara bağlanılıyor… şimdi çekilen fotoğraflar saklanır ve gönderilir.", "denied": "Konuma izin verilmedi.", "direction": "Yön", "hero": "Saha fotoğrafları", "insecure": "Bu tarayıcı burada konumu engelliyor. Chrome veya Safari kullanın ve sertifika uyarısını kabul edin.", "intro": "İstendiğinde konuma izin verin. Her fotoğraf anında bilgisayarın haritasında görünür ve orada kaydedilir. Bu sayfayı açık tutun.", "kept": "Telefona kaydedildi - gönderiliyor…", "kind": "Tür (isteğe bağlı)", "language": "Dil", "linking": "Bağlanıyor…", "lost": "Bilgisayara ulaşılamıyor: fotoğraflar telefonda tutulur ve daha sonra gönderilir.", "need": "Önce işaretli soruları doldurun.", "no": "Hayır", "nokey": "Bu sayfayı Biruni GIS'teki (Saha fotoğrafları) kodu okutarak açın.", "none": "Fotoğraflarınız burada görünecek.", "note": "Not (isteğe bağlı)", "offline": "Bağlı değil", "online": "Bağlı", "p2pfail": "Bu ağ bilgisayara doğrudan bağlantıya izin vermiyor. Fotoğraflar telefonda saklanıyor; başka bir ağ veya Wi-Fi deneyin.", "pcoff": "Bilgisayar yanıt vermiyor. Biruni açık ve Saha fotoğrafları başlatılmış mı? Fotoğraflar telefonda saklanıyor.", "position": "Konum", "queued": "Gönderilmeyi bekleyen:", "recent": "Son fotoğraflar", "required": "Zorunlu", "sent": "Bilgisayarda:", "shoot": "Fotoğraf çek", "start": "Başlangıç", "title": "Biruni GIS - saha fotoğrafları", "waiting": "Konum bekleniyor…", "yes": "Evet"}},KINDS=[],FORM=[],ROOM='',HASHL=null,T={},LANG='en';const DEF='',$=i=>document.getElementById(i);
+let ALL={"ar": {"averaged": "متوسط {n} قراءة، تشتت ± {s} م - هيتاخد للصورة الجاية", "averaging": "بياخد المتوسط… {n} قراءة - ثبّت التليفون", "avg": "متوسط هنا (20 ث)", "bad": "القيمة دي مش مظبوطة.", "connected": "متوصل بالكمبيوتر", "connecting": "بيتوصل بالكمبيوتر… الصور اللي تتصور دلوقتي محفوظة وهتتبعت.", "denied": "لم يُسمح بالموقع.", "direction": "الاتجاه", "guide": "توجيه من الكمبيوتر", "hero": "صور ميدانية", "insecure": "يمنع هذا المتصفح الموقع هنا. استخدم Chrome أو Safari واقبل تحذير الشهادة.", "inside": "جوه - {d} من الحد", "intro": "اسمح بالموقع لما يطلبه. كل صورة هتظهر على خريطة الكمبيوتر على طول وتتحفظ عليه. خلّي الصفحة دي مفتوحة.", "kept": "اتحفظت على التليفون - بتتبعت…", "kind": "النوع (اختياري)", "language": "اللغة", "linking": "بيتوصل…", "lost": "مش واصل للكمبيوتر - الصور محفوظة على التليفون وهتتبعت لوحدها بعدين.", "me": "اسمك على خريطة الكمبيوتر", "near": "{d} من الخط", "need": "املأ الأسئلة المعلّمة الأول.", "no": "لا", "nokey": "افتح الصفحة دي بمسح الكود اللي في Biruni GIS (صور ميدانية).", "none": "صورك هتظهر هنا.", "note": "ملاحظة (اختيارية)", "offline": "غير متصل", "online": "متوصل", "outside": "برة - {d} للحد", "p2pfail": "الشبكة دي مش بتسمح بربط مباشر بالكمبيوتر. الصور محفوظة على التليفون؛ جرّب شبكة تانية أو واي فاي.", "pcoff": "الكمبيوتر مش بيرد. هل Biruni مفتوح والصور الميدانية شغالة؟ الصور محفوظة على التليفون.", "point": "النقطة", "position": "الموقع", "queued": "مستنية تتبعت:", "recent": "آخر الصور", "required": "إلزامي", "sent": "وصل للكمبيوتر:", "share": "ورّيني على خريطة الكمبيوتر", "shoot": "صوّر", "start": "ابدأ", "stop": "إيقاف", "target": "{d} لحد {name}", "title": "Biruni GIS - صور ميدانية", "waiting": "مستني الموقع…", "yes": "نعم"}, "en": {"averaged": "Averaged from {n} readings, spread ± {s} m - used for the next photo", "averaging": "Averaging… {n} readings - keep the phone still", "avg": "Average here (20 s)", "bad": "This value is not right.", "connected": "Connected to the computer", "connecting": "Connecting to the computer… photos taken now are kept and sent.", "denied": "Location not allowed.", "direction": "Direction", "guide": "Guide from the computer", "hero": "Field photos", "insecure": "This browser blocks the location here. Use Chrome or Safari and accept the certificate warning.", "inside": "Inside - {d} from the edge", "intro": "Allow the location when asked. Each photo appears on the computer's map at once and is saved there. Keep this page open.", "kept": "Saved on the phone - sending…", "kind": "Kind (optional)", "language": "Language", "linking": "Connecting…", "lost": "Not reaching the computer - photos are kept on the phone and sent later.", "me": "Your name on the computer's map", "near": "{d} from the line", "need": "Fill in the marked questions first.", "no": "No", "nokey": "Open this page by scanning the code in Biruni GIS (Field photos).", "none": "Your photos will appear here.", "note": "Note (optional)", "offline": "Not connected", "online": "Connected", "outside": "Outside - {d} to the edge", "p2pfail": "This network does not allow a direct link to the computer. Photos are kept on the phone; try another network or Wi-Fi.", "pcoff": "The computer is not answering. Is Biruni open, with Field photos started? Photos are kept on the phone.", "point": "the point", "position": "Position", "queued": "Waiting to send:", "recent": "Recent photos", "required": "Required", "sent": "On the computer:", "share": "Show me on the computer's map", "shoot": "Take a photo", "start": "Start", "stop": "Stop", "target": "{d} to {name}", "title": "Biruni GIS - field photos", "waiting": "Waiting for the location…", "yes": "Yes"}, "es": {"averaged": "Promedio de {n} lecturas, dispersión ± {s} m - para la próxima foto", "averaging": "Promediando… {n} lecturas - mantenga el teléfono quieto", "avg": "Promediar aquí (20 s)", "bad": "Este valor no es correcto.", "connected": "Conectado al ordenador", "connecting": "Conectando con el equipo… las fotos que tome ahora se guardan y se envían.", "denied": "Ubicación no permitida.", "direction": "Dirección", "guide": "Guía del ordenador", "hero": "Fotos de campo", "insecure": "Este navegador bloquea aquí la ubicación. Use Chrome o Safari y acepte el aviso del certificado.", "inside": "Dentro - a {d} del borde", "intro": "Permite la ubicación cuando se solicite. Cada foto aparece al instante en el mapa del ordenador y se guarda allí. Mantén esta página abierta.", "kept": "Guardada en el teléfono - enviando…", "kind": "Tipo (opcional)", "language": "Idioma", "linking": "Conectando…", "lost": "No se alcanza el ordenador: las fotos se guardan en el teléfono y se envían más tarde.", "me": "Su nombre en el mapa del ordenador", "near": "a {d} de la línea", "need": "Primero rellene las preguntas marcadas.", "no": "No", "nokey": "Abra esta página escaneando el código en Biruni GIS (Fotos de campo).", "none": "Sus fotos aparecerán aquí.", "note": "Nota (opcional)", "offline": "No conectado", "online": "Conectado", "outside": "Fuera - a {d} del borde", "p2pfail": "Esta red no permite un enlace directo con el equipo. Las fotos se guardan en el teléfono; pruebe otra red o Wi-Fi.", "pcoff": "El equipo no responde. ¿Está Biruni abierto, con Fotos de campo iniciado? Las fotos se guardan en el teléfono.", "point": "el punto", "position": "Posición", "queued": "Pendientes de enviar:", "recent": "Fotos recientes", "required": "Obligatorio", "sent": "En el ordenador:", "share": "Mostrarme en el mapa del ordenador", "shoot": "Tomar una foto", "start": "Inicio", "stop": "Detener", "target": "{d} hasta {name}", "title": "Biruni GIS - fotos de campo", "waiting": "Esperando la ubicación…", "yes": "Sí"}, "fa": {"averaged": "میانگین {n} خوانش، پراکندگی ± {s} متر - برای عکس بعدی", "averaging": "در حال میانگین‌گیری… {n} خوانش - تلفن را ثابت نگه دارید", "avg": "میانگین همین‌جا (۲۰ ث)", "bad": "این مقدار درست نیست.", "connected": "به رایانه متصل است", "connecting": "در حال اتصال به رایانه… عکس‌هایی که اکنون می‌گیرید نگه داشته و فرستاده می‌شوند.", "denied": "دسترسی به مکان مجاز نیست.", "direction": "جهت", "guide": "راهنما از رایانه", "hero": "عکس‌های میدانی", "insecure": "این مرورگر اینجا مکان را مسدود می‌کند. از Chrome یا Safari استفاده کنید و هشدار گواهی را بپذیرید.", "inside": "داخل - {d} تا لبه", "intro": "هنگام درخواست، اجازهٔ موقعیت مکانی را بدهید. هر عکس بلافاصله روی نقشهٔ رایانه نمایش داده می‌شود و همان‌جا ذخیره می‌شود. این صفحه را باز نگه دارید.", "kept": "روی تلفن ذخیره شد - در حال ارسال…", "kind": "نوع (اختیاری)", "language": "زبان", "linking": "در حال اتصال…", "lost": "دسترسی به رایانه ممکن نیست؛ عکس‌ها روی تلفن نگه داشته می‌شوند و بعداً ارسال می‌شوند.", "me": "نام شما روی نقشهٔ رایانه", "near": "{d} تا خط", "need": "اول پرسش‌های علامت‌خورده را پر کنید.", "no": "خیر", "nokey": "این صفحه را با اسکن کد در Biruni GIS (عکس‌های میدانی) باز کنید.", "none": "عکس‌هایتان اینجا نمایش داده می‌شوند.", "note": "یادداشت (اختیاری)", "offline": "متصل نیست", "online": "وصل است", "outside": "بیرون - {d} تا لبه", "p2pfail": "این شبکه اجازهٔ پیوند مستقیم با رایانه را نمی‌دهد. عکس‌ها روی تلفن نگه داشته می‌شوند؛ شبکهٔ دیگر یا Wi-Fi را امتحان کنید.", "pcoff": "رایانه پاسخ نمی‌دهد. آیا Biruni باز است و عکس‌های میدانی آغاز شده؟ عکس‌ها روی تلفن نگه داشته می‌شوند.", "point": "نقطه", "position": "موقعیت", "queued": "در انتظار ارسال:", "recent": "عکس‌های اخیر", "required": "الزامی", "sent": "روی رایانه:", "share": "مرا روی نقشهٔ رایانه نشان بده", "shoot": "گرفتن عکس", "start": "شروع", "stop": "توقف", "target": "{d} تا {name}", "title": "Biruni GIS - عکس‌های میدانی", "waiting": "در انتظار موقعیت مکانی…", "yes": "بله"}, "fr": {"averaged": "Moyenne de {n} mesures, dispersion ± {s} m - pour la prochaine photo", "averaging": "Moyenne en cours… {n} mesures - gardez le téléphone immobile", "avg": "Moyenne ici (20 s)", "bad": "Cette valeur n'est pas correcte.", "connected": "Connecté à l'ordinateur", "connecting": "Connexion à l'ordinateur… les photos prises maintenant sont gardées et envoyées.", "denied": "Localisation non autorisée.", "direction": "Direction", "guide": "Guide de l'ordinateur", "hero": "Photos de terrain", "insecure": "Ce navigateur bloque la localisation ici. Utilisez Chrome ou Safari et acceptez l'avertissement de certificat.", "inside": "Dedans - à {d} du bord", "intro": "Autorisez la localisation lorsqu'elle est demandée. Chaque photo apparaît aussitôt sur la carte de l'ordinateur et y est enregistrée. Gardez cette page ouverte.", "kept": "Enregistrée sur le téléphone - envoi…", "kind": "Type (facultatif)", "language": "Langue", "linking": "Connexion…", "lost": "L'ordinateur est injoignable : les photos sont conservées sur le téléphone et envoyées plus tard.", "me": "Votre nom sur la carte de l'ordinateur", "near": "à {d} de la ligne", "need": "Remplissez d'abord les questions marquées.", "no": "Non", "nokey": "Ouvrez cette page en scannant le code dans Biruni GIS (Photos de terrain).", "none": "Vos photos apparaîtront ici.", "note": "Note (facultatif)", "offline": "Non connecté", "online": "Connecté", "outside": "Dehors - à {d} du bord", "p2pfail": "Ce réseau ne permet pas de lien direct avec l'ordinateur. Les photos sont gardées sur le téléphone ; essayez un autre réseau ou le Wi-Fi.", "pcoff": "L'ordinateur ne répond pas. Biruni est-il ouvert, avec Photos de terrain démarré ? Les photos sont gardées sur le téléphone.", "point": "le point", "position": "Position", "queued": "En attente d'envoi :", "recent": "Photos récentes", "required": "Obligatoire", "sent": "Sur l'ordinateur :", "share": "Me montrer sur la carte de l'ordinateur", "shoot": "Prendre une photo", "start": "Début", "stop": "Arrêter", "target": "{d} jusqu'à {name}", "title": "Biruni GIS - photos de terrain", "waiting": "En attente de la position…", "yes": "Oui"}, "pt_BR": {"averaged": "Média de {n} leituras, dispersão ± {s} m - usada na próxima foto", "averaging": "Calculando a média… {n} leituras - mantenha o telefone parado", "avg": "Média aqui (20 s)", "bad": "Este valor não está certo.", "connected": "Conectado ao computador", "connecting": "Conectando ao computador… as fotos tiradas agora são guardadas e enviadas.", "denied": "Localização não permitida.", "direction": "Direção", "guide": "Guia do computador", "hero": "Fotos de campo", "insecure": "Este navegador bloqueia a localização aqui. Use Chrome ou Safari e aceite o aviso do certificado.", "inside": "Dentro - a {d} da borda", "intro": "Permita a localização quando solicitado. Cada foto aparece na hora no mapa do computador e é salva lá. Mantenha esta página aberta.", "kept": "Salva no telefone - enviando…", "kind": "Tipo (opcional)", "language": "Idioma", "linking": "Conectando…", "lost": "Sem conexão com o computador: as fotos ficam no celular e são enviadas depois.", "me": "Seu nome no mapa do computador", "near": "a {d} da linha", "need": "Primeiro preencha as perguntas marcadas.", "no": "Não", "nokey": "Abra esta página lendo o código no Biruni GIS (Fotos de campo).", "none": "Suas fotos aparecerão aqui.", "note": "Nota (opcional)", "offline": "Não conectado", "online": "Conectado", "outside": "Fora - a {d} da borda", "p2pfail": "Esta rede não permite uma ligação direta com o computador. As fotos ficam no telefone; tente outra rede ou Wi-Fi.", "pcoff": "O computador não responde. O Biruni está aberto, com Fotos de campo iniciado? As fotos ficam guardadas no telefone.", "point": "o ponto", "position": "Posição", "queued": "Aguardando envio:", "recent": "Fotos recentes", "required": "Obrigatório", "sent": "No computador:", "share": "Mostrar-me no mapa do computador", "shoot": "Tirar uma foto", "start": "Início", "stop": "Parar", "target": "{d} até {name}", "title": "Biruni GIS - fotos de campo", "waiting": "Aguardando a localização…", "yes": "Sim"}, "tr": {"averaged": "{n} okumanın ortalaması, dağılım ± {s} m - sonraki fotoğrafta kullanılır", "averaging": "Ortalanıyor… {n} okuma - telefonu sabit tutun", "avg": "Burada ortala (20 sn)", "bad": "Bu değer doğru değil.", "connected": "Bilgisayara bağlı", "connecting": "Bilgisayara bağlanılıyor… şimdi çekilen fotoğraflar saklanır ve gönderilir.", "denied": "Konuma izin verilmedi.", "direction": "Yön", "guide": "Bilgisayardan yönlendirme", "hero": "Saha fotoğrafları", "insecure": "Bu tarayıcı burada konumu engelliyor. Chrome veya Safari kullanın ve sertifika uyarısını kabul edin.", "inside": "İçeride - kenara {d}", "intro": "İstendiğinde konuma izin verin. Her fotoğraf anında bilgisayarın haritasında görünür ve orada kaydedilir. Bu sayfayı açık tutun.", "kept": "Telefona kaydedildi - gönderiliyor…", "kind": "Tür (isteğe bağlı)", "language": "Dil", "linking": "Bağlanıyor…", "lost": "Bilgisayara ulaşılamıyor: fotoğraflar telefonda tutulur ve daha sonra gönderilir.", "me": "Bilgisayarın haritasındaki adınız", "near": "çizgiye {d}", "need": "Önce işaretli soruları doldurun.", "no": "Hayır", "nokey": "Bu sayfayı Biruni GIS'teki (Saha fotoğrafları) kodu okutarak açın.", "none": "Fotoğraflarınız burada görünecek.", "note": "Not (isteğe bağlı)", "offline": "Bağlı değil", "online": "Bağlı", "outside": "Dışarıda - kenara {d}", "p2pfail": "Bu ağ bilgisayara doğrudan bağlantıya izin vermiyor. Fotoğraflar telefonda saklanıyor; başka bir ağ veya Wi-Fi deneyin.", "pcoff": "Bilgisayar yanıt vermiyor. Biruni açık ve Saha fotoğrafları başlatılmış mı? Fotoğraflar telefonda saklanıyor.", "point": "nokta", "position": "Konum", "queued": "Gönderilmeyi bekleyen:", "recent": "Son fotoğraflar", "required": "Zorunlu", "sent": "Bilgisayarda:", "share": "Beni bilgisayarın haritasında göster", "shoot": "Fotoğraf çek", "start": "Başlangıç", "stop": "Durdur", "target": "{name} noktasına {d}", "title": "Biruni GIS - saha fotoğrafları", "waiting": "Konum bekleniyor…", "yes": "Evet"}},KINDS=[],FORM=[],ROOM='',HASHL=null,T={},LANG='en';const DEF='',$=i=>document.getElementById(i);
 const NAMES={en:'English',ar:'العربية',es:'Español',pt_BR:'Português',fr:'Français',tr:'Türkçe',fa:'فارسی'};
 function pick(l){if(!l)return null;l=String(l).replace('-','_');if(ALL[l])return l;const b=l.split('_')[0].toLowerCase();
  return Object.keys(ALL).find(k=>k.split('_')[0].toLowerCase()===b)||null}
@@ -159,6 +187,8 @@ const bare=s=>String(s||'').replace(/\s*[:：]\s*$/,'');
 function label(){document.title=T.title;$('hero').textContent=T.hero;$('introText').textContent=T.intro;
  $('go').textContent=T.start;$('note').placeholder=T.note;$('lPos').textContent=T.position;$('lDir').textContent=T.direction;
  $('lKind').textContent=T.kind;$('lRecent').textContent=T.recent;$('lLang').textContent=T.language;
+ $('lGuide').textContent=T.guide;$('lMe').textContent=T.me;$('share').setAttribute('aria-label',T.share);
+ $('me').placeholder=T.me;if(!avg)$('avgBtn').textContent=T.avg;
  $('lSent').textContent=bare(T.sent);$('lWait').textContent=bare(T.queued);$('shotHint').textContent=fix?T.shoot:T.waiting;
  $('shot').setAttribute('aria-label',T.shoot);$('langBtn').setAttribute('aria-label',T.language);
  $('langCode').textContent=LANG.split('_')[0].toUpperCase();const e=$('list').querySelector('.empty');if(e)e.textContent=T.none}
@@ -208,6 +238,96 @@ function answers(){const out={};let first=null,why='';
  if(first){first.scrollIntoView({behavior:'smooth',block:'center'});toast(T[why]);if(navigator.vibrate)navigator.vibrate([40,60,40]);return null}
  return out}
 function afterShot(){FORM.forEach(f=>{if(!f.keep)delete vals[f.name]});saveVals();drawForm()}
+/* distances on the ground: a flat local frame in metres around (lat0, lon0) is exact enough for a few km */
+function proj(lat0,lon0){const k=Math.cos(lat0*Math.PI/180);return (lon,lat)=>[(lon-lon0)*k*111320,(lat-lat0)*110540]}
+function meters(a,b){const P=proj(a.lat,a.lon),v=P(b.lon,b.lat);return Math.hypot(v[0],v[1])}
+/* a distance stays left to right inside Arabic text (LRI ... PDI) */
+function fmtD(m){return '\u2066'+(m<1000?(m<10?m.toFixed(1):Math.round(m))+' m':(m/1000).toFixed(2)+' km')+'\u2069'}
+/* the team: this phone's position goes to the PC's map, with the name written here (it can be turned off) */
+const DEVID=kept('biruni-dev')||(()=>{const d=uid().replace(/-/g,'').slice(0,16);keep('biruni-dev',d);return d})();
+let lastPos=null;
+async function tellPos(force){if(!fix||!$('share').checked)return;const now=Date.now();
+ if(!force&&lastPos&&now-lastPos.at<15000&&meters(lastPos,fix)<10)return;lastPos={lat:fix.lat,lon:fix.lon,at:now};
+ try{await sendPos({id:DEVID,name:$('me').value.trim().slice(0,40),lat:fix.lat,lon:fix.lon,acc:fix.acc,
+  heading:compass!=null?compass:fix.heading,t:fix.t})}catch(e){}}
+/* the guide: points to reach, lines and boundaries to walk, sent by the PC */
+let GUIDE={v:0,items:[]};
+function setGuide(g){if(!g||!Array.isArray(g.items))return;GUIDE=g;
+ try{const j=JSON.stringify(g);if(j.length<250000)keep('biruni-guide-'+ROOM,j)}catch(e){}
+ $('guideCard').classList.toggle('hide',!g.items.length);drawGuide()}
+function segDist(p,a,b){const dx=b[0]-a[0],dy=b[1]-a[1],l=dx*dx+dy*dy;let t=l?((p[0]-a[0])*dx+(p[1]-a[1])*dy)/l:0;
+ t=Math.max(0,Math.min(1,t));const x=a[0]+t*dx,y=a[1]+t*dy;return [Math.hypot(p[0]-x,p[1]-y),x,y]}
+function inRing(p,r){let c=false;for(let i=0,j=r.length-1;i<r.length;j=i++){const a=r[i],b=r[j];
+ if((a[1]>p[1])!==(b[1]>p[1])&&p[0]<(b[0]-a[0])*(p[1]-a[1])/(b[1]-a[1])+a[0])c=!c}return c}
+/* the nearest thing to the phone: {d metres, x/y of the nearest place, item, inside} */
+function nearest(P){let best=null;const me=[0,0];
+ for(const it of GUIDE.items){let d=Infinity,x=0,y=0,ins=false;
+  if(it.k==='pt'){[x,y]=P(it.c[0],it.c[1]);d=Math.hypot(x,y)}
+  else{const parts=it.c.map(part=>part.map(c=>P(c[0],c[1])));
+   for(const part of parts){const n=part.length,closed=it.k==='poly';
+    for(let i=0;i<n-1+(closed?1:0);i++){const r=segDist(me,part[i],part[(i+1)%n]);if(r[0]<d)[d,x,y]=r}}
+   if(it.k==='poly')ins=parts.reduce((c,r)=>c!==inRing(me,r),false)}
+  const rank=ins?-1e9+d:d;if(!best||rank<best.rank)best={d:d,x:x,y:y,it:it,inside:ins,rank:rank}}
+ return best}
+function drawGuide(){const cv=$('gmap');if($('guideCard').classList.contains('hide'))return;
+ const W=cv.clientWidth||300,H=cv.clientHeight||190,dpr=window.devicePixelRatio||1;
+ if(cv.width!==Math.round(W*dpr)){cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr)}
+ const g=cv.getContext('2d'),css=getComputedStyle(document.documentElement),col=n=>css.getPropertyValue(n).trim();
+ g.setTransform(dpr,0,0,dpr,0,0);g.clearRect(0,0,W,H);
+ const c0=fix||(()=>{const it=GUIDE.items[0],c=it.k==='pt'?it.c:it.c[0][0];return {lat:c[1],lon:c[0]}})();
+ const P=proj(c0.lat,c0.lon),shapes=GUIDE.items.map(it=>({it:it,xy:it.k==='pt'?[[P(it.c[0],it.c[1])]]:
+  it.c.map(part=>part.map(c=>P(c[0],c[1])))}));
+ let x0=0,y0=0,x1=0,y1=0;shapes.forEach(s=>s.xy.forEach(part=>part.forEach(([x,y])=>{x0=Math.min(x0,x);x1=Math.max(x1,x);
+  y0=Math.min(y0,y);y1=Math.max(y1,y)})));
+ if(!fix){x0=x1=y0=y1=NaN;shapes.forEach(s=>s.xy.forEach(part=>part.forEach(([x,y])=>{x0=isNaN(x0)?x:Math.min(x0,x);
+  x1=isNaN(x1)?x:Math.max(x1,x);y0=isNaN(y0)?y:Math.min(y0,y);y1=isNaN(y1)?y:Math.max(y1,y)})))}
+ const pad=18,span=Math.max(x1-x0,y1-y0,20),k=Math.min((W-2*pad)/Math.max(x1-x0,span*.2),(H-2*pad)/Math.max(y1-y0,span*.2));
+ const ox=W/2-k*(x0+x1)/2,oy=H/2+k*(y0+y1)/2,S=([x,y])=>[ox+k*x,oy-k*y];
+ const acc=col('--accent');g.lineJoin='round';g.lineCap='round';
+ shapes.forEach(s=>{if(s.it.k==='poly'){g.beginPath();s.xy.forEach(r=>r.forEach((p,i)=>{const[a,b]=S(p);i?g.lineTo(a,b):g.moveTo(a,b)}));
+   g.closePath();g.globalAlpha=.16;g.fillStyle=acc;g.fill('evenodd');g.globalAlpha=1;g.strokeStyle=acc;g.lineWidth=2;g.stroke()}
+  else if(s.it.k==='line'){g.strokeStyle=acc;g.lineWidth=3;s.xy.forEach(part=>{g.beginPath();
+   part.forEach((p,i)=>{const[a,b]=S(p);i?g.lineTo(a,b):g.moveTo(a,b)});g.stroke()})}
+  else{const[a,b]=S(s.xy[0][0]);g.fillStyle=acc;g.beginPath();g.arc(a,b,6,0,7);g.fill();
+   if(s.it.n){g.fillStyle=col('--text');g.font='600 12px system-ui,sans-serif';g.textAlign='center';g.fillText(s.it.n,a,b-10)}}});
+ const t=$('gtext');if(!fix){t.textContent=T.waiting;t.className='gtext';return}
+ const n=nearest(P);if(!n){t.textContent='—';return}
+ const[mx,my]=S([0,0]),[nx,ny]=S([n.x,n.y]);g.setLineDash([5,5]);g.strokeStyle=col('--dim');g.lineWidth=1.5;g.beginPath();
+ g.moveTo(mx,my);g.lineTo(nx,ny);g.stroke();g.setLineDash([]);
+ g.fillStyle='rgba(43,127,255,.18)';g.beginPath();g.arc(mx,my,Math.max(8,Math.min(60,k*(fix.acc||0))),0,7);g.fill();
+ g.fillStyle='#2B7FFF';g.strokeStyle='#fff';g.lineWidth=3;g.beginPath();g.arc(mx,my,7,0,7);g.fill();g.stroke();
+ const name=n.it.n||T.point,d=fmtD(n.d);
+ t.textContent=n.it.k==='poly'?(n.it.n?n.it.n+': ':'')+(n.inside?T.inside:T.outside).replace('{d}',d):
+  n.it.k==='line'?(n.it.n?n.it.n+': ':'')+T.near.replace('{d}',d):T.target.replace('{d}',d).replace('{name}',name);
+ t.className='gtext'+(n.it.k==='poly'?(n.inside?' in':' out'):'');
+ const brg=Math.atan2(n.x,n.y)*180/Math.PI,heading=compass!=null?compass:0;
+ $('garrow').style.transform='rotate('+Math.round(brg-heading)+'deg)';$('garrow').parentNode.classList.toggle('hide',n.d<1)}
+window.addEventListener('resize',()=>drawGuide());
+/* the averaged position: many readings while the phone stays still, odd ones left out */
+const AVG_MS=20000;let avg=null,avgFix=null;
+function average(pts){const accs=pts.map(p=>p.acc).sort((a,b)=>a-b),med=accs[accs.length>>1];
+ let use=pts.filter(p=>p.acc<=2*med);
+ const mean=a=>{let w=0,x=0,y=0;a.forEach(p=>{const k=1/Math.max(p.acc,1)**2;w+=k;x+=k*p.lon;y+=k*p.lat});return {lon:x/w,lat:y/w}};
+ let m=mean(use);const P=proj(m.lat,m.lon),d=use.map(p=>Math.hypot(...P(p.lon,p.lat)));
+ const rms=Math.sqrt(d.reduce((s,v)=>s+v*v,0)/d.length)||0,kept=use.filter((p,i)=>d[i]<=Math.max(2.5*rms,.5));
+ if(kept.length>=3){use=kept;m=mean(use)}
+ const P2=proj(m.lat,m.lon),sd=Math.sqrt(use.reduce((s,p)=>{const v=P2(p.lon,p.lat);return s+v[0]*v[0]+v[1]*v[1]},0)/use.length);
+ const ua=use.map(p=>p.acc).sort((a,b)=>a-b);
+ return {lat:m.lat,lon:m.lon,n:use.length,sd:sd,acc:ua[ua.length>>1]}}
+function tickAvg(){if(!avg)return;const n=avg.pts.length,f=Math.min(1,(Date.now()-avg.t0)/AVG_MS);
+ $('avgFill').style.width=Math.max(4,f*100)+'%';$('avgInfo').textContent=T.averaging.replace('{n}',n);
+ if(f>=1&&n>=3){const r=average(avg.pts);avg=null;$('avgBar').classList.add('hide');$('avgBtn').classList.remove('on');
+  $('avgBtn').textContent=T.avg;avgFix={lat:r.lat,lon:r.lon,acc:r.acc,alt:fix&&fix.alt,heading:fix&&fix.heading,
+   t:Date.now(),n:r.n,sd:r.sd};$('avgInfo').textContent=T.averaged.replace('{n}',r.n).replace('{s}','\u2066'+r.sd.toFixed(1)+'\u2069');
+  if(navigator.vibrate)navigator.vibrate([30,50,30])}}
+function toggleAvg(){if(avg){avg=null;$('avgBar').classList.add('hide');$('avgBtn').classList.remove('on');
+  $('avgBtn').textContent=T.avg;$('avgInfo').textContent='';return}
+ avg={pts:[],t0:Date.now()};avgFix=null;$('avgBar').classList.remove('hide');$('avgBtn').classList.add('on');
+ $('avgBtn').textContent=T.stop;tickAvg()}
+setInterval(tickAvg,500);
+/* the averaged position is used when it is recent and the phone has not moved away from it */
+function shotFix(){if(avgFix&&fix&&Date.now()-avgFix.t<120000&&meters(avgFix,fix)<Math.max(15,2*(fix.acc||0))){
+  const a=avgFix;avgFix=null;$('avgInfo').textContent='';return a}return fix}
 /* photos not yet on the PC wait in the phone's browser storage (kept if the page or phone restarts) */
 function openDb(){return new Promise(r=>{try{const q=indexedDB.open('biruni-photos',1);
  q.onupgradeneeded=()=>q.result.createObjectStore('q',{keyPath:'id'});q.onsuccess=()=>r(q.result);
@@ -318,6 +438,8 @@ function gathered(pc,ms){return new Promise(r=>{if(pc.iceGatheringState==='compl
 /* the phone sends over the bridge: relays to meet, then a direct channel to the PC */
 let pc=null,dc=null,sid=null,linking=false,retry=null,backoff=4000,lastState='',acks=new Map();
 function say(on,key){lastState=key;status(on,key)}
+async function sendPos(p){if(dc&&dc.readyState==='open')dc.send(JSON.stringify({t:'pos',p:p}))}
+function pollGuide(){}
 function hello(m){if(Array.isArray(m.kinds))KINDS=m.kinds.map(String).slice(0,24);drawKinds();
  if(Array.isArray(m.form)){FORM=m.form.filter(f=>f&&f.name&&f.label).slice(0,30);drawForm()}
  if(!kept('biruni-lang')&&!HASHL&&pick(m.lang))setLang(pick(m.lang));keep('biruni-hello-'+ROOM,JSON.stringify({kinds:KINDS,form:FORM}))}
@@ -329,10 +451,11 @@ async function connect(){if(!BK||linking||(dc&&dc.readyState==='open'))return;
  linking=true;say(false,'connecting');const my=sid=rid();
  try{pc=new RTCPeerConnection({iceServers:BR.ice});const ch=dc=pc.createDataChannel('photos',{ordered:true});
   ch.binaryType='arraybuffer';const me=pc;
-  ch.onopen=()=>{linking=false;backoff=4000;ch.send(JSON.stringify({t:'hi',ua:dev}));say(true,'connected');flush()};
+  ch.onopen=()=>{linking=false;backoff=4000;ch.send(JSON.stringify({t:'hi',ua:dev}));say(true,'connected');flush();
+   tellPos(true)};
   ch.onclose=()=>{if(pc===me){drop();say(false,'lost');later()}};
   ch.onmessage=e=>{if(typeof e.data!=='string')return;let m;try{m=JSON.parse(e.data)}catch(x){return}
-   if(m.t==='hello')hello(m);else if(m.t==='ack'){const f=acks.get(m.id);if(f){acks.delete(m.id);f.resolve(m.status)}}};
+   if(m.t==='hello')hello(m);else if(m.t==='guide')setGuide(m.g);else if(m.t==='ack'){const f=acks.get(m.id);if(f){acks.delete(m.id);f.resolve(m.status)}}};
   pc.oniceconnectionstatechange=()=>{if(pc!==me)return;const s=me.iceConnectionState;
    if(s==='failed'){drop();say(false,'p2pfail');later()}};
   await me.setLocalDescription(await me.createOffer());await gathered(me,3000);
@@ -378,10 +501,12 @@ function thumb(it,s){const e=$('list').querySelector('.empty');if(e)e.remove();
 function onFix(p){const c=p.coords,first=!fix;fix={lat:c.latitude,lon:c.longitude,acc:c.accuracy,alt:c.altitude,
  heading:c.heading,t:p.timestamp};$('pos').textContent=c.latitude.toFixed(6)+', '+c.longitude.toFixed(6);
  const a=Math.round(c.accuracy),q=a<=8?'good':a<=20?'fair':'poor';$('acc').textContent='± '+a+' m';$('acc').className='acc '+q;
+ if(avg)avg.pts.push({lat:c.latitude,lon:c.longitude,acc:c.accuracy});tellPos();drawGuide();
  $('accBar').className=q;$('accBar').style.width=Math.max(6,Math.min(100,100-(a-3)*2.2))+'%';
  if(compass==null&&c.heading!=null&&!isNaN(c.heading))showDir(c.heading);
  $('shot').disabled=false;$('shotHint').textContent=T.shoot;if(first&&navigator.vibrate)navigator.vibrate(15)}
-function showDir(h){$('arrow').style.transform='rotate('+Math.round(h)+'deg)';$('deg').textContent=Math.round(h)%360+'°'}
+let gdraw=0;function showDir(h){$('arrow').style.transform='rotate('+Math.round(h)+'deg)';$('deg').textContent=Math.round(h)%360+'°';
+ if(Date.now()-gdraw>250){gdraw=Date.now();drawGuide()}}
 function onCompass(e){let h=null;if(typeof e.webkitCompassHeading==='number')h=e.webkitCompassHeading;
  else if(e.absolute&&e.alpha!=null)h=(360-e.alpha)%360;if(h!=null){compass=Math.round(h)%360;showDir(compass)}}
 async function wake(){try{await navigator.wakeLock.request('screen')}catch(e){}}
@@ -390,15 +515,18 @@ async function start(){if(!window.isSecureContext||!navigator.geolocation){statu
  window.addEventListener('deviceorientationabsolute',onCompass);window.addEventListener('deviceorientation',onCompass);
  navigator.geolocation.watchPosition(onFix,e=>status(false,T.denied+' ('+e.message+')'),
   {enableHighAccuracy:true,maximumAge:0,timeout:30000});wake();started=true;document.body.classList.add('working');
- $('intro').classList.add('hide');$('work').classList.remove('hide');$('bar').classList.remove('hide');flush()}
+ $('intro').classList.add('hide');$('work').classList.remove('hide');$('bar').classList.remove('hide');flush();pollGuide();drawGuide()}
+setInterval(()=>tellPos(true),30000);
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){if(started)wake();flush()}});
-$('go').onclick=start;
+$('go').onclick=start;$('avgBtn').onclick=toggleAvg;
+$('me').value=kept('biruni-me')||'';$('me').onchange=()=>{keep('biruni-me',$('me').value.trim());tellPos(true)};
+$('share').checked=kept('biruni-share')!=='0';$('share').onchange=()=>{keep('biruni-share',$('share').checked?'1':'0');tellPos(true)};
 $('shot').onclick=()=>{if(!fix)return;const f=answers();if(!f)return;if(navigator.vibrate)navigator.vibrate(25);
- pending={fix:fix,compass:compass,at:Date.now(),f:f};$('file').click()};
+ pending={fix:shotFix(),compass:compass,at:Date.now(),f:f};$('file').click()};
 $('file').onchange=async()=>{const f=$('file').files[0];$('file').value='';if(!f||!pending)return;
  const p=pending.fix,blob=new Blob([await f.arrayBuffer()],{type:f.type||'image/jpeg'});
  const meta={id:uid(),lat:p.lat,lon:p.lon,acc:p.acc,alt:p.alt,heading:p.heading,compass:pending.compass,
-  t:pending.at,fix_age:Math.max(0,Math.round((pending.at-p.t)/1000)),kind:kind,note:$('note').value.trim(),device:dev,f:pending.f};
+  t:pending.at,fix_age:Math.max(0,Math.round((pending.at-p.t)/1000)),kind:kind,note:$('note').value.trim(),device:dev,f:pending.f,avg_n:p.n,avg_sd:p.sd};
  const it={id:meta.id,blob:blob,meta:meta,room:ROOM};pending=null;await put(it);thumb(it,'⏳');$('note').value='';afterShot();
  toast(T.kept);count();flush()};
 $('langBtn').onclick=()=>{const box=$('langs');box.textContent='';Object.keys(ALL).forEach(k=>{const b=document.createElement('button');
@@ -407,6 +535,7 @@ $('langBtn').onclick=()=>{const box=$('langs');box.textContent='';Object.keys(AL
  $('sheet').classList.remove('hide')};
 $('sheet').onclick=e=>{if(e.target===$('sheet'))$('sheet').classList.add('hide')};
 setLang(pick(kept('biruni-lang'))||pick(HASHL)||pick(DEF)||pick(navigator.language)||'en');
+try{const g=JSON.parse(kept('biruni-guide-'+ROOM)||'null');if(g)setGuide(g)}catch(e){}
 {const e=document.createElement('div');e.className='empty';e.textContent=T.none;$('list').appendChild(e)}
 (async()=>{db=await openDb();const w=await all();w.slice(-9).forEach(it=>thumb(it,'⏳'));count();flush()})();
 </script></body></html>
