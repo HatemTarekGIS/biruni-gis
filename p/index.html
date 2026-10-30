@@ -1,57 +1,169 @@
 <!doctype html><html lang="en" dir="ltr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#14171B"><title>Biruni GIS</title><meta name="robots" content="noindex"><meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#F4F6F8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0E1114" media="(prefers-color-scheme: dark)">
+<meta name="color-scheme" content="light dark"><title>Biruni GIS</title><meta name="robots" content="noindex"><meta name="referrer" content="no-referrer">
 <style>
-*{box-sizing:border-box}body{margin:0;font:17px/1.45 system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;
-background:#14171B;color:#E4E8EC}main{max-width:480px;margin:0 auto;padding:16px 16px 32px}
-header{display:flex;align-items:center;gap:9px;font-weight:700;font-size:19px}
-.dot{width:11px;height:11px;border-radius:50%;background:#6B7580;flex:none}.dot.on{background:#2CC5B4}
-.dot.off{background:#D64545}#st{font-size:14px;color:#A2ACB6;margin:4px 0 14px;min-height:20px}
-button{font:inherit;font-weight:700;border:0;border-radius:14px;padding:16px;width:100%;background:#2CC5B4;
-color:#0B1F1D;cursor:pointer}button:disabled{background:#3A424B;color:#8A949E}
-#shot{font-size:21px;padding:28px 16px;margin:8px 0 12px}
-.gps{display:flex;justify-content:space-between;gap:8px;font-size:15px;color:#A2ACB6;font-variant-numeric:tabular-nums}
-.good{color:#2CC5B4}.fair{color:#E8B04B}.poor{color:#E06C6C}
-.kinds{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 12px}
-.kinds button{width:auto;padding:9px 14px;background:#232930;color:#E4E8EC;font-weight:600;border:1px solid #3A424B}
-.kinds button.sel{background:#2CC5B4;color:#0B1F1D;border-color:#2CC5B4}
-input[type=text]{width:100%;font:inherit;padding:12px;border-radius:12px;border:1px solid #3A424B;
-background:#1C2127;color:#E4E8EC}#count{font-size:14px;color:#A2ACB6;margin-top:12px}
-#list{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
-#list div{position:relative;aspect-ratio:1;border-radius:10px;overflow:hidden;background:#232930}
-#list img{width:100%;height:100%;object-fit:cover}
-#list span{position:absolute;bottom:4px;inset-inline-end:4px;background:#000b;border-radius:8px;padding:0 7px;font-size:14px}
-.hide{display:none!important}p{color:#A2ACB6}
-</style></head><body><main>
-<header><span class="dot" id="dot"></span><span id="title"></span></header><div id="st"></div>
-<section id="intro"><p id="introText"></p><button id="go"></button></section>
+:root{--bg:#F4F6F8;--card:#FFFFFF;--text:#14181D;--dim:#5F6B76;--line:#E1E6EB;--accent:#12A594;--ink:#FFFFFF;
+ --soft:#E1F4F1;--good:#12A36E;--fair:#C98A12;--poor:#D24B4B;--shadow:0 1px 2px rgba(16,24,32,.05),0 6px 20px rgba(16,24,32,.06)}
+@media (prefers-color-scheme:dark){:root{--bg:#0E1114;--card:#171B20;--text:#E8ECEF;--dim:#97A3AE;--line:#262C33;
+ --accent:#2CC5B4;--ink:#05201C;--soft:#11302C;--good:#3DD39A;--fair:#E8B04B;--poor:#F07070;--shadow:none}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--text)}
+body{font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans Arabic","Noto Sans",Tahoma,sans-serif;
+ min-height:100vh;-webkit-font-smoothing:antialiased}
+body.working{padding-bottom:calc(118px + env(safe-area-inset-bottom))}
+svg{width:1em;height:1em;flex:none}
+button{font:inherit;cursor:pointer}
+.top{position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:10px;
+ padding:calc(10px + env(safe-area-inset-top)) 16px 10px;background:var(--bg)}
+.brand{display:flex;align-items:center;gap:9px;font-weight:700;font-size:17px;letter-spacing:-.01em}
+.logo{width:30px;height:30px;border-radius:10px;background:var(--accent);color:var(--ink);display:grid;place-items:center;font-size:18px}
+.tools{display:flex;gap:8px;align-items:center}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;padding:6px 11px;border-radius:999px;
+ background:var(--card);border:1px solid var(--line);color:var(--dim);white-space:nowrap}
+.pill svg{font-size:15px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--dim)}
+.dot.on{background:var(--good)}.dot.off{background:var(--poor)}.dot.wait{background:var(--fair);animation:pulse 1.2s infinite}
+@keyframes pulse{50%{opacity:.3}}
+.banner{margin:2px 16px 4px;padding:10px 13px;border-radius:14px;font-size:14px;line-height:1.45;
+ background:var(--card);border:1px solid var(--line);border-inline-start:4px solid var(--fair)}
+main{max-width:520px;margin:0 auto;padding:10px 16px 16px}
+.intro{text-align:center;padding:26px 6px 10px}
+.hero{position:relative;width:118px;height:118px;margin:10px auto 22px;border-radius:34px;background:var(--soft);
+ color:var(--accent);display:grid;place-items:center;font-size:54px}
+.hero .pin{position:absolute;inset-inline-end:-8px;top:-8px;width:44px;height:44px;border-radius:50%;background:var(--accent);
+ color:var(--ink);display:grid;place-items:center;font-size:24px;border:4px solid var(--bg)}
+h1{font-size:27px;line-height:1.2;margin:0 0 10px;letter-spacing:-.02em}
+.intro p{color:var(--dim);margin:0 auto 26px;max-width:32ch}
+.primary{width:100%;padding:16px;border:0;border-radius:16px;background:var(--accent);color:var(--ink);font-size:17px;
+ font-weight:700;box-shadow:var(--shadow);transition:transform .12s}
+.primary:active{transform:scale(.98)}.primary:disabled{opacity:.45}
+.card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:15px;margin-bottom:12px;box-shadow:var(--shadow)}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.lbl{font-size:13px;font-weight:600;color:var(--dim)}
+.coords{display:block;font:600 21px/1.3 ui-monospace,"SF Mono",Menlo,Consolas,monospace;margin:6px 0 12px;
+ font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.meter{height:6px;border-radius:6px;background:var(--line);overflow:hidden}
+.meter i{display:block;height:100%;width:6%;border-radius:6px;background:var(--dim);transition:width .6s,background .6s}
+.acc{font-weight:700;font-variant-numeric:tabular-nums;direction:ltr;unicode-bidi:isolate}
+.good{color:var(--good)}.fair{color:var(--fair)}.poor{color:var(--poor)}
+.meter i.good{background:var(--good)}.meter i.fair{background:var(--fair)}.meter i.poor{background:var(--poor)}
+.sub{margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+.dir{display:inline-flex;align-items:center;gap:7px;font-weight:700;font-variant-numeric:tabular-nums}
+.dir svg{font-size:18px;color:var(--accent);transition:transform .35s}
+.kinds{display:flex;gap:8px;overflow-x:auto;margin:10px -15px 12px;padding:0 15px;scrollbar-width:none}
+.kinds::-webkit-scrollbar{display:none}
+.kinds button{flex:none;font-size:15px;font-weight:600;padding:8px 15px;border-radius:999px;border:1px solid var(--line);
+ background:var(--bg);color:var(--text);transition:background .15s,color .15s,border-color .15s}
+.kinds button.sel{background:var(--accent);border-color:var(--accent);color:var(--ink)}
+input[type=text]{width:100%;font:inherit;padding:12px 14px;border-radius:13px;border:1px solid var(--line);
+ background:var(--bg);color:var(--text);outline:none;transition:border-color .15s}
+input[type=text]:focus{border-color:var(--accent)}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:12px 15px;box-shadow:var(--shadow)}
+.stat b{display:block;font-size:27px;line-height:1.15;font-variant-numeric:tabular-nums}
+.stat span{font-size:13px;color:var(--dim)}.stat.warn b{color:var(--fair)}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:9px}
+.grid div{position:relative;aspect-ratio:1;border-radius:15px;overflow:hidden;background:var(--line);animation:pop .35s ease-out}
+@keyframes pop{from{transform:scale(.86);opacity:0}}
+.grid img,.last img{width:100%;height:100%;object-fit:cover;display:block}
+.badge{position:absolute;bottom:6px;inset-inline-end:6px;min-width:24px;height:24px;padding:0 6px;display:grid;
+ place-items:center;border-radius:12px;font-size:13px;font-weight:700;background:rgba(0,0,0,.62);color:#fff}
+.badge.ok{background:var(--good)}.badge.bad{background:var(--poor)}
+.empty{grid-column:1/-1;aspect-ratio:auto!important;animation:none!important;background:transparent!important;
+ color:var(--dim);font-size:14px;text-align:center;padding:14px 0}
+.shutterbar{position:fixed;inset-inline:0;bottom:0;z-index:6;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;
+ gap:12px;padding:12px 22px calc(12px + env(safe-area-inset-bottom));background:var(--card);border-top:1px solid var(--line)}
+.last{width:54px;height:54px;border-radius:15px;overflow:hidden;background:var(--line);justify-self:start}
+.shutter{width:80px;height:80px;border:0;padding:0;border-radius:50%;background:transparent;position:relative}
+.shutter .ring{position:absolute;inset:0;border-radius:50%;border:4px solid var(--accent)}
+.shutter .core{position:absolute;inset:9px;border-radius:50%;background:var(--accent);color:var(--ink);display:grid;
+ place-items:center;font-size:28px;transition:transform .12s}
+.shutter:active .core{transform:scale(.9)}
+.shutter:disabled .ring{border-color:var(--line);border-top-color:var(--accent);animation:spin 1s linear infinite}
+.shutter:disabled .core{background:var(--line);color:var(--dim)}
+@keyframes spin{to{transform:rotate(360deg)}}
+.hint{justify-self:end;font-size:13px;line-height:1.35;color:var(--dim);text-align:end;max-width:118px}
+.sheet{position:fixed;inset:0;z-index:10;background:rgba(0,0,0,.42);display:flex;align-items:flex-end;animation:fade .2s}
+.panel{width:100%;max-width:520px;margin:0 auto;background:var(--card);border-radius:24px 24px 0 0;
+ padding:10px 12px calc(14px + env(safe-area-inset-bottom));animation:up .25s ease-out}
+.grab{width:40px;height:5px;border-radius:3px;background:var(--line);margin:0 auto 10px}
+.panel .lbl{padding:0 12px 6px}
+.panel button{display:flex;justify-content:space-between;align-items:center;width:100%;font-size:17px;padding:13px 12px;
+ border:0;border-radius:13px;background:transparent;color:var(--text);text-align:start}
+.panel button.sel{background:var(--soft);font-weight:700}.panel button.sel::after{content:"✓";color:var(--accent)}
+@keyframes up{from{transform:translateY(48px);opacity:0}}@keyframes fade{from{opacity:0}}
+.toast{position:fixed;left:50%;bottom:calc(126px + env(safe-area-inset-bottom));z-index:8;transform:translate(-50%,16px);
+ opacity:0;background:var(--text);color:var(--bg);padding:10px 18px;border-radius:999px;font-size:14px;font-weight:600;
+ transition:opacity .25s,transform .25s;pointer-events:none;white-space:nowrap;max-width:90vw;overflow:hidden;text-overflow:ellipsis}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.hide{display:none!important}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style></head><body>
+<header class="top">
+ <div class="brand"><span class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="11" r="3"/><path d="M17.66 16.66L13.41 20.9a2 2 0 0 1-2.83 0l-4.24-4.24a8 8 0 1 1 11.32 0z"/></svg></span><span id="title">Biruni GIS</span></div>
+ <div class="tools"><span class="pill" id="chip"><i class="dot wait" id="dot"></i><span id="chipText"></span></span>
+ <button class="pill" id="langBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3.6 9h16.8M3.6 15h16.8M11.5 3a17 17 0 0 0 0 18M12.5 3a17 17 0 0 1 0 18"/></svg><span id="langCode"></span></button></div>
+</header>
+<div class="banner hide" id="st"></div>
+<main>
+<section id="intro" class="intro">
+ <div class="hero"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h1a2 2 0 0 0 2-2a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1a2 2 0 0 0 2 2h1a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2"/><circle cx="12" cy="13" r="3"/></svg>
+ <span class="pin"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="11" r="3"/><path d="M17.66 16.66L13.41 20.9a2 2 0 0 1-2.83 0l-4.24-4.24a8 8 0 1 1 11.32 0z"/></svg></span></div>
+ <h1 id="hero"></h1><p id="introText"></p><button class="primary" id="go" type="button"></button>
+</section>
 <section id="work" class="hide">
-<div class="gps"><span id="pos"></span><span id="acc"></span></div>
-<button id="shot" disabled></button>
+ <div class="card">
+  <div class="row"><span class="lbl" id="lPos"></span><span class="acc" id="acc"></span></div>
+  <bdi class="coords" id="pos">—</bdi>
+  <div class="meter"><i id="accBar"></i></div>
+  <div class="row sub"><span class="lbl" id="lDir"></span><span class="dir"><svg id="arrow" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l7.5 19L12 16.8 4.5 21z"/></svg><bdi id="deg">—</bdi></span></div>
+ </div>
+ <div class="card">
+  <span class="lbl" id="lKind"></span><div class="kinds" id="kinds"></div>
+  <input type="text" id="note" enterkeyhint="done" autocomplete="off">
+ </div>
+ <div class="stats"><div class="stat"><b id="nSent">0</b><span id="lSent"></span></div>
+  <div class="stat" id="waitBox"><b id="nWait">0</b><span id="lWait"></span></div></div>
+ <span class="lbl" id="lRecent"></span><div id="list" class="grid"></div>
+</section>
+</main>
+<footer class="shutterbar hide" id="bar"><div class="last" id="last"></div>
+ <button id="shot" class="shutter" type="button" disabled><span class="ring"></span><span class="core"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h1a2 2 0 0 0 2-2a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1a2 2 0 0 0 2 2h1a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2"/><circle cx="12" cy="13" r="3"/></svg></span></button>
+ <div class="hint" id="shotHint"></div></footer>
 <input id="file" type="file" accept="image/*" capture="environment" class="hide">
-<div class="kinds" id="kinds"></div><input type="text" id="note">
-<div id="count"></div><div id="list"></div></section></main>
+<div class="sheet hide" id="sheet"><div class="panel"><div class="grab"></div><div class="lbl" id="lLang"></div><div id="langs"></div></div></div>
+<div class="toast" id="toast"></div>
 <script>
-let T={"ar": {"connected": "متوصل بالكمبيوتر", "connecting": "بيتوصل بالكمبيوتر… الصور اللي تتصور دلوقتي محفوظة وهتتبعت.", "denied": "لم يُسمح بالموقع.", "insecure": "يمنع هذا المتصفح الموقع هنا. استخدم Chrome أو Safari واقبل تحذير الشهادة.", "intro": "اسمح بالموقع لما يطلبه. كل صورة هتظهر على خريطة الكمبيوتر على طول وتتحفظ عليه. خلّي الصفحة دي مفتوحة.", "lost": "مش واصل للكمبيوتر - الصور محفوظة على التليفون وهتتبعت لوحدها بعدين.", "nokey": "افتح الصفحة دي بمسح الكود اللي في Biruni GIS (صور ميدانية).", "note": "ملاحظة (اختيارية)", "p2pfail": "الشبكة دي مش بتسمح بربط مباشر بالكمبيوتر. الصور محفوظة على التليفون؛ جرّب شبكة تانية أو واي فاي.", "pcoff": "الكمبيوتر مش بيرد. هل Biruni مفتوح والصور الميدانية شغالة؟ الصور محفوظة على التليفون.", "queued": "مستنية تتبعت:", "sent": "وصل للكمبيوتر:", "shoot": "صوّر", "start": "ابدأ", "title": "Biruni GIS - صور ميدانية", "waiting": "مستني الموقع…"}, "en": {"connected": "Connected to the computer", "connecting": "Connecting to the computer… photos taken now are kept and sent.", "denied": "Location not allowed.", "insecure": "This browser blocks the location here. Use Chrome or Safari and accept the certificate warning.", "intro": "Allow the location when asked. Each photo appears on the computer's map at once and is saved there. Keep this page open.", "lost": "Not reaching the computer - photos are kept on the phone and sent later.", "nokey": "Open this page by scanning the code in Biruni GIS (Field photos).", "note": "Note (optional)", "p2pfail": "This network does not allow a direct link to the computer. Photos are kept on the phone; try another network or Wi-Fi.", "pcoff": "The computer is not answering. Is Biruni open, with Field photos started? Photos are kept on the phone.", "queued": "Waiting to send:", "sent": "On the computer:", "shoot": "Take a photo", "start": "Start", "title": "Biruni GIS - field photos", "waiting": "Waiting for the location…"}, "es": {"connected": "Conectado al ordenador", "connecting": "Conectando con el equipo… las fotos que tome ahora se guardan y se envían.", "denied": "Ubicación no permitida.", "insecure": "Este navegador bloquea aquí la ubicación. Use Chrome o Safari y acepte el aviso del certificado.", "intro": "Permite la ubicación cuando se solicite. Cada foto aparece al instante en el mapa del ordenador y se guarda allí. Mantén esta página abierta.", "lost": "No se alcanza el ordenador: las fotos se guardan en el teléfono y se envían más tarde.", "nokey": "Abra esta página escaneando el código en Biruni GIS (Fotos de campo).", "note": "Nota (opcional)", "p2pfail": "Esta red no permite un enlace directo con el equipo. Las fotos se guardan en el teléfono; pruebe otra red o Wi-Fi.", "pcoff": "El equipo no responde. ¿Está Biruni abierto, con Fotos de campo iniciado? Las fotos se guardan en el teléfono.", "queued": "Pendientes de enviar:", "sent": "En el ordenador:", "shoot": "Tomar una foto", "start": "Inicio", "title": "Biruni GIS - fotos de campo", "waiting": "Esperando la ubicación…"}, "fa": {"connected": "به رایانه متصل است", "connecting": "در حال اتصال به رایانه… عکس‌هایی که اکنون می‌گیرید نگه داشته و فرستاده می‌شوند.", "denied": "دسترسی به مکان مجاز نیست.", "insecure": "این مرورگر اینجا مکان را مسدود می‌کند. از Chrome یا Safari استفاده کنید و هشدار گواهی را بپذیرید.", "intro": "هنگام درخواست، اجازهٔ موقعیت مکانی را بدهید. هر عکس بلافاصله روی نقشهٔ رایانه نمایش داده می‌شود و همان‌جا ذخیره می‌شود. این صفحه را باز نگه دارید.", "lost": "دسترسی به رایانه ممکن نیست؛ عکس‌ها روی تلفن نگه داشته می‌شوند و بعداً ارسال می‌شوند.", "nokey": "این صفحه را با اسکن کد در Biruni GIS (عکس‌های میدانی) باز کنید.", "note": "یادداشت (اختیاری)", "p2pfail": "این شبکه اجازهٔ پیوند مستقیم با رایانه را نمی‌دهد. عکس‌ها روی تلفن نگه داشته می‌شوند؛ شبکهٔ دیگر یا Wi-Fi را امتحان کنید.", "pcoff": "رایانه پاسخ نمی‌دهد. آیا Biruni باز است و عکس‌های میدانی آغاز شده؟ عکس‌ها روی تلفن نگه داشته می‌شوند.", "queued": "در انتظار ارسال:", "sent": "روی رایانه:", "shoot": "گرفتن عکس", "start": "شروع", "title": "Biruni GIS - عکس‌های میدانی", "waiting": "در انتظار موقعیت مکانی…"}, "fr": {"connected": "Connecté à l'ordinateur", "connecting": "Connexion à l'ordinateur… les photos prises maintenant sont gardées et envoyées.", "denied": "Localisation non autorisée.", "insecure": "Ce navigateur bloque la localisation ici. Utilisez Chrome ou Safari et acceptez l'avertissement de certificat.", "intro": "Autorisez la localisation lorsqu'elle est demandée. Chaque photo apparaît aussitôt sur la carte de l'ordinateur et y est enregistrée. Gardez cette page ouverte.", "lost": "L'ordinateur est injoignable : les photos sont conservées sur le téléphone et envoyées plus tard.", "nokey": "Ouvrez cette page en scannant le code dans Biruni GIS (Photos de terrain).", "note": "Note (facultatif)", "p2pfail": "Ce réseau ne permet pas de lien direct avec l'ordinateur. Les photos sont gardées sur le téléphone ; essayez un autre réseau ou le Wi-Fi.", "pcoff": "L'ordinateur ne répond pas. Biruni est-il ouvert, avec Photos de terrain démarré ? Les photos sont gardées sur le téléphone.", "queued": "En attente d'envoi :", "sent": "Sur l'ordinateur :", "shoot": "Prendre une photo", "start": "Début", "title": "Biruni GIS - photos de terrain", "waiting": "En attente de la position…"}, "pt_BR": {"connected": "Conectado ao computador", "connecting": "Conectando ao computador… as fotos tiradas agora são guardadas e enviadas.", "denied": "Localização não permitida.", "insecure": "Este navegador bloqueia a localização aqui. Use Chrome ou Safari e aceite o aviso do certificado.", "intro": "Permita a localização quando solicitado. Cada foto aparece na hora no mapa do computador e é salva lá. Mantenha esta página aberta.", "lost": "Sem conexão com o computador: as fotos ficam no celular e são enviadas depois.", "nokey": "Abra esta página lendo o código no Biruni GIS (Fotos de campo).", "note": "Nota (opcional)", "p2pfail": "Esta rede não permite uma ligação direta com o computador. As fotos ficam no telefone; tente outra rede ou Wi-Fi.", "pcoff": "O computador não responde. O Biruni está aberto, com Fotos de campo iniciado? As fotos ficam guardadas no telefone.", "queued": "Aguardando envio:", "sent": "No computador:", "shoot": "Tirar uma foto", "start": "Início", "title": "Biruni GIS - fotos de campo", "waiting": "Aguardando a localização…"}, "tr": {"connected": "Bilgisayara bağlı", "connecting": "Bilgisayara bağlanılıyor… şimdi çekilen fotoğraflar saklanır ve gönderilir.", "denied": "Konuma izin verilmedi.", "insecure": "Bu tarayıcı burada konumu engelliyor. Chrome veya Safari kullanın ve sertifika uyarısını kabul edin.", "intro": "İstendiğinde konuma izin verin. Her fotoğraf anında bilgisayarın haritasında görünür ve orada kaydedilir. Bu sayfayı açık tutun.", "lost": "Bilgisayara ulaşılamıyor: fotoğraflar telefonda tutulur ve daha sonra gönderilir.", "nokey": "Bu sayfayı Biruni GIS'teki (Saha fotoğrafları) kodu okutarak açın.", "note": "Not (isteğe bağlı)", "p2pfail": "Bu ağ bilgisayara doğrudan bağlantıya izin vermiyor. Fotoğraflar telefonda saklanıyor; başka bir ağ veya Wi-Fi deneyin.", "pcoff": "Bilgisayar yanıt vermiyor. Biruni açık ve Saha fotoğrafları başlatılmış mı? Fotoğraflar telefonda saklanıyor.", "queued": "Gönderilmeyi bekleyen:", "sent": "Bilgisayarda:", "shoot": "Fotoğraf çek", "start": "Başlangıç", "title": "Biruni GIS - saha fotoğrafları", "waiting": "Konum bekleniyor…"}},KINDS=[],ROOM='';const $=i=>document.getElementById(i);
+let ALL={"ar": {"connected": "متوصل بالكمبيوتر", "connecting": "بيتوصل بالكمبيوتر… الصور اللي تتصور دلوقتي محفوظة وهتتبعت.", "denied": "لم يُسمح بالموقع.", "direction": "الاتجاه", "hero": "صور ميدانية", "insecure": "يمنع هذا المتصفح الموقع هنا. استخدم Chrome أو Safari واقبل تحذير الشهادة.", "intro": "اسمح بالموقع لما يطلبه. كل صورة هتظهر على خريطة الكمبيوتر على طول وتتحفظ عليه. خلّي الصفحة دي مفتوحة.", "kept": "اتحفظت على التليفون - بتتبعت…", "kind": "النوع (اختياري)", "language": "اللغة", "linking": "بيتوصل…", "lost": "مش واصل للكمبيوتر - الصور محفوظة على التليفون وهتتبعت لوحدها بعدين.", "nokey": "افتح الصفحة دي بمسح الكود اللي في Biruni GIS (صور ميدانية).", "none": "صورك هتظهر هنا.", "note": "ملاحظة (اختيارية)", "offline": "غير متصل", "online": "متوصل", "p2pfail": "الشبكة دي مش بتسمح بربط مباشر بالكمبيوتر. الصور محفوظة على التليفون؛ جرّب شبكة تانية أو واي فاي.", "pcoff": "الكمبيوتر مش بيرد. هل Biruni مفتوح والصور الميدانية شغالة؟ الصور محفوظة على التليفون.", "position": "الموقع", "queued": "مستنية تتبعت:", "recent": "آخر الصور", "sent": "وصل للكمبيوتر:", "shoot": "صوّر", "start": "ابدأ", "title": "Biruni GIS - صور ميدانية", "waiting": "مستني الموقع…"}, "en": {"connected": "Connected to the computer", "connecting": "Connecting to the computer… photos taken now are kept and sent.", "denied": "Location not allowed.", "direction": "Direction", "hero": "Field photos", "insecure": "This browser blocks the location here. Use Chrome or Safari and accept the certificate warning.", "intro": "Allow the location when asked. Each photo appears on the computer's map at once and is saved there. Keep this page open.", "kept": "Saved on the phone - sending…", "kind": "Kind (optional)", "language": "Language", "linking": "Connecting…", "lost": "Not reaching the computer - photos are kept on the phone and sent later.", "nokey": "Open this page by scanning the code in Biruni GIS (Field photos).", "none": "Your photos will appear here.", "note": "Note (optional)", "offline": "Not connected", "online": "Connected", "p2pfail": "This network does not allow a direct link to the computer. Photos are kept on the phone; try another network or Wi-Fi.", "pcoff": "The computer is not answering. Is Biruni open, with Field photos started? Photos are kept on the phone.", "position": "Position", "queued": "Waiting to send:", "recent": "Recent photos", "sent": "On the computer:", "shoot": "Take a photo", "start": "Start", "title": "Biruni GIS - field photos", "waiting": "Waiting for the location…"}, "es": {"connected": "Conectado al ordenador", "connecting": "Conectando con el equipo… las fotos que tome ahora se guardan y se envían.", "denied": "Ubicación no permitida.", "direction": "Dirección", "hero": "Fotos de campo", "insecure": "Este navegador bloquea aquí la ubicación. Use Chrome o Safari y acepte el aviso del certificado.", "intro": "Permite la ubicación cuando se solicite. Cada foto aparece al instante en el mapa del ordenador y se guarda allí. Mantén esta página abierta.", "kept": "Guardada en el teléfono - enviando…", "kind": "Tipo (opcional)", "language": "Idioma", "linking": "Conectando…", "lost": "No se alcanza el ordenador: las fotos se guardan en el teléfono y se envían más tarde.", "nokey": "Abra esta página escaneando el código en Biruni GIS (Fotos de campo).", "none": "Sus fotos aparecerán aquí.", "note": "Nota (opcional)", "offline": "No conectado", "online": "Conectado", "p2pfail": "Esta red no permite un enlace directo con el equipo. Las fotos se guardan en el teléfono; pruebe otra red o Wi-Fi.", "pcoff": "El equipo no responde. ¿Está Biruni abierto, con Fotos de campo iniciado? Las fotos se guardan en el teléfono.", "position": "Posición", "queued": "Pendientes de enviar:", "recent": "Fotos recientes", "sent": "En el ordenador:", "shoot": "Tomar una foto", "start": "Inicio", "title": "Biruni GIS - fotos de campo", "waiting": "Esperando la ubicación…"}, "fa": {"connected": "به رایانه متصل است", "connecting": "در حال اتصال به رایانه… عکس‌هایی که اکنون می‌گیرید نگه داشته و فرستاده می‌شوند.", "denied": "دسترسی به مکان مجاز نیست.", "direction": "جهت", "hero": "عکس‌های میدانی", "insecure": "این مرورگر اینجا مکان را مسدود می‌کند. از Chrome یا Safari استفاده کنید و هشدار گواهی را بپذیرید.", "intro": "هنگام درخواست، اجازهٔ موقعیت مکانی را بدهید. هر عکس بلافاصله روی نقشهٔ رایانه نمایش داده می‌شود و همان‌جا ذخیره می‌شود. این صفحه را باز نگه دارید.", "kept": "روی تلفن ذخیره شد - در حال ارسال…", "kind": "نوع (اختیاری)", "language": "زبان", "linking": "در حال اتصال…", "lost": "دسترسی به رایانه ممکن نیست؛ عکس‌ها روی تلفن نگه داشته می‌شوند و بعداً ارسال می‌شوند.", "nokey": "این صفحه را با اسکن کد در Biruni GIS (عکس‌های میدانی) باز کنید.", "none": "عکس‌هایتان اینجا نمایش داده می‌شوند.", "note": "یادداشت (اختیاری)", "offline": "متصل نیست", "online": "وصل است", "p2pfail": "این شبکه اجازهٔ پیوند مستقیم با رایانه را نمی‌دهد. عکس‌ها روی تلفن نگه داشته می‌شوند؛ شبکهٔ دیگر یا Wi-Fi را امتحان کنید.", "pcoff": "رایانه پاسخ نمی‌دهد. آیا Biruni باز است و عکس‌های میدانی آغاز شده؟ عکس‌ها روی تلفن نگه داشته می‌شوند.", "position": "موقعیت", "queued": "در انتظار ارسال:", "recent": "عکس‌های اخیر", "sent": "روی رایانه:", "shoot": "گرفتن عکس", "start": "شروع", "title": "Biruni GIS - عکس‌های میدانی", "waiting": "در انتظار موقعیت مکانی…"}, "fr": {"connected": "Connecté à l'ordinateur", "connecting": "Connexion à l'ordinateur… les photos prises maintenant sont gardées et envoyées.", "denied": "Localisation non autorisée.", "direction": "Direction", "hero": "Photos de terrain", "insecure": "Ce navigateur bloque la localisation ici. Utilisez Chrome ou Safari et acceptez l'avertissement de certificat.", "intro": "Autorisez la localisation lorsqu'elle est demandée. Chaque photo apparaît aussitôt sur la carte de l'ordinateur et y est enregistrée. Gardez cette page ouverte.", "kept": "Enregistrée sur le téléphone - envoi…", "kind": "Type (facultatif)", "language": "Langue", "linking": "Connexion…", "lost": "L'ordinateur est injoignable : les photos sont conservées sur le téléphone et envoyées plus tard.", "nokey": "Ouvrez cette page en scannant le code dans Biruni GIS (Photos de terrain).", "none": "Vos photos apparaîtront ici.", "note": "Note (facultatif)", "offline": "Non connecté", "online": "Connecté", "p2pfail": "Ce réseau ne permet pas de lien direct avec l'ordinateur. Les photos sont gardées sur le téléphone ; essayez un autre réseau ou le Wi-Fi.", "pcoff": "L'ordinateur ne répond pas. Biruni est-il ouvert, avec Photos de terrain démarré ? Les photos sont gardées sur le téléphone.", "position": "Position", "queued": "En attente d'envoi :", "recent": "Photos récentes", "sent": "Sur l'ordinateur :", "shoot": "Prendre une photo", "start": "Début", "title": "Biruni GIS - photos de terrain", "waiting": "En attente de la position…"}, "pt_BR": {"connected": "Conectado ao computador", "connecting": "Conectando ao computador… as fotos tiradas agora são guardadas e enviadas.", "denied": "Localização não permitida.", "direction": "Direção", "hero": "Fotos de campo", "insecure": "Este navegador bloqueia a localização aqui. Use Chrome ou Safari e aceite o aviso do certificado.", "intro": "Permita a localização quando solicitado. Cada foto aparece na hora no mapa do computador e é salva lá. Mantenha esta página aberta.", "kept": "Salva no telefone - enviando…", "kind": "Tipo (opcional)", "language": "Idioma", "linking": "Conectando…", "lost": "Sem conexão com o computador: as fotos ficam no celular e são enviadas depois.", "nokey": "Abra esta página lendo o código no Biruni GIS (Fotos de campo).", "none": "Suas fotos aparecerão aqui.", "note": "Nota (opcional)", "offline": "Não conectado", "online": "Conectado", "p2pfail": "Esta rede não permite uma ligação direta com o computador. As fotos ficam no telefone; tente outra rede ou Wi-Fi.", "pcoff": "O computador não responde. O Biruni está aberto, com Fotos de campo iniciado? As fotos ficam guardadas no telefone.", "position": "Posição", "queued": "Aguardando envio:", "recent": "Fotos recentes", "sent": "No computador:", "shoot": "Tirar uma foto", "start": "Início", "title": "Biruni GIS - fotos de campo", "waiting": "Aguardando a localização…"}, "tr": {"connected": "Bilgisayara bağlı", "connecting": "Bilgisayara bağlanılıyor… şimdi çekilen fotoğraflar saklanır ve gönderilir.", "denied": "Konuma izin verilmedi.", "direction": "Yön", "hero": "Saha fotoğrafları", "insecure": "Bu tarayıcı burada konumu engelliyor. Chrome veya Safari kullanın ve sertifika uyarısını kabul edin.", "intro": "İstendiğinde konuma izin verin. Her fotoğraf anında bilgisayarın haritasında görünür ve orada kaydedilir. Bu sayfayı açık tutun.", "kept": "Telefona kaydedildi - gönderiliyor…", "kind": "Tür (isteğe bağlı)", "language": "Dil", "linking": "Bağlanıyor…", "lost": "Bilgisayara ulaşılamıyor: fotoğraflar telefonda tutulur ve daha sonra gönderilir.", "nokey": "Bu sayfayı Biruni GIS'teki (Saha fotoğrafları) kodu okutarak açın.", "none": "Fotoğraflarınız burada görünecek.", "note": "Not (isteğe bağlı)", "offline": "Bağlı değil", "online": "Bağlı", "p2pfail": "Bu ağ bilgisayara doğrudan bağlantıya izin vermiyor. Fotoğraflar telefonda saklanıyor; başka bir ağ veya Wi-Fi deneyin.", "pcoff": "Bilgisayar yanıt vermiyor. Biruni açık ve Saha fotoğrafları başlatılmış mı? Fotoğraflar telefonda saklanıyor.", "position": "Konum", "queued": "Gönderilmeyi bekleyen:", "recent": "Son fotoğraflar", "sent": "Bilgisayarda:", "shoot": "Fotoğraf çek", "start": "Başlangıç", "title": "Biruni GIS - saha fotoğrafları", "waiting": "Konum bekleniyor…"}},KINDS=[],ROOM='',HASHL=null,T={},LANG='en';const DEF='',$=i=>document.getElementById(i);
+const NAMES={en:'English',ar:'العربية',es:'Español',pt_BR:'Português',fr:'Français',tr:'Türkçe',fa:'فارسی'};
+function pick(l){if(!l)return null;l=String(l).replace('-','_');if(ALL[l])return l;const b=l.split('_')[0].toLowerCase();
+ return Object.keys(ALL).find(k=>k.split('_')[0].toLowerCase()===b)||null}
+function keep(k,v){try{if(v==null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(e){}}
+function kept(k){try{return localStorage.getItem(k)}catch(e){return null}}
 
-const ALL=T,HP=new URLSearchParams(location.hash.slice(1)),KEYB=HP.get('k')||'';
-const LANG=(l=>ALL[l]?l:(ALL[l.split('-')[0]]?l.split('-')[0]:'en'))(HP.get('l')||navigator.language||'en');
-T=ALL[LANG];document.documentElement.lang=LANG;document.documentElement.dir=(LANG==='ar'||LANG==='fa')?'rtl':'ltr';
-ROOM=KEYB.slice(0,12);
-try{const c=JSON.parse(localStorage.getItem('biruni-hello-'+ROOM)||'null');if(c){T=Object.assign({},T,c.texts||{});
- KINDS=c.kinds||[]}}catch(e){}
+const HP=new URLSearchParams(location.hash.slice(1)),KEYB=HP.get('k')||'';HASHL=HP.get('l');ROOM=KEYB.slice(0,12);
+try{const c=JSON.parse(kept('biruni-hello-'+ROOM)||'null');if(c&&Array.isArray(c.kinds))KINDS=c.kinds}catch(e){}
 
-function label(){$('title').textContent=T.title;$('introText').textContent=T.intro;$('go').textContent=T.start;
- if(!fix)$('shot').textContent=T.waiting;else $('shot').textContent='📷  '+T.shoot;$('note').placeholder=T.note}
-let fix=null,compass=null,kind='',sent=0,db=null,mem=[],busy=false,pending=null;
+let fix=null,compass=null,kind='',sent=0,db=null,mem=[],busy=false,pending=null,lastSt=null,started=false;
 const dev=((navigator.userAgentData&&navigator.userAgentData.platform)||navigator.platform||'').slice(0,40);
+const bare=s=>String(s||'').replace(/\s*[:：]\s*$/,'');
+function label(){document.title=T.title;$('hero').textContent=T.hero;$('introText').textContent=T.intro;
+ $('go').textContent=T.start;$('note').placeholder=T.note;$('lPos').textContent=T.position;$('lDir').textContent=T.direction;
+ $('lKind').textContent=T.kind;$('lRecent').textContent=T.recent;$('lLang').textContent=T.language;
+ $('lSent').textContent=bare(T.sent);$('lWait').textContent=bare(T.queued);$('shotHint').textContent=fix?T.shoot:T.waiting;
+ $('shot').setAttribute('aria-label',T.shoot);$('langBtn').setAttribute('aria-label',T.language);
+ $('langCode').textContent=LANG.split('_')[0].toUpperCase();const e=$('list').querySelector('.empty');if(e)e.textContent=T.none}
+function setLang(l){LANG=l;T=Object.assign({},ALL.en||{},ALL[l]||{});const h=document.documentElement;
+ h.lang=l.replace('_','-');h.dir=(l==='ar'||l==='fa')?'rtl':'ltr';label();drawKinds();
+ if(lastSt)status(lastSt[0],lastSt[1]);else chip('wait')}
 function uid(){const r=crypto.randomUUID?crypto.randomUUID():Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);
  return r.replace(/[^A-Za-z0-9-]/g,'')}
-function drawKinds(){$('kinds').textContent='';KINDS.forEach(k=>{const b=document.createElement('button');b.textContent=k;
- b.classList.toggle('sel',k===kind);b.onclick=()=>{kind=kind===k?'':k;
+function drawKinds(){$('kinds').textContent='';KINDS.forEach(k=>{const b=document.createElement('button');b.type='button';
+ b.textContent=k;b.classList.toggle('sel',k===kind);b.onclick=()=>{kind=kind===k?'':k;
  [...$('kinds').children].forEach(x=>x.classList.toggle('sel',x.textContent===kind))};$('kinds').appendChild(b)});
- $('kinds').classList.toggle('hide',!KINDS.length)}
-label();drawKinds();
+ $('kinds').classList.toggle('hide',!KINDS.length);$('lKind').classList.toggle('hide',!KINDS.length)}
 /* photos not yet on the PC wait in the phone's browser storage (kept if the page or phone restarts) */
 function openDb(){return new Promise(r=>{try{const q=indexedDB.open('biruni-photos',1);
  q.onupgradeneeded=()=>q.result.createObjectStore('q',{keyPath:'id'});q.onsuccess=()=>r(q.result);
@@ -62,10 +174,15 @@ async function put(it){if(db){try{await tx('readwrite',s=>s.put(it));return}catc
 async function all(){let a=[];if(db){try{a=await tx('readonly',s=>s.getAll())||[]}catch(e){}}
  return a.concat(mem).filter(x=>(x.room||'')===ROOM)}
 async function del(id){mem=mem.filter(x=>x.id!==id);if(db){try{await tx('readwrite',s=>s.delete(id))}catch(e){}}}
-function status(on,text){$('dot').className='dot '+(on?'on':'off');$('st').textContent=text}
-function mark(id,s){const e=document.querySelector('[data-id="'+id+'"] span');if(e)e.textContent=s}
-async function count(){const n=(await all()).length;
- $('count').textContent=T.sent+' '+sent+(n?'  ·  '+T.queued+' '+n:'')}
+function chip(state){$('dot').className='dot '+state;$('chipText').textContent=state==='on'?T.online:state==='wait'?T.linking:T.offline}
+function status(on,key){lastSt=[on,key];const b=$('st');chip(on?'on':key==='connecting'?'wait':'off');
+ if(on){b.classList.add('hide')}else{b.textContent=T[key]||key;b.classList.remove('hide')}}
+let tt=null;function toast(s){const t=$('toast');t.textContent=s;t.classList.add('show');clearTimeout(tt);
+ tt=setTimeout(()=>t.classList.remove('show'),2200)}
+function mark(id,s){const e=document.querySelector('[data-id="'+id+'"] .badge');if(!e)return;e.textContent=s;
+ e.className='badge'+(s==='✓'?' ok':s==='✗'?' bad':'')}
+async function count(){const n=(await all()).length;$('nSent').textContent=sent;$('nWait').textContent=n;
+ $('waitBox').classList.toggle('warn',n>0)}
 
 /* ---- Biruni bridge core: shared by the phone page and the PC's hidden receiver ---- */
 const BR={relays:["wss://relay.damus.io", "wss://nos.lol", "wss://relay.primal.net", "wss://nostr.mom", "wss://relay.nostr.band"],ntfy:'https://ntfy.sh/',kind:25050,
@@ -156,9 +273,9 @@ function gathered(pc,ms){return new Promise(r=>{if(pc.iceGatheringState==='compl
 
 /* the phone sends over the bridge: relays to meet, then a direct channel to the PC */
 let pc=null,dc=null,sid=null,linking=false,retry=null,backoff=4000,lastState='',acks=new Map();
-function say(on,key){lastState=key;status(on,T[key]||key)}
-function hello(m){if(m.texts)T=Object.assign({},T,m.texts);if(Array.isArray(m.kinds))KINDS=m.kinds;label();drawKinds();count();
- try{localStorage.setItem('biruni-hello-'+ROOM,JSON.stringify({texts:m.texts,kinds:m.kinds}))}catch(e){}}
+function say(on,key){lastState=key;status(on,key)}
+function hello(m){if(Array.isArray(m.kinds))KINDS=m.kinds.map(String).slice(0,24);drawKinds();
+ if(!kept('biruni-lang')&&!HASHL&&pick(m.lang))setLang(pick(m.lang));keep('biruni-hello-'+ROOM,JSON.stringify({kinds:KINDS}))}
 function drop(){const p=pc;pc=null;dc=null;linking=false;if(p)try{p.close()}catch(e){}
  for(const [id,f] of acks){f.reject(new Error('closed'))}acks.clear()}
 function later(){clearTimeout(retry);retry=setTimeout(connect,backoff);backoff=Math.min(backoff*2,60000)}
@@ -193,7 +310,7 @@ async function alive(){if(dc&&dc.readyState==='open')return true;connect();retur
 function offline(){if(dc&&dc.readyState==='open')return;
  if(lastState==='connected'||!lastState)say(false,'connecting');else say(false,lastState);connect()}
 (async()=>{if(!KEYB||KEYB.length!==43||!window.isSecureContext||!window.RTCPeerConnection){
-  $('go').disabled=true;status(false,!KEYB?T.nokey:T.insecure);return}
+  $('go').disabled=true;status(false,!KEYB?'nokey':'insecure');return}
  await bridgeKey(KEYB);SIG.start(onSignal,n=>{if(n&&!linking&&!(dc&&dc.readyState==='open')){backoff=4000;connect()}});
  window.addEventListener('online',()=>{backoff=4000;connect()})})();
 
@@ -205,32 +322,46 @@ async function flush(){if(busy)return;busy=true;
    else if(st===400||st===413){await del(it.id);mark(it.id,'✗')}
    else throw new Error(st);count()}
   const ok=items.length?true:await alive();
-  if(ok)status(true,T.connected);else offline()}catch(e){offline()}
+  if(ok)status(true,'connected');else offline()}catch(e){offline()}
  busy=false;count()}
 setInterval(flush,5000);window.addEventListener('online',flush);
-function thumb(it,s){const d=document.createElement('div'),i=document.createElement('img'),sp=document.createElement('span');
- d.dataset.id=it.id;i.src=URL.createObjectURL(it.blob);sp.textContent=s;d.append(i,sp);$('list').prepend(d);
- while($('list').children.length>9)$('list').lastChild.remove()}
-function onFix(p){const c=p.coords;fix={lat:c.latitude,lon:c.longitude,acc:c.accuracy,alt:c.altitude,heading:c.heading,t:p.timestamp};
- $('pos').textContent=c.latitude.toFixed(6)+', '+c.longitude.toFixed(6);const a=Math.round(c.accuracy);
- $('acc').textContent='± '+a+' m';$('acc').className=a<=8?'good':a<=20?'fair':'poor';
- $('shot').disabled=false;$('shot').textContent='📷  '+T.shoot}
+function thumb(it,s){const e=$('list').querySelector('.empty');if(e)e.remove();
+ const d=document.createElement('div'),i=document.createElement('img'),sp=document.createElement('span');
+ const u=URL.createObjectURL(it.blob);d.dataset.id=it.id;i.src=u;i.alt='';sp.className='badge';d.append(i,sp);
+ $('list').prepend(d);mark(it.id,s);while($('list').children.length>9)$('list').lastChild.remove();
+ const l=document.createElement('img');l.src=u;l.alt='';$('last').replaceChildren(l)}
+function onFix(p){const c=p.coords,first=!fix;fix={lat:c.latitude,lon:c.longitude,acc:c.accuracy,alt:c.altitude,
+ heading:c.heading,t:p.timestamp};$('pos').textContent=c.latitude.toFixed(6)+', '+c.longitude.toFixed(6);
+ const a=Math.round(c.accuracy),q=a<=8?'good':a<=20?'fair':'poor';$('acc').textContent='± '+a+' m';$('acc').className='acc '+q;
+ $('accBar').className=q;$('accBar').style.width=Math.max(6,Math.min(100,100-(a-3)*2.2))+'%';
+ if(compass==null&&c.heading!=null&&!isNaN(c.heading))showDir(c.heading);
+ $('shot').disabled=false;$('shotHint').textContent=T.shoot;if(first&&navigator.vibrate)navigator.vibrate(15)}
+function showDir(h){$('arrow').style.transform='rotate('+Math.round(h)+'deg)';$('deg').textContent=Math.round(h)%360+'°'}
 function onCompass(e){let h=null;if(typeof e.webkitCompassHeading==='number')h=e.webkitCompassHeading;
- else if(e.absolute&&e.alpha!=null)h=(360-e.alpha)%360;if(h!=null)compass=Math.round(h)%360}
+ else if(e.absolute&&e.alpha!=null)h=(360-e.alpha)%360;if(h!=null){compass=Math.round(h)%360;showDir(compass)}}
 async function wake(){try{await navigator.wakeLock.request('screen')}catch(e){}}
-async function start(){if(!window.isSecureContext||!navigator.geolocation){status(false,T.insecure);return}
+async function start(){if(!window.isSecureContext||!navigator.geolocation){status(false,'insecure');return}
  try{if(window.DeviceOrientationEvent&&DeviceOrientationEvent.requestPermission)await DeviceOrientationEvent.requestPermission()}catch(e){}
  window.addEventListener('deviceorientationabsolute',onCompass);window.addEventListener('deviceorientation',onCompass);
  navigator.geolocation.watchPosition(onFix,e=>status(false,T.denied+' ('+e.message+')'),
-  {enableHighAccuracy:true,maximumAge:0,timeout:30000});wake();
- $('intro').classList.add('hide');$('work').classList.remove('hide');flush()}
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){wake();flush()}});
+  {enableHighAccuracy:true,maximumAge:0,timeout:30000});wake();started=true;document.body.classList.add('working');
+ $('intro').classList.add('hide');$('work').classList.remove('hide');$('bar').classList.remove('hide');flush()}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){if(started)wake();flush()}});
 $('go').onclick=start;
-$('shot').onclick=()=>{if(!fix)return;pending={fix:fix,compass:compass,at:Date.now()};$('file').click()};
+$('shot').onclick=()=>{if(!fix)return;if(navigator.vibrate)navigator.vibrate(25);
+ pending={fix:fix,compass:compass,at:Date.now()};$('file').click()};
 $('file').onchange=async()=>{const f=$('file').files[0];$('file').value='';if(!f||!pending)return;
  const p=pending.fix,blob=new Blob([await f.arrayBuffer()],{type:f.type||'image/jpeg'});
  const meta={id:uid(),lat:p.lat,lon:p.lon,acc:p.acc,alt:p.alt,heading:p.heading,compass:pending.compass,
   t:pending.at,fix_age:Math.max(0,Math.round((pending.at-p.t)/1000)),kind:kind,note:$('note').value.trim(),device:dev};
- const it={id:meta.id,blob:blob,meta:meta,room:ROOM};pending=null;await put(it);thumb(it,'⏳');$('note').value='';count();flush()};
+ const it={id:meta.id,blob:blob,meta:meta,room:ROOM};pending=null;await put(it);thumb(it,'⏳');$('note').value='';
+ toast(T.kept);count();flush()};
+$('langBtn').onclick=()=>{const box=$('langs');box.textContent='';Object.keys(ALL).forEach(k=>{const b=document.createElement('button');
+ b.type='button';b.textContent=NAMES[k]||k;b.lang=k.replace('_','-');b.classList.toggle('sel',k===LANG);
+ b.onclick=()=>{keep('biruni-lang',k);setLang(k);$('sheet').classList.add('hide')};box.appendChild(b)});
+ $('sheet').classList.remove('hide')};
+$('sheet').onclick=e=>{if(e.target===$('sheet'))$('sheet').classList.add('hide')};
+setLang(pick(kept('biruni-lang'))||pick(HASHL)||pick(DEF)||pick(navigator.language)||'en');
+{const e=document.createElement('div');e.className='empty';e.textContent=T.none;$('list').appendChild(e)}
 (async()=>{db=await openDb();const w=await all();w.slice(-9).forEach(it=>thumb(it,'⏳'));count();flush()})();
 </script></body></html>
