@@ -1,0 +1,28 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
+<meta name="referrer" content="no-referrer"><meta name="color-scheme" content="light dark"><title>Biruni GIS</title>
+<style>
+:root{--bg:#F4F6F8;--card:#FFFFFF;--text:#14181D;--dim:#5F6B76;--line:#E1E6EB;--accent:#12A594;--ink:#FFFFFF}
+@media (prefers-color-scheme:dark){:root{--bg:#0E1114;--card:#171B20;--text:#E8ECEF;--dim:#97A3AE;--line:#262C33;
+ --accent:#2CC5B4;--ink:#05201C}}
+html,body{margin:0;background:var(--bg);color:var(--text)}
+body{font:17px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans Arabic",Tahoma,sans-serif;display:grid;
+ place-items:center;min-height:100vh;padding:20px;box-sizing:border-box}
+.card{background:var(--card);border:1px solid var(--line);border-radius:24px;padding:28px 24px;max-width:360px;width:100%;
+ text-align:center}
+.pin{width:72px;height:72px;border-radius:22px;background:var(--accent);color:var(--ink);display:grid;place-items:center;
+ margin:0 auto 16px;font-size:34px}
+h1{font-size:30px;margin:0 0 4px}.lv{color:var(--dim);font-weight:600;margin-bottom:16px}p{margin:0;color:var(--dim)}
+</style></head><body><div class="card"><div class="pin">&#9906;</div><h1 id="t"></h1><div class="lv" id="l"></div>
+<p id="m"></p></div><script>
+const ALL={"en": {"title": "Room", "noted": "Noted. Go back to the Biruni photo page: the next photo is placed in this room.", "level": "Level {n}", "bad": "This code has no room in it."}, "ar": {"title": "الغرفة", "noted": "اتسجّلت. ارجع لصفحة صور البيروني: الصورة الجاية هتتحط في الغرفة دي.", "level": "الدور {n}", "bad": "الكود ده مفيهوش غرفة."}, "es": {"title": "Sala", "noted": "Anotada. Vuelva a la página de fotos de Biruni: la próxima foto se ubica en esta sala.", "level": "Planta {n}", "bad": "Este código no contiene ninguna sala."}, "pt_BR": {"title": "Sala", "noted": "Anotada. Volte à página de fotos do Biruni: a próxima foto fica nesta sala.", "level": "Andar {n}", "bad": "Este código não contém nenhuma sala."}, "fr": {"title": "Pièce", "noted": "Notée. Revenez à la page photos de Biruni : la prochaine photo sera placée dans cette pièce.", "level": "Niveau {n}", "bad": "Ce code ne contient aucune pièce."}, "tr": {"title": "Oda", "noted": "Kaydedildi. Biruni fotoğraf sayfasına dönün: sonraki fotoğraf bu odaya konur.", "level": "Kat {n}", "bad": "Bu kodda oda yok."}, "fa": {"title": "اتاق", "noted": "ثبت شد. به صفحهٔ عکس Biruni برگردید: عکس بعدی در این اتاق قرار می‌گیرد.", "level": "طبقهٔ {n}", "bad": "این کد اتاقی ندارد."}},H=new URLSearchParams(location.hash.slice(1));
+let lang='en';try{lang=localStorage.getItem('biruni-lang')||''}catch(e){}
+if(!ALL[lang]){const b=(navigator.language||'en').replace('-','_');lang=ALL[b]?b:(Object.keys(ALL).find(k=>k.split('_')[0]===b.split('_')[0])||'en')}
+const T=ALL[lang],u=H.get('u');document.documentElement.lang=lang.replace('_','-');
+document.documentElement.dir=(lang==='ar'||lang==='fa')?'rtl':'ltr';document.title=T.title;
+if(!u){document.getElementById('t').textContent=T.bad}else{
+ document.getElementById('t').textContent=H.get('n')||u;
+ if(H.get('l')!==null)document.getElementById('l').textContent=T.level.replace('{n}',H.get('l'));
+ document.getElementById('m').textContent=T.noted;
+ try{localStorage.setItem('biruni-room',JSON.stringify({u:u,t:Date.now()}))}catch(e){}}
+</script></body></html>
