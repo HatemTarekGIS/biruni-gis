@@ -1,1 +1,413 @@
-<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=https://github.com/HatemTarekGIS/biruni-gis"><title>Biruni GIS</title><a href="https://github.com/HatemTarekGIS/biruni-gis">Biruni GIS</a>
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Biruni GIS · Free desktop GIS for Windows</title>
+<meta name="description" content="Biruni GIS is a free, open-source desktop GIS for Windows in English, Arabic and more. Open ArcGIS Pro and ArcMap projects, work offline, no account, no licence.">
+<meta property="og:title" content="Biruni GIS · Free desktop GIS">
+<meta property="og:description" content="Free and open-source desktop GIS. Measure, map and analyse the world. English · العربية · Offline · No account.">
+<meta property="og:image" content="https://hatemtarekgis.github.io/biruni-gis/assets/overview.png">
+<meta name="theme-color" content="#0E7C74">
+<link rel="icon" href="assets/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #F7F9FA; --surface: #FFFFFF; --surface-2: #EEF3F3; --text: #16201F; --dim: #56636A; --line: #DCE4E6;
+  --accent: #0E7C74; --accent-2: #0A635D; --accent-soft: #DDF0EE; --warm: #C9822B; --warm-soft: #FBEFDD;
+  --shadow: 0 1px 2px rgba(16,32,31,.06), 0 8px 28px rgba(16,32,31,.08);
+  --radius: 14px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0E1515; --surface: #151F1F; --surface-2: #1B2828; --text: #E6EEED; --dim: #9AABAA; --line: #263535;
+    --accent: #2CC5B4; --accent-2: #4FD6C7; --accent-soft: #173A3B; --warm: #E7A651; --warm-soft: #3A2C17;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 28px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0E1515; --surface: #151F1F; --surface-2: #1B2828; --text: #E6EEED; --dim: #9AABAA; --line: #263535;
+  --accent: #2CC5B4; --accent-2: #4FD6C7; --accent-soft: #173A3B; --warm: #E7A651; --warm-soft: #3A2C17;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 28px rgba(0,0,0,.35);
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0; background: var(--bg); color: var(--text); line-height: 1.6; font-size: 16px;
+  font-family: Inter, "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased;
+}
+html[lang="ar"] body { font-family: "IBM Plex Sans Arabic", "Segoe UI", Tahoma, sans-serif; line-height: 1.75; }
+html[lang="ar"] [data-l="en"], html[lang="en"] [data-l="ar"] { display: none !important; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+img { max-width: 100%; height: auto; display: block; }
+.wrap { max-width: 1140px; margin: 0 auto; padding: 0 20px; }
+.ltr { direction: ltr; unicode-bidi: isolate; display: inline-block; }
+
+/* nav */
+header.nav { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 86%, transparent);
+  backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+.nav .wrap { display: flex; align-items: center; gap: 18px; height: 64px; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 18px; color: var(--text); }
+.brand img { width: 34px; height: 34px; }
+.brand:hover { text-decoration: none; }
+.nav .links { display: flex; gap: 18px; margin-inline-start: auto; align-items: center; }
+.nav .links a { color: var(--dim); font-weight: 500; font-size: 15px; }
+.nav .links a:hover { color: var(--text); text-decoration: none; }
+.pill { border: 1px solid var(--line); background: var(--surface); color: var(--text); border-radius: 999px;
+  padding: 6px 12px; font: inherit; font-size: 14px; cursor: pointer; }
+.pill:hover { border-color: var(--accent); }
+@media (max-width: 820px) { .nav .links a.hide-s { display: none; } }
+
+/* hero */
+.hero { padding-top: 72px; padding-bottom: 40px; text-align: center; }
+.badge { display: inline-flex; gap: 8px; align-items: center; background: var(--accent-soft); color: var(--accent-2);
+  padding: 6px 14px; border-radius: 999px; font-size: 14px; font-weight: 600; }
+:root[data-theme="dark"] .badge { color: var(--accent); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .badge { color: var(--accent); } }
+h1 { font-size: clamp(34px, 6vw, 60px); line-height: 1.1; margin: 18px auto 14px; letter-spacing: -.02em; max-width: 900px; }
+html[lang="ar"] h1 { letter-spacing: 0; line-height: 1.3; }
+h1 .acc { color: var(--accent); }
+.lead { font-size: clamp(17px, 2.2vw, 20px); color: var(--dim); max-width: 760px; margin: 0 auto; }
+.cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin: 30px 0 12px; }
+.btn { display: inline-flex; align-items: center; gap: 10px; padding: 13px 22px; border-radius: 12px; font-weight: 600;
+  font-size: 16px; border: 1px solid var(--line); background: var(--surface); color: var(--text); }
+.btn:hover { text-decoration: none; border-color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+:root[data-theme="dark"] .btn.primary { color: #0B1F1D; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .btn.primary { color: #0B1F1D; } }
+.btn.primary:hover { background: var(--accent-2); }
+.btn svg { width: 20px; height: 20px; }
+.meta { color: var(--dim); font-size: 14px; }
+.shot { margin: 44px auto 0; border-radius: 16px; overflow: hidden; border: 1px solid var(--line); box-shadow: var(--shadow);
+  background: var(--surface); max-width: 1100px; }
+.shot .bar { display: flex; gap: 6px; padding: 10px 14px; border-bottom: 1px solid var(--line); background: var(--surface-2); }
+.shot .bar i { width: 11px; height: 11px; border-radius: 50%; background: var(--line); display: block; }
+
+/* stats */
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin: 46px 0 10px; }
+.stat { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; text-align: center; }
+.stat b { display: block; font-size: 28px; color: var(--accent); line-height: 1.2; }
+.stat span { color: var(--dim); font-size: 14px; }
+@media (max-width: 700px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+
+/* sections */
+section { padding: 64px 0; }
+section.alt { background: var(--surface); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.kicker { color: var(--accent); font-weight: 700; font-size: 14px; text-transform: uppercase; letter-spacing: .08em; }
+html[lang="ar"] .kicker { letter-spacing: 0; text-transform: none; font-size: 15px; }
+h2 { font-size: clamp(26px, 4vw, 38px); margin: 8px 0 12px; line-height: 1.2; letter-spacing: -.01em; }
+html[lang="ar"] h2 { letter-spacing: 0; line-height: 1.4; }
+.sub { color: var(--dim); max-width: 760px; margin: 0 0 30px; font-size: 17px; }
+.grid { display: grid; gap: 16px; grid-template-columns: repeat(3, 1fr); }
+.grid.two { grid-template-columns: repeat(2, 1fr); }
+@media (max-width: 920px) { .grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 620px) { .grid, .grid.two { grid-template-columns: 1fr; } }
+.card { background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; position: relative; }
+section:not(.alt) .card { background: var(--surface); }
+.card h3 { margin: 10px 0 6px; font-size: 17px; }
+.card p { margin: 0; color: var(--dim); font-size: 15px; }
+.ic { width: 40px; height: 40px; border-radius: 10px; background: var(--accent-soft); color: var(--accent);
+  display: grid; place-items: center; }
+.ic svg { width: 22px; height: 22px; }
+.new { position: absolute; top: 16px; inset-inline-end: 16px; font-size: 12px; font-weight: 700; color: var(--warm);
+  background: var(--warm-soft); border-radius: 999px; padding: 2px 9px; }
+
+/* split */
+.split { display: grid; grid-template-columns: 1.05fr 1fr; gap: 40px; align-items: center; }
+@media (max-width: 900px) { .split { grid-template-columns: 1fr; } }
+.ticks { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; }
+.ticks li { display: flex; gap: 12px; align-items: flex-start; }
+.ticks li::before { content: ""; flex: 0 0 22px; height: 22px; margin-top: 3px; border-radius: 50%;
+  background: var(--accent-soft) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230E7C74' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12l5 5L20 7'/%3E%3C/svg%3E") center/14px no-repeat; }
+.ticks b { display: block; }
+.ticks span { color: var(--dim); font-size: 15px; }
+.frame { border-radius: 14px; overflow: hidden; border: 1px solid var(--line); box-shadow: var(--shadow); background: #fff; }
+
+/* compare */
+table.cmp { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); overflow: hidden; font-size: 15px; }
+.cmp th, .cmp td { padding: 13px 16px; border-bottom: 1px solid var(--line); text-align: start; }
+.cmp thead th { background: var(--surface-2); font-size: 14px; color: var(--dim); }
+.cmp td.y { color: var(--accent); font-weight: 600; }
+.cmp td.n { color: var(--dim); }
+.cmp tr:last-child td { border-bottom: 0; }
+.scroll-x { overflow-x: auto; }
+
+/* download */
+.dl { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border-radius: 22px; padding: 44px;
+  display: grid; grid-template-columns: 1.3fr 1fr; gap: 30px; align-items: center; }
+:root[data-theme="dark"] .dl { color: #0B1F1D; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .dl { color: #0B1F1D; } }
+.dl h2 { margin-top: 0; }
+.dl p { opacity: .92; margin: 0; }
+.dl .btn { background: #fff; color: #0A635D; border: 0; }
+.dl ul { margin: 0; padding-inline-start: 20px; opacity: .95; }
+@media (max-width: 820px) { .dl { grid-template-columns: 1fr; padding: 28px; } }
+
+/* faq */
+details { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 4px 18px; margin-bottom: 10px; }
+summary { cursor: pointer; font-weight: 600; padding: 12px 0; list-style: none; }
+summary::-webkit-details-marker { display: none; }
+summary::after { content: "+"; float: inline-end; color: var(--accent); font-weight: 700; }
+details[open] summary::after { content: "−"; }
+details p { color: var(--dim); margin: 0 0 14px; }
+
+footer { padding: 40px 0 50px; color: var(--dim); font-size: 14px; border-top: 1px solid var(--line); }
+footer .wrap { display: grid; gap: 10px; }
+footer .row { display: flex; gap: 18px; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap">
+    <a class="brand" href="#top"><img src="assets/logo.png" alt="">Biruni GIS</a>
+    <nav class="links">
+      <a class="hide-s" href="#features"><span data-l="en">Features</span><span data-l="ar">المزايا</span></a>
+      <a class="hide-s" href="#arcgis"><span data-l="en">From ArcGIS</span><span data-l="ar">قادم من ArcGIS</span></a>
+      <a class="hide-s" href="#field"><span data-l="en">Field</span><span data-l="ar">الميدان</span></a>
+      <a class="hide-s" href="#download"><span data-l="en">Download</span><span data-l="ar">التحميل</span></a>
+      <a class="hide-s" href="https://github.com/HatemTarekGIS/biruni-gis">GitHub</a>
+      <button class="pill" id="langBtn" type="button" aria-label="Language"><span data-l="en">العربية</span><span data-l="ar">English</span></button>
+      <button class="pill" id="themeBtn" type="button" aria-label="Theme">◐</button>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+<div class="wrap hero">
+  <span class="badge">
+    <span data-l="en">Free · Open source · Offline · No account</span>
+    <span data-l="ar">مجاني · مفتوح المصدر · بلا إنترنت · بلا حساب</span>
+  </span>
+  <h1>
+    <span data-l="en">The desktop GIS that is <span class="acc">yours</span>. Measure, map and analyse the world.</span>
+    <span data-l="ar">نظم معلومات جغرافية <span class="acc">مِلكُك</span>. قِس العالم وارسمه وحلّله.</span>
+  </h1>
+  <p class="lead">
+    <span data-l="en">A modern ribbon interface, full Arabic right-to-left support, and the tools surveyors, engineers and students use every day. No licence that runs out, no credits, no sign-in.</span>
+    <span data-l="ar">واجهة شريطية حديثة، ودعم كامل للعربية من اليمين إلى اليسار، والأدوات التي يستخدمها المسّاحون والمهندسون والطلاب كل يوم. بلا رخصة تنتهي، ولا رصيد (credits)، ولا تسجيل دخول.</span>
+  </p>
+  <div class="cta">
+    <a class="btn primary" href="https://github.com/HatemTarekGIS/biruni-gis/releases/latest">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-5-5m5 5l5-5M5 21h14"/></svg>
+      <span data-l="en">Download for Windows</span><span data-l="ar">نزّل لويندوز</span>
+    </a>
+    <a class="btn" href="https://github.com/HatemTarekGIS/biruni-gis">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 00-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.9 1.52 2.34 1.08 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02a9.56 9.56 0 015 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10 10 0 0012 2z"/></svg>
+      <span data-l="en">Source code</span><span data-l="ar">الكود المصدري</span>
+    </a>
+  </div>
+  <div class="meta">
+    <span data-l="en">Windows 10 / 11 · 64-bit · English and العربية (Español, Português, Français, Türkçe and فارسی in 0.3)</span>
+    <span data-l="ar">ويندوز 10 / 11 · ‎64-bit · العربية وEnglish (وEspañol وPortuguês وFrançais وTürkçe وفارسی في 0.3)</span>
+  </div>
+
+  <div class="shot">
+    <div class="bar"><i></i><i></i><i></i></div>
+    <img src="assets/overview.png" alt="Biruni GIS main window with the ribbon, layers and a world map" loading="eager" width="1280" height="688">
+  </div>
+
+  <div class="stats">
+    <div class="stat"><b>$0</b><span data-l="en">forever, for everyone</span><span data-l="ar">للأبد، وللجميع</span></div>
+    <div class="stat"><b class="ltr">~1,370</b><span data-l="en">geoprocessing tools</span><span data-l="ar">أداة معالجة مكانية</span></div>
+    <div class="stat"><b>RTL</b><span data-l="en">full Arabic interface</span><span data-l="ar">واجهة عربية كاملة</span></div>
+    <div class="stat"><b>100%</b><span data-l="en">works offline</span><span data-l="ar">يعمل دون إنترنت</span></div>
+  </div>
+</div>
+
+<!-- ArcGIS -->
+<section class="alt" id="arcgis">
+  <div class="wrap">
+    <div class="kicker"><span data-l="en">Coming from ArcGIS</span><span data-l="ar">قادم من ArcGIS؟</span></div>
+    <h2><span data-l="en">Move without losing anything, and go back any time.</span><span data-l="ar">انتقل دون أن تخسر شيئًا، وعُد متى شئت.</span></h2>
+    <p class="sub">
+      <span data-l="en">Your projects, symbols, scripts and models come with you. Items marked <b>0.3</b> are in the next release.</span>
+      <span data-l="ar">مشاريعك ورموزك وسكربتاتك ونماذجك تنتقل معك. العناصر المعلَّمة بـ <b>0.3</b> قادمة في الإصدار التالي.</span>
+    </p>
+    <div class="grid">
+      <div class="card"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3v4a1 1 0 001 1h4"/><path d="M17 21H7a2 2 0 01-2-2V5a2 2 0 012-2h7l5 5v11a2 2 0 01-2 2z"/><path d="M9 14h6m-3-3l3 3-3 3"/></svg></div>
+        <h3><span data-l="en">Open .aprx, .mapx, .lyrx and .mxd</span><span data-l="ar">افتح aprx وmapx وlyrx وmxd</span></h3>
+        <p><span data-l="en">Layers, groups, colours, labels and definition queries. ArcMap symbology too (0.3): 99.9% of renderers matched on 1,307 real layers.</span><span data-l="ar">الطبقات والمجموعات والألوان والتسميات والفلاتر، ورموز ArcMap أيضًا (0.3): تطابق نوع الترميز في 99.9% من 1,307 طبقات حقيقية.</span></p></div>
+      <div class="card"><span class="new">0.3</span><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3v4a1 1 0 001 1h4"/><path d="M17 21H7a2 2 0 01-2-2V5a2 2 0 012-2h7l5 5v11a2 2 0 01-2 2z"/><path d="M10 13l-1 2 1 2m4-4l1 2-1 2"/></svg></div>
+        <h3><span data-l="en">Run your arcpy scripts</span><span data-l="ar">شغّل سكربتات arcpy الخاصة بك</span></h3>
+        <p><span data-l="en">About 200 arcpy functions (cursors, geometry, Buffer, Clip, Dissolve, Spatial Join…) on shapefile, GeoPackage and File Geodatabase. No licence needed.</span><span data-l="ar">نحو 200 دالة من arcpy (Cursors والهندسة وBuffer وClip وDissolve وSpatial Join…) على shp وGeoPackage وFile Geodatabase، دون رخصة.</span></p></div>
+      <div class="card"><span class="new">0.3</span><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg></div>
+        <h3><span data-l="en">Readiness scan</span><span data-l="ar">فحص الجاهزية للانتقال</span></h3>
+        <p><span data-l="en">Point it at your folders: every map, script and model is checked and you get a report of what opens 100%, what changes and what is missing.</span><span data-l="ar">اختر مجلداتك: تُفحص كل خريطة وسكربت ونموذج، وتحصل على تقرير بما سيفتح 100% وما سيتغير وما ينقص.</span></p></div>
+      <div class="card"><span class="new">0.3</span><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="6" height="6" rx="1"/><rect x="15" y="15" width="6" height="6" rx="1"/><path d="M9 6h4a2 2 0 012 2v7"/></svg></div>
+        <h3><span data-l="en">ModelBuilder models</span><span data-l="ar">نماذج ModelBuilder</span></h3>
+        <p><span data-l="en">Models in .atbx toolboxes become models in the Biruni toolbox. Steps that cannot be converted are kept as notes, never dropped silently.</span><span data-l="ar">تتحول النماذج الموجودة في atbx إلى نماذج في صندوق الأدوات، وتبقى الخطوة التي لا يمكن تحويلها ملاحظةً ظاهرة، ولا تُحذف دون علمك.</span></p></div>
+      <div class="card"><span class="new">0.3</span><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 010 10h-1"/></svg></div>
+        <h3><span data-l="en">Save back for ArcGIS Pro</span><span data-l="ar">احفظ لـ ArcGIS Pro مجددًا</span></h3>
+        <p><span data-l="en">Write .aprx, .mapx and .lyrx with symbols, labels and layouts, checked by opening them in ArcGIS Pro. Half the team can stay on Pro.</span><span data-l="ar">احفظ aprx وmapx وlyrx بالرموز والتسميات والمخططات، وقد تحققنا منها بفتحها في ArcGIS Pro نفسه؛ فيمكن لنصف الفريق البقاء على Pro.</span></p></div>
+      <div class="card"><span class="new">0.3</span><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="6" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><path d="M7 7h.01M7 17h.01"/></svg></div>
+        <h3><span data-l="en">Your company's ArcGIS services</span><span data-l="ar">خدمات ArcGIS في شركتك</span></h3>
+        <p><span data-l="en">Connect to ArcGIS Server, Portal or Online, edit feature services, or take a layer offline and sync it back with conflict checks.</span><span data-l="ar">اتصل بـ ArcGIS Server أو Portal أو Online، وعدّل الخدمات، أو انقل الطبقة للعمل دون اتصال ثم زامن تعديلاتك مع كشف التعارضات.</span></p></div>
+    </div>
+  </div>
+</section>
+
+<!-- features -->
+<section id="features">
+  <div class="wrap">
+    <div class="kicker"><span data-l="en">Everyday work</span><span data-l="ar">العمل اليومي</span></div>
+    <h2><span data-l="en">Everything you need, where you expect it.</span><span data-l="ar">كل ما تحتاجه، حيث تتوقعه.</span></h2>
+    <p class="sub"><span data-l="en">A familiar ribbon, a search box that finds any tool (type an ArcGIS tool name too), and tools made for real projects.</span><span data-l="ar">شريط مألوف، ومربع بحث يجد أي أداة (حتى باسمها في ArcGIS)، وأدوات مصممة للمشاريع الحقيقية.</span></p>
+    <div class="grid">
+      <div class="card"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg></div>
+        <h3><span data-l="en">Project folders</span><span data-l="ar">المشروع مجلد واحد</span></h3>
+        <p><span data-l="en">Map, project database, data, outputs and exports kept together. Copy all data in with one click, or package as ZIP.</span><span data-l="ar">الخريطة وقاعدة بيانات المشروع والبيانات والمخرجات في مكان واحد. انسخ كل البيانات إليه بنقرة، أو احزمه في ملف ZIP.</span></p></div>
+      <div class="card"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></div>
+        <h3><span data-l="en">Time machine</span><span data-l="ar">آلة الزمن</span></h3>
+        <p><span data-l="en">Every save is a version you can restore. In 0.3: if the power goes out, your unsaved edits come back.</span><span data-l="ar">كل حفظ نسخة يمكنك الرجوع إليها. وفي 0.3: إذا انقطعت الكهرباء تعود التعديلات غير المحفوظة.</span></p></div>
+      <div class="card"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21l6-6m0 0l3 3 9-9-3-3-9 9zM14 6l4 4"/></svg></div>
+        <h3><span data-l="en">CAD and survey</span><span data-l="ar">الكاد والمساحة</span></h3>
+        <p><span data-l="en">DXF to GIS with texts, blocks, true arcs and Arabic SHX fonts. Helmert/affine fit, COGO, parcel subdivision, deeds to parcels.</span><span data-l="ar">من DXF إلى GIS بالنصوص والبلوكات والأقواس الحقيقية وخطوط SHX العربية، والتوقيع بهلمرت والأفيني، وCOGO، وتقسيم القطع، ومن نص الصك إلى القطعة.</span></p></div>
+      <div class="card"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg></div>
+        <h3><span data-l="en">Check my data</span><span data-l="ar">افحص بياناتي</span></h3>
+        <p><span data-l="en">One scan of every layer with safe fixes, topology rules and attribute rules. In 0.3: plain-language explanations of errors.</span><span data-l="ar">فحص واحد لكل الطبقات مع إصلاحات آمنة، وقواعد الطوبولوجيا، وقواعد الخصائص. وفي 0.3: شرح الأخطاء بلغة بسيطة.</span></p></div>
+      <div class="card"><span class="new">0.3</span><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h5"/></svg></div>
+        <h3><span data-l="en">Engineering office</span><span data-l="ar">المكتب الهندسي</span></h3>
+        <p><span data-l="en">Guess the coordinate system, delivery spec and check, compare versions, bill of quantities, setbacks, scanned plans to parcels.</span><span data-l="ar">تعرّف نظام الإحداثيات، ومواصفات التسليم وفحصها، ومقارنة نسختين، وجدول الكميات، والارتدادات، والقطع من المخطط الممسوح ضوئيًا.</span></p></div>
+      <div class="card"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3s6 6.5 6 11a6 6 0 01-12 0c0-4.5 6-11 6-11z"/></svg></div>
+        <h3><span data-l="en">Hydrology, terrain, LiDAR</span><span data-l="ar">الهيدرولوجيا والتضاريس والليدار</span></h3>
+        <p><span data-l="en">Streams and watersheds in one click and all SAGA and GRASS tools. In 0.3: ground surface from drone points, stockpile volumes and profiles.</span><span data-l="ar">المجاري والأحواض بنقرة، وكل أدوات SAGA وGRASS. وفي 0.3: سطح الأرض من نقاط الطائرات المسيّرة، وأحجام الردم والحفر، والقطاعات.</span></p></div>
+      <div class="card"><span class="new">0.3</span><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h10M4 18h7"/><path d="M17 15l3 3-3 3"/></svg></div>
+        <h3><span data-l="en">Spatial statistics</span><span data-l="ar">الإحصاء المكاني</span></h3>
+        <p><span data-l="en">Hot spots, clusters and outliers, regression and an advisor that suggests the right test for your question.</span><span data-l="ar">النقاط الساخنة والعناقيد والقيم الشاذة والانحدار، ومستشار يقترح الاختبار المناسب لسؤالك.</span></p></div>
+      <div class="card"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 15l3-3 3 3 4-4"/></svg></div>
+        <h3><span data-l="en">Map sheets and books</span><span data-l="ar">لوحات وأطالس</span></h3>
+        <p><span data-l="en">A finished map sheet in one click with grid, north arrow, scale and legend, Arabic-Indic digits included. Web maps and KMZ too.</span><span data-l="ar">لوحة خريطة جاهزة بنقرة: شبكة وسهم شمال ومقياس ومفتاح، وبالأرقام العربية أيضًا، إضافة إلى خرائط الويب وKMZ.</span></p></div>
+      <div class="card"><span class="new">0.3</span><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16M9 3v2c0 4 3 8 7 9M14 9c-1 3-5 7-10 8"/><path d="M13 21l4-9 4 9m-7-2h6"/></svg></div>
+        <h3><span data-l="en">Right-to-left done right</span><span data-l="ar">العربية كما ينبغي</span></h3>
+        <p><span data-l="en">Correct Arabic, Persian and Urdu labels, even on curved lines; Hijri and other calendars; legacy Arabic CAD fonts repaired.</span><span data-l="ar">تسميات عربية وفارسية وأردية صحيحة حتى على الخطوط المنحنية، والتقويم الهجري وغيره، وإصلاح خطوط الكاد العربية القديمة.</span></p></div>
+    </div>
+  </div>
+</section>
+
+<!-- field -->
+<section class="alt" id="field">
+  <div class="wrap split">
+    <div>
+      <div class="kicker"><span data-l="en">Field and phone · 0.3</span><span data-l="ar">الميدان والهاتف · 0.3</span></div>
+      <h2><span data-l="en">Any phone becomes a field device. No app, no cloud account.</span><span data-l="ar">أي هاتف يصبح جهازًا ميدانيًا، بلا تطبيق ولا حساب سحابي.</span></h2>
+      <ul class="ticks">
+        <li><div><b><span data-l="en">Field photos and forms</span><span data-l="ar">صور ميدانية ونماذج</span></b><span data-l="en">Scan a code; photos and answers land on your map, straight from phone to computer.</span><span data-l="ar">امسح الرمز، فتصل الصور والإجابات إلى خريطتك مباشرة من الهاتف إلى الحاسوب.</span></div></li>
+        <li><div><b><span data-l="en">Live GPS and team on the map</span><span data-l="ar">GPS مباشر والفريق على الخريطة</span></b><span data-l="en">Track the team, guide someone to a point or a boundary, average readings for better positions.</span><span data-l="ar">تابع الفريق، ووجّه أحدهم إلى نقطة أو حدود، واحسب متوسط القراءات لموقع أدق.</span></div></li>
+        <li><div><b><span data-l="en">Share your map live</span><span data-l="ar">شارك خريطتك مباشرة</span></b><span data-l="en">Someone opens a link and sees your map as you work.</span><span data-l="ar">يفتح أحدهم رابطًا فيرى خريطتك أثناء عملك.</span></div></li>
+        <li><div><b><span data-l="en">Living QR on printed maps and sealed deliverables</span><span data-l="ar">رمز QR حي على الخرائط المطبوعة، وختم لملفات التسليم</span></b><span data-l="en">A printed map that opens online, and a signature that shows if a delivered file was changed.</span><span data-l="ar">خريطة مطبوعة تُفتح على الإنترنت، وتوقيع يكشف أي تعديل على ملف بعد تسليمه.</span></div></li>
+      </ul>
+    </div>
+    <div class="frame"><img src="assets/mapsheet.png" alt="A map sheet made with Biruni GIS, in Arabic" loading="lazy" width="1754" height="1240"></div>
+  </div>
+</section>
+
+<!-- compare -->
+<section id="compare">
+  <div class="wrap">
+    <div class="kicker"><span data-l="en">Your data stays yours</span><span data-l="ar">بياناتك مِلكُك</span></div>
+    <h2><span data-l="en">No account. No licence server. Nothing sent anywhere.</span><span data-l="ar">بلا حساب، ولا خادم رخص، ولا شيء يُرسل إلى أي مكان.</span></h2>
+    <p class="sub"><span data-l="en">Biruni connects to the internet only for what you ask for (basemaps, open-data downloads) and once a day to check for a new version.</span><span data-l="ar">لا يتصل البيروني بالإنترنت إلا لما تطلبه أنت (خرائط الأساس وتنزيل البيانات المفتوحة)، ومرة في اليوم للتحقق من وجود إصدار جديد.</span></p>
+    <div class="scroll-x">
+    <table class="cmp">
+      <thead><tr><th></th><th>Biruni GIS</th><th><span data-l="en">Typical commercial desktop GIS</span><span data-l="ar">برامج GIS التجارية المعتادة</span></th></tr></thead>
+      <tbody>
+        <tr><td><span data-l="en">Price</span><span data-l="ar">السعر</span></td><td class="y"><span data-l="en">Free, forever</span><span data-l="ar">مجاني للأبد</span></td><td class="n"><span data-l="en">Yearly licence + extensions + credits</span><span data-l="ar">رخصة سنوية + إضافات + credits</span></td></tr>
+        <tr><td><span data-l="en">Sign-in</span><span data-l="ar">تسجيل الدخول</span></td><td class="y"><span data-l="en">Never</span><span data-l="ar">أبدًا</span></td><td class="n"><span data-l="en">Named user account</span><span data-l="ar">حساب باسم المستخدم</span></td></tr>
+        <tr><td><span data-l="en">Works offline</span><span data-l="ar">من غير إنترنت</span></td><td class="y"><span data-l="en">Always</span><span data-l="ar">دائمًا</span></td><td class="n"><span data-l="en">Licence must be checked out</span><span data-l="ar">يجب حجز الرخصة أولًا</span></td></tr>
+        <tr><td><span data-l="en">Spatial, 3D and network analysis</span><span data-l="ar">التحليل المكاني وثلاثي الأبعاد والشبكات</span></td><td class="y"><span data-l="en">Included</span><span data-l="ar">موجودة</span></td><td class="n"><span data-l="en">Paid extensions</span><span data-l="ar">إضافات مدفوعة</span></td></tr>
+        <tr><td><span data-l="en">Field data collection</span><span data-l="ar">جمع البيانات من الميدان</span></td><td class="y"><span data-l="en">Any phone browser, no cloud</span><span data-l="ar">من متصفح أي هاتف، دون سحابة</span></td><td class="n"><span data-l="en">Mobile user types</span><span data-l="ar">اشتراك لكل مستخدم ميداني</span></td></tr>
+        <tr><td><span data-l="en">Arabic interface</span><span data-l="ar">الواجهة العربية</span></td><td class="y"><span data-l="en">Full right-to-left</span><span data-l="ar">كاملة من اليمين إلى اليسار</span></td><td class="n"><span data-l="en">Varies</span><span data-l="ar">تختلف</span></td></tr>
+        <tr><td><span data-l="en">Source code</span><span data-l="ar">الكود المصدري</span></td><td class="y"><span data-l="en">Open (GPL)</span><span data-l="ar">مفتوح (GPL)</span></td><td class="n"><span data-l="en">Closed</span><span data-l="ar">مغلق</span></td></tr>
+      </tbody>
+    </table>
+    </div>
+  </div>
+</section>
+
+<!-- download -->
+<section id="download">
+  <div class="wrap">
+    <div class="dl">
+      <div>
+        <h2><span data-l="en">Get Biruni GIS</span><span data-l="ar">نزّل Biruni GIS</span></h2>
+        <p><span data-l="en">Download the installer from the releases page and run it. An Arabic PDF guide is attached to each release.</span><span data-l="ar">نزّل ملف التثبيت من صفحة الإصدارات وشغّله، ومع كل إصدار دليل PDF بالعربية.</span></p>
+        <div class="cta" style="justify-content:flex-start;margin-bottom:0">
+          <a class="btn" href="https://github.com/HatemTarekGIS/biruni-gis/releases/latest"><span data-l="en">Download the latest version</span><span data-l="ar">نزّل أحدث إصدار</span></a>
+        </div>
+      </div>
+      <ul>
+        <li><span data-l="en">Windows 10 or 11, 64-bit</span><span data-l="ar">ويندوز 10 أو 11، ‎64-bit</span></li>
+        <li><span data-l="en">About 2.5 GB of disk space</span><span data-l="ar">نحو 2.5 جيجابايت من مساحة القرص</span></li>
+        <li><span data-l="en">Light mode for older laptops (0.3)</span><span data-l="ar">وضع خفيف للحواسيب القديمة (0.3)</span></li>
+        <li><span data-l="en">Keeps its own settings: never touches other GIS installs</span><span data-l="ar">إعداداته مستقلة: لا يمس أي برنامج GIS آخر مثبت</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- faq -->
+<section class="alt" id="faq">
+  <div class="wrap">
+    <div class="kicker"><span data-l="en">Questions</span><span data-l="ar">أسئلة</span></div>
+    <h2><span data-l="en">Good to know</span><span data-l="ar">ما يهمك أن تعرفه</span></h2>
+    <details><summary><span data-l="en">Is it really free?</span><span data-l="ar">هل هو مجاني فعلًا؟</span></summary>
+      <p><span data-l="en">Yes. Biruni GIS is open source under the GNU GPL. You can use it at work, at university and at home, on as many computers as you like.</span><span data-l="ar">نعم. البيروني مفتوح المصدر برخصة GNU GPL، ويمكنك استخدامه في العمل والجامعة والمنزل، على أي عدد من الأجهزة.</span></p></details>
+    <details><summary><span data-l="en">Can it replace ArcGIS Pro for me?</span><span data-l="ar">هل يمكن أن يكون بديلًا لـ ArcGIS Pro عندي؟</span></summary>
+      <p><span data-l="en">For most daily mapping, editing, analysis and survey work, yes. Some ArcGIS-only data features (topology rules stored in a geodatabase, attribute rules, versioning) are not supported yet. Run the readiness scan on your own folders to see exactly what will work.</span><span data-l="ar">في معظم أعمال الخرائط والتحرير والتحليل والمساحة اليومية، نعم. بعض خصائص ArcGIS غير مدعومة بعد، مثل قواعد الطوبولوجيا المخزنة في الـ geodatabase، وقواعد الخصائص، والـ Versioning. شغّل فحص الجاهزية على مجلداتك لتعرف بدقة ما الذي سيعمل.</span></p></details>
+    <details><summary><span data-l="en">Will it change my existing QGIS or ArcGIS?</span><span data-l="ar">هل سيغيّر شيئًا في QGIS أو ArcGIS لديّ؟</span></summary>
+      <p><span data-l="en">No. Biruni keeps its own profile in %APPDATA%\Biruni GIS and opens your ArcGIS files without changing them.</span><span data-l="ar">لا. يحفظ البيروني إعداداته في ‎%APPDATA%\Biruni GIS‎ بشكل مستقل، ويفتح ملفات ArcGIS دون تعديلها.</span></p></details>
+    <details><summary><span data-l="en">Why does Windows warn me when I run the installer?</span><span data-l="ar">لماذا يحذرني ويندوز عند تشغيل ملف التثبيت؟</span></summary>
+      <p><span data-l="en">The installer is not code-signed yet. Choose “More info”, then “Run anyway”. Signing is being set up with SignPath.</span><span data-l="ar">ملف التثبيت غير موقّع رقميًا بعد. اختر «More info» ثم «Run anyway». يجري إعداد التوقيع مع SignPath.</span></p></details>
+    <details><summary><span data-l="en">How can I help?</span><span data-l="ar">كيف أساعد؟</span></summary>
+      <p><span data-l="en">Report problems or ideas on <a href="https://github.com/HatemTarekGIS/biruni-gis/issues">GitHub Issues</a>, improve a translation, or tell a colleague.</span><span data-l="ar">أبلغ عن مشكلة أو فكرة على <a href="https://github.com/HatemTarekGIS/biruni-gis/issues">GitHub Issues</a>، أو حسّن ترجمة، أو أخبر زميلًا عنه.</span></p></details>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="row">
+      <a href="https://github.com/HatemTarekGIS/biruni-gis">GitHub</a>
+      <a href="https://github.com/HatemTarekGIS/biruni-gis/releases"><span data-l="en">Releases</span><span data-l="ar">الإصدارات</span></a>
+      <a href="https://github.com/HatemTarekGIS/biruni-gis/issues"><span data-l="en">Report a problem</span><span data-l="ar">أبلغ عن مشكلة</span></a>
+    </div>
+    <div>
+      <span data-l="en">Named after Abu Rayhan al-Biruni (973–1048), who measured the Earth from a mountain top using the dip angle to the horizon, the idea behind the logo.</span>
+      <span data-l="ar">سُمّي باسم أبي الريحان البيروني (973–1048) الذي قاس الأرض من قمة جبل بزاوية انخفاض الأفق، وهي الفكرة التي يرسمها الشعار.</span>
+    </div>
+    <div>
+      <span data-l="en">Biruni GIS is based on QGIS and released under the GNU GPL. “QGIS” is a trademark of QGIS.org; Biruni GIS is an independent project, not endorsed by the QGIS project. ArcGIS is a trademark of its owner; Biruni GIS is not affiliated with or endorsed by it.</span>
+      <span data-l="ar">Biruni GIS مبني على QGIS ومنشور برخصة GNU GPL. «QGIS» علامة تجارية لـ QGIS.org، وBiruni GIS مشروع مستقل غير معتمد من مشروع QGIS. وArcGIS علامة تجارية لأصحابها، ولا يرتبط بهم Biruni GIS ولا يحظى باعتمادهم.</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function () {
+  var root = document.documentElement;
+  function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
+  function setLang(l) {
+    root.lang = l; root.dir = l === "ar" ? "rtl" : "ltr";
+    document.title = l === "ar" ? "Biruni GIS · برنامج GIS مجاني لويندوز" : "Biruni GIS · Free desktop GIS for Windows";
+  }
+  var q = new URLSearchParams(location.search).get("lang");
+  var saved = store("biruni-site-lang");
+  var nav = (navigator.language || "en").toLowerCase();
+  setLang(q === "ar" || q === "en" ? q : saved || (nav.indexOf("ar") === 0 ? "ar" : "en"));
+  document.getElementById("langBtn").onclick = function () {
+    var l = root.lang === "ar" ? "en" : "ar"; setLang(l); store("biruni-site-lang", l);
+  };
+  var t = store("biruni-site-theme"); if (t) root.dataset.theme = t;
+  document.getElementById("themeBtn").onclick = function () {
+    var dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+    root.dataset.theme = dark ? "light" : "dark"; store("biruni-site-theme", root.dataset.theme);
+  };
+})();
+</script>
+</body>
+</html>
