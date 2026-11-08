@@ -1770,18 +1770,18 @@ function drawMarkers(ctx,ms,now){ctx.save();ctx.lineWidth=2;for(const m of ms){c
    stabilises video - and the live layer follows the smoothed pose, so both stay together and the tremor is gone. */
 const GLW={ok:null};
 function glInit(){if(GLW.ok!==null)return GLW.ok;GLW.ok=false;try{const cv=document.createElement('canvas');
- const gl=cv.getContext('webgl',{premultipliedAlpha:false,preserveDrawingBuffer:true,antialias:false,alpha:false});if(!gl)return false;
+ const gl=cv.getContext('webgl',{premultipliedAlpha:false,preserveDrawingBuffer:true,antialias:false,alpha:true});if(!gl)return false;
  const sh=(t,src)=>{const o=gl.createShader(t);gl.shaderSource(o,src);gl.compileShader(o);if(!gl.getShaderParameter(o,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(o));return o};
  const pr=gl.createProgram();gl.attachShader(pr,sh(gl.VERTEX_SHADER,'attribute vec2 a;void main(){gl_Position=vec4(a,0.,1.);}'));
- gl.attachShader(pr,sh(gl.FRAGMENT_SHADER,'precision highp float;uniform sampler2D t;uniform mat3 M;uniform vec2 S;uniform float O;uniform float D;'+
-  'void main(){vec3 q=M*vec3(gl_FragCoord.x,O-gl_FragCoord.y,1.);if(q.z<=0.){gl_FragColor=vec4(.02,.03,.04,1.);return;}vec2 uv=q.xy/q.z/S;'+
-  'if(uv.x<0.||uv.y<0.||uv.x>1.||uv.y>1.){gl_FragColor=vec4(.02,.03,.04,1.);return;}gl_FragColor=vec4(texture2D(t,uv).rgb*D,1.);}'));
+ gl.attachShader(pr,sh(gl.FRAGMENT_SHADER,'precision highp float;uniform sampler2D t;uniform mat3 M;uniform vec2 S;uniform float O;uniform float D;uniform float T;'+
+  'void main(){vec3 q=M*vec3(gl_FragCoord.x,O-gl_FragCoord.y,1.);if(q.z<=0.){gl_FragColor=T>.5?vec4(0.):vec4(.02,.03,.04,1.);return;}vec2 uv=q.xy/q.z/S;'+
+  'if(uv.x<0.||uv.y<0.||uv.x>1.||uv.y>1.){gl_FragColor=T>.5?vec4(0.):vec4(.02,.03,.04,1.);return;}gl_FragColor=vec4(texture2D(t,uv).rgb*D,1.);}'));
  gl.linkProgram(pr);if(!gl.getProgramParameter(pr,gl.LINK_STATUS))return false;gl.useProgram(pr);
  const b=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,b);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);
  const a=gl.getAttribLocation(pr,'a');gl.enableVertexAttribArray(a);gl.vertexAttribPointer(a,2,gl.FLOAT,false,0,0);
  const tx=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,tx);for(const [k,v] of [[gl.TEXTURE_MIN_FILTER,gl.LINEAR],[gl.TEXTURE_MAG_FILTER,gl.LINEAR],
   [gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE],[gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE]])gl.texParameteri(gl.TEXTURE_2D,k,v);
- Object.assign(GLW,{ok:true,cv:cv,gl:gl,uM:gl.getUniformLocation(pr,'M'),uS:gl.getUniformLocation(pr,'S'),uO:gl.getUniformLocation(pr,'O'),uD:gl.getUniformLocation(pr,'D')})}
+ Object.assign(GLW,{ok:true,cv:cv,gl:gl,uM:gl.getUniformLocation(pr,'M'),uS:gl.getUniformLocation(pr,'S'),uO:gl.getUniformLocation(pr,'O'),uD:gl.getUniformLocation(pr,'D'),uT:gl.getUniformLocation(pr,'T')})}
  catch(e){GLW.ok=false}return GLW.ok}
 /* one triangle of src drawn affinely onto three points of dst */
 function triDraw(x,img,s,d){const [s0,s1,s2]=s,[d0,d1,d2]=d,den=(s1[0]-s0[0])*(s2[1]-s0[1])-(s2[0]-s0[0])*(s1[1]-s0[1]);if(Math.abs(den)<1e-9)return;
@@ -1791,17 +1791,24 @@ function triDraw(x,img,s,d){const [s0,s1,s2]=s,[d0,d1,d2]=d,den=(s1[0]-s0[0])*(s
  d.forEach((q,i)=>{const X=mx+(q[0]-mx)*1.015+(q[0]>mx?.5:-.5),Y=my+(q[1]-my)*1.015+(q[1]>my?.5:-.5);i?x.lineTo(X,Y):x.moveTo(X,Y)});x.closePath();x.clip();
  x.setTransform(a,c,b,dd,d0[0]-a*s0[0]-b*s0[1],d0[1]-c*s0[0]-dd*s0[1]);x.drawImage(img,0,0);x.restore()}
 /* draw src onto dst (w×h) so that display pixel p shows src pixel M·p (M: display -> src) */
-function warpTo(dst,src,M,w,h,dim){dim=dim==null?1:dim;
+function warpTo(dst,src,M,w,h,dim,over){dim=dim==null?1:dim;
  if(V.useGL!==false&&glInit()){try{const g=GLW.gl;if(GLW.cv.width!==w||GLW.cv.height!==h){GLW.cv.width=w;GLW.cv.height=h}g.viewport(0,0,w,h);
    g.texImage2D(g.TEXTURE_2D,0,g.RGBA,g.RGBA,g.UNSIGNED_BYTE,src);g.uniformMatrix3fv(GLW.uM,false,[M[0],M[3],M[6],M[1],M[4],M[7],M[2],M[5],M[8]]);
-   g.uniform2f(GLW.uS,src.width,src.height);g.uniform1f(GLW.uO,h);g.uniform1f(GLW.uD,dim);g.drawArrays(g.TRIANGLE_STRIP,0,4);
-   if(g.getError()===g.NO_ERROR){dst.setTransform(1,0,0,1,0,0);dst.drawImage(GLW.cv,0,0);V.warpBy='webgl';return}}catch(e){}GLW.ok=false}
+   g.uniform2f(GLW.uS,src.width,src.height);g.uniform1f(GLW.uO,h);g.uniform1f(GLW.uD,dim);g.uniform1f(GLW.uT,over?1:0);g.drawArrays(g.TRIANGLE_STRIP,0,4);
+   if(g.getError()===g.NO_ERROR){dst.setTransform(1,0,0,1,0,0);if(!over)dst.clearRect(0,0,w,h);dst.drawImage(GLW.cv,0,0);V.warpBy='webgl';return}}catch(e){}GLW.ok=false}
  /* without WebGL: a mesh of small triangles (each nearly affine) */
- dst.setTransform(1,0,0,1,0,0);dst.fillStyle='#05080b';dst.fillRect(0,0,w,h);const nx=18,ny=12;
+ dst.setTransform(1,0,0,1,0,0);if(!over){dst.fillStyle='#05080b';dst.fillRect(0,0,w,h)}const nx=18,ny=12;
  for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){const x0=i*w/nx,x1=(i+1)*w/nx,y0=j*h/ny,y1=(j+1)*h/ny;
   for(const tri of [[[x0,y0],[x1,y0],[x1,y1]],[[x0,y0],[x1,y1],[x0,y1]]]){const sp=tri.map(q=>app(M,q[0],q[1]));
    if(sp.every(q=>q[0]<0)||sp.every(q=>q[1]<0)||sp.every(q=>q[0]>src.width)||sp.every(q=>q[1]>src.height))continue;triDraw(dst,src,sp,tri)}}
- if(dim<1){dst.fillStyle='rgba(5,8,11,'+(1-dim)+')';dst.fillRect(0,0,w,h)}V.warpBy='2d'}
+ if(dim<1&&!over){dst.fillStyle='rgba(5,8,11,'+(1-dim)+')';dst.fillRect(0,0,w,h)}V.warpBy='2d'}
+/* [11-08] the steady paper is a MOSAIC in paper space: every analysed frame is laid onto it with its own homography,
+   so a corner the camera does not see right now keeps its last seen picture (never black), and a corner never seen
+   shows the paper as printed (drawn here). The newest frame always wins where it sees. */
+function mosaicAdd(src,Hr){const p=PV.paper;if(!p||!Hr)return;const ppm=Math.min(8,2400/Math.max(p.page[0],p.page[1])),mw=Math.round(p.page[0]*ppm),mh=Math.round(p.page[1]*ppm);
+ if(!V.mos||V.mosId!==p.id||V.mos.width!==mw||V.mos.height!==mh){V.mos=document.createElement('canvas');V.mos.width=mw;V.mos.height=mh;V.mx=V.mos.getContext('2d');V.mosId=p.id;V.mosPpm=ppm;
+  try{V.mx.drawImage(renderPaper(p,layersOf(p.widget),ppm,BD.lang()),0,0,mw,mh)}catch(e){V.mx.fillStyle='#f4f3ee';V.mx.fillRect(0,0,mw,mh)}}
+ warpTo(V.mx,src,mul(Hr,[1/ppm,0,0,0,1/ppm,0,0,0,1]),mw,mh,1,true)}
 /* the steady paper: page (mm) -> display px, the paper turned by quarter turns as the camera sees it, centred */
 function stabBase(p,cw,ch,rot){const pw=p.page[0],ph=p.page[1],r=rot||0,rw=r%2?ph:pw,rh=r%2?pw:ph,top=ch*.1,bot=ch*.14,side=cw*.025;
  const s=Math.min((cw-2*side)/rw,(ch-top-bot)/rh),ox=(cw-rw*s)/2,oy=top+((ch-top-bot)-rh*s)/2;
@@ -1816,11 +1823,14 @@ function mapsFor(mode,Hr,Hs,p){if(mode==='stab'){const B=mul(zoomM(),stabBase(p,
  const Z=cropM(V.cv.width,V.cv.height),Hri=inv(Hr),C=Hri?mul(Z,mul(Hs,Hri)):null,Ci=C?inv(C):null;return Ci?{ov:mul(Z,Hs),pic:Ci}:null}
 function keepFrame(src,Hr,Hs){if(!V.keep){V.keep=document.createElement('canvas');V.kctx=V.keep.getContext('2d')}
  if(V.keep.width!==src.width||V.keep.height!==src.height){V.keep.width=src.width;V.keep.height=src.height}V.kctx.drawImage(src,0,0);
- V.keepHr=Hr;V.keepHs=Hs||Hr;V.keepSeen=PV.seen;V.keepT=performance.now()}
+ if(V.mode==='stab')mosaicAdd(src,Hr);V.keepHr=Hr;V.keepHs=Hs||Hr;V.keepSeen=PV.seen;V.keepT=performance.now()}
 function renderBg(){if(!V.keep||!V.keepHr||!PV.paper)return false;const w=V.cv.width,h=V.cv.height;
  if(V.mode==='stab'){const qa=quarter(V.keepHr,PV.paper);if(V.rot==null)V.rot=qa.q;else if(qa.q!==V.rot){const d=Math.abs(((qa.ang-V.rot*Math.PI/2+3*Math.PI)%(2*Math.PI))-Math.PI);if(d>.97)V.rot=qa.q}}
  const m=mapsFor(V.mode,V.keepHr,V.keepHs,PV.paper);if(!m)return false;if(!V.bg){V.bg=document.createElement('canvas');V.bgx=V.bg.getContext('2d')}
- if(V.bg.width!==w||V.bg.height!==h){V.bg.width=w;V.bg.height=h}warpTo(V.bgx,V.keep,m.pic,w,h,1);V.bgOv=m.ov;V.bgMode=V.mode;V.bgDirty=false;
+ if(V.bg.width!==w||V.bg.height!==h){V.bg.width=w;V.bg.height=h}
+ if(V.mode==='stab'&&V.mos&&V.mosId===PV.paper.id){const x=V.bgx,B=m.ov,k=1/V.mosPpm;x.setTransform(1,0,0,1,0,0);x.fillStyle='#05080b';x.fillRect(0,0,w,h);
+  x.imageSmoothingEnabled=true;x.imageSmoothingQuality='high';x.setTransform(B[0]*k,B[3]*k,B[1]*k,B[4]*k,B[2],B[5]);x.drawImage(V.mos,0,0);x.setTransform(1,0,0,1,0,0)}
+ else warpTo(V.bgx,V.keep,m.pic,w,h,1);V.bgOv=m.ov;V.bgMode=V.mode;V.bgDirty=false;
  if(V.mode==='stab'){/* the steady paper: what lies around the sheet (the desk, warped) is darkened, the sheet stands out */
   const pw=PV.paper.page[0],ph=PV.paper.page[1],cs=[[0,0],[pw,0],[pw,ph],[0,ph]].map(q=>app(m.ov,q[0],q[1])),x=V.bgx;x.save();x.beginPath();x.rect(0,0,w,h);
   cs.forEach((q,i)=>i?x.lineTo(q[0],q[1]):x.moveTo(q[0],q[1]));x.closePath();x.fillStyle='rgba(5,8,11,.84)';x.fill('evenodd');
@@ -1940,7 +1950,7 @@ function loop(){if(!PV.open)return;V.raf=requestAnimationFrame(loop);const now=p
  V.fpsT.push(now);while(V.fpsT.length&&now-V.fpsT[0]>1000)V.fpsT.shift();PV.fps=V.fpsT.length;
  let truth=null;const pf=PV.prof||(PV.prof={scene:0,grab:0,blit:0,overlay:0}),av=(k,v)=>{pf[k]=pf[k]?pf[k]*.9+v*.1:v};let tA=performance.now();
  const c=V.ctx;c.setTransform(1,0,0,1,0,0);c.globalAlpha=1;
- if(!V.demo&&!(V.video&&V.video.readyState>=2))return;
+ if(!V.demo&&!(V.video&&V.video.readyState>=2)){if(V.video&&V.video.paused&&V.video.srcObject&&now-(V.kick||0)>1000){V.kick=now;V.video.play().catch(()=>{})}return}
  const st=V.demo?(V.demo.freeze!=null?V.demo.freeze:t-V.demo.t0+V.demo.phase):0;if(V.demo)truth=(V.demo.cam||camH)(V.demo.paper,st,V.W,V.H);
  analyse(truth,st);let tB=performance.now();av('grab',tB-tA);
  prepare();const lostFor=now/1000-PV.lastSeen,have=V.keepHr&&(V.frozen||lostFor<3);
@@ -1959,9 +1969,9 @@ function loop(){if(!PV.open)return;V.raf=requestAnimationFrame(loop);const now=p
 function stopCam(){if(V.stream){for(const tr of V.stream.getTracks())tr.stop();V.stream=null}if(V.video){V.video.srcObject=null}}
 async function startCamera(){stopCam();V.demo=null;FILT.reset();PV.H=null;PV.locked=false;$('paperCamBtn').classList.add('on');$('paperDemoBtn').classList.remove('on');
  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){msg(T('paper_nocam'),5000);return startDemo()}
- try{const st=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false});V.stream=st;
-  if(!V.video){V.video=document.createElement('video');V.video.playsInline=true;V.video.muted=true;V.video.setAttribute('playsinline','')}
-  V.video.srcObject=st;await V.video.play();const vw=V.video.videoWidth||1280,vh=V.video.videoHeight||720,k=Math.min(1,1280/Math.max(vw,vh));setSize(Math.round(vw*k),Math.round(vh*k));msg(T('paper_search'),4500)}
+ try{const st=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}},audio:false});V.stream=st;
+  if(!V.video){V.video=document.createElement('video');V.video.playsInline=true;V.video.muted=true;V.video.setAttribute('playsinline','');V.video.style.cssText='position:fixed;left:0;top:0;width:2px;height:2px;opacity:.01;pointer-events:none';($('paperView')||document.body).appendChild(V.video)}
+  V.video.srcObject=st;await V.video.play();const vw=V.video.videoWidth||1280,vh=V.video.videoHeight||720,k=Math.min(1,1920/Math.max(vw,vh));setSize(Math.round(vw*k),Math.round(vh*k));msg(T('paper_search'),4500)}
  catch(e){msg(T('paper_nocam'),5000);startDemo()}}
 function startDemo(){stopCam();$('paperDemoBtn').classList.add('on');$('paperCamBtn').classList.remove('on');FILT.reset();PV.H=null;PV.locked=false;PV.err=null;PV.firstLock=null;
  const port=window.innerHeight>window.innerWidth*1.1;setSize(port?720:1280,port?1280:720);
