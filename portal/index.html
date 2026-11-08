@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer"><title>Biruni Portal</title><style>
+:root{--teal:#0B4F4A;--teal2:#14A394;--gold:#FBBF24;--bg:#f4f6f5;--card:#fff;--ink:#14201f;--mute:#5d6b69;--line:#dfe6e4;
+ --ok:#0f8a5f;--bad:#c62828;--warn:#b26a00;--font:"Segoe UI",Tahoma,"Noto Sans Arabic","Noto Sans",system-ui,sans-serif}
+@media (prefers-color-scheme:dark){:root{--bg:#0b1312;--card:#121d1c;--ink:#e6efed;--mute:#97a8a5;--line:#23312f}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--font)}
+header{background:linear-gradient(135deg,var(--teal),var(--teal2));color:#fff;padding:14px 16px 16px}
+.top{display:flex;gap:12px;align-items:center;max-width:1180px;margin:auto}
+.logo{width:44px;height:44px;flex:none;display:block}
+.top h1{margin:0;font-size:20px;unicode-bidi:plaintext}.top p{margin:2px 0 0;opacity:.9;font-size:13px;unicode-bidi:plaintext}
+.grow{flex:1;min-width:0}
+.badge{display:inline-flex;gap:6px;align-items:center;border-radius:999px;padding:3px 10px;font-size:12.5px;font-weight:600;white-space:nowrap}
+.b-ok{background:#e3f6ee;color:var(--ok)}.b-bad{background:#fde7e7;color:var(--bad)}.b-warn{background:#fff3dc;color:var(--warn)}
+.b-gold{background:var(--gold);color:#3b2a00}.b-mute{background:rgba(127,140,138,.15);color:var(--mute)}
+header .badge{margin-top:8px}
+.bar{max-width:1180px;margin:12px auto 0;padding:0 16px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.bar input[type=search],.bar select{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink)}
+.bar input[type=search]{flex:1;min-width:180px}
+button{font:inherit;cursor:pointer;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:8px 12px}
+button.pri{background:var(--teal);border-color:var(--teal);color:#fff}button.gold{background:var(--gold);border-color:var(--gold);color:#3b2a00;font-weight:600}
+button:disabled{opacity:.45;cursor:not-allowed}
+.follows{max-width:1180px;margin:10px auto 0;padding:0 16px;display:flex;flex-wrap:wrap;gap:6px}
+main{max-width:1180px;margin:12px auto 40px;padding:0 16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:6px;cursor:pointer;min-width:0}
+.card:hover{border-color:var(--teal2)}.card.untrusted{border-color:var(--bad);background:repeating-linear-gradient(135deg,transparent 0 12px,rgba(198,40,40,.05) 12px 24px)}
+.card h3{margin:0;font-size:15.5px;unicode-bidi:plaintext;overflow-wrap:anywhere}.card .meta{color:var(--mute);font-size:12.5px;display:flex;flex-wrap:wrap;gap:6px}
+.card img{width:100%;height:120px;object-fit:cover;border-radius:10px;background:var(--line)}
+.tag{background:rgba(20,163,148,.12);color:var(--teal2);border-radius:6px;padding:0 6px;font-size:12px}
+.empty{grid-column:1/-1;text-align:center;color:var(--mute);padding:40px 0}
+.dlg{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:16px;z-index:10}
+.dlg.hide{display:none}.box{background:var(--card);color:var(--ink);border-radius:16px;max-width:560px;width:100%;max-height:90vh;overflow:auto;padding:18px}
+.box h2{margin:0 0 6px;font-size:18px;unicode-bidi:plaintext}.box dl{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:13.5px}
+.box dt{color:var(--mute)}.box dd{margin:0;overflow-wrap:anywhere;unicode-bidi:plaintext}.row{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.note{font-size:13px;color:var(--mute);margin:8px 0}.err{color:var(--bad);font-size:13.5px;margin-top:8px}
+.box input[type=password],.box input[type=file]{font:inherit;width:100%;margin-top:6px;padding:8px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink)}
+.banner{max-width:1180px;margin:10px auto 0;padding:10px 14px;border-radius:12px;background:#fff3dc;color:#6b4400;font-size:13.5px}
+.banner.hide{display:none}
+code{font-family:ui-monospace,Consolas,monospace;font-size:12px}
+</style></head>
+<body>
+<header><div class="top"><svg class="logo" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <!-- Biruni GIS mark: Al-Biruni measured the Earth from a mountain top using the
+       dip angle between the horizontal and the line of sight to the horizon.
+       Shapes are pre-clipped to the rounded tile (Qt SVG has no clipPath). -->
+  <defs>
+    <linearGradient id="bpLogoBg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0B4F4A"/>
+      <stop offset="1" stop-color="#14A394"/>
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="58" fill="url(#bpLogoBg)"/>
+  <!-- the Earth: circle c=(128,420) r=248 intersected with the tile -->
+  <path d="M0.8 207.6 A248 248 0 0 1 255.2 207.6 A58 58 0 0 1 198 256 L58 256 A58 58 0 0 1 0.8 207.6 Z"
+        fill="#FFFFFF" fill-opacity="0.14"/>
+  <path d="M6 204.1 A248 248 0 0 1 250 204.1" fill="none" stroke="#FFFFFF" stroke-opacity="0.85" stroke-width="7"/>
+  <!-- the mountain -->
+  <path d="M40 186 L92 92 L140 176 Z" fill="#FFFFFF"/>
+  <!-- horizontal reference -->
+  <line x1="92" y1="92" x2="226" y2="92" stroke="#FFFFFF" stroke-opacity="0.75" stroke-width="7"
+        stroke-linecap="round" stroke-dasharray="2 16"/>
+  <!-- line of sight to the horizon and the dip angle -->
+  <line x1="92" y1="92" x2="246" y2="196" stroke="#FBBF24" stroke-width="10" stroke-linecap="round"/>
+  <path d="M140 92 A48 48 0 0 1 131.8 118.9" fill="none" stroke="#FBBF24" stroke-width="7" stroke-linecap="round"/>
+  <circle cx="92" cy="92" r="11" fill="#FBBF24" stroke="#FFFFFF" stroke-width="5"/>
+</svg>
+<div class="grow"><h1 id="pName">…</h1><p id="pAbout"></p><span id="pBadge" class="badge b-mute">…</span></div>
+<button class="gold" id="keyBtn"></button></div></header>
+<div class="banner hide" id="banner"></div>
+<div class="bar"><input type="search" id="q"><select id="fType"></select><select id="fTag"></select><select id="fGroup"></select>
+<label><input type="checkbox" id="fFollow" checked> <span id="fFollowL"></span></label></div>
+<div class="follows" id="follows"></div>
+<main id="grid"></main>
+<div class="dlg hide" id="itemDlg"><div class="box" id="itemBox"></div></div>
+<div class="dlg hide" id="keyDlg"><div class="box"><h2 id="kTitle"></h2><p class="note" id="kNote"></p>
+<input type="file" id="kFile" accept=".json,.biruni-key,application/json"><input type="password" id="kPass">
+<label class="note"><input type="checkbox" id="kRemember"> <span id="kRememberL"></span></label><div class="err" id="kErr"></div>
+<div class="row"><button class="pri" id="kOk"></button><button id="kForget"></button><button id="kCancel"></button></div></div></div>
+<script src="portal.js" onerror="void 0"></script>
+<script>
+(()=>{'use strict';
+const $=id=>document.getElementById(id);
+const Q=new URLSearchParams(location.hash.slice(1));
+const LQ=(Q.get('l')||'').slice(0,2),L=LQ==='en'||LQ==='ar'?LQ:(/^(ar|fa|ur)/i.test(navigator.language||'ar')?'ar':'en');
+const TX={
+ar:{title:'بوابة بيروني',signed:'موقّعة من',print:'بصمة',bad:'التوقيع غير صالح — لا تثق بهذه البوابة',pinnedOk:'مطابقة للمفتاح المثبّت',
+ pinnedBad:'ليست صاحبة المفتاح المثبّت في الرابط',insecure:'افتح البوابة عبر https أو من الملف مباشرةً ليتحقق المتصفح من التوقيعات',
+ rollback:'تحذير: هذه نسخة أقدم من آخر نسخة رأيتها لهذه البوابة',search:'ابحث في العناصر…',allTypes:'كل الأنواع',allTags:'كل الوسوم',allGroups:'كل المجموعات',
+ public:'عامة',myGroups:'مجموعاتي',follow:'البوابات المتابَعة',myKey:'مفتاحي',keyOn:'مفتاح',t_file:'ملف',t_dashboard:'لوحة',t_mapservice:'خدمة خرائط',t_link:'رابط',
+ locked:'مشفّر',expired:'منتهي',expires:'ينتهي',untrusted:'غير موثوق',created:'أُضيف',size:'الحجم',hash:'SHA-256',scope:'نطاق الاستخدام',groups:'المجموعات',
+ from:'من بوابة',tags:'الوسوم',file:'الملف',address:'العنوان',open:'افتح',download:'تنزيل',unlock:'افتح بمفتاحي',close:'إغلاق',
+ expiredMsg:'انتهت صلاحية هذا العنصر؛ لا يُفتح.',untrustedMsg:'هذا العنصر غير موقّع من صاحب البوابة أو عُدِّل؛ لا يُفتح.',notMember:'مفتاحك ليس عضوًا في مجموعات هذا العنصر.',
+ altered:'الملف المنزَّل لا يطابق بصمته؛ رُفض.',pick:'لم يتمكّن المتصفح من قراءة الملف؛ اختره من مجلد البوابة:',noItems:'لا توجد عناصر مطابقة.',
+ kTitle:'مفتاح العضو',kNote:'اختر ملف مفتاحك (من صاحب البوابة أو من بيروني). يبقى المفتاح في هذا المتصفح فقط.',kPass:'كلمة مرور المفتاح (إن وُجدت)',
+ kRemember:'تذكّره على هذا الجهاز',ok:'استخدم',forget:'انسَ المفتاح',cancel:'إلغاء',kBad:'كلمة المرور خاطئة أو الملف ليس مفتاح بوابة.',
+ unreachable:'تعذّر الوصول',fOk:'موثوقة',fBad:'غير موثوقة',days:'يوم',hours:'ساعة',working:'جارٍ…',done:'تم',
+ why_bad_signature:'توقيع غير صالح',why_foreign_item:'عنصر من مالك آخر',why_not_an_item:'ليس عنصرًا','why_not the pinned key':'ليس المفتاح المثبّت',why_insecure:'لا تحقق هنا',
+ 'why_not a portal':'ليست بوابة',why_unreachable:'تعذّر الوصول',copyLink:'انسخ رابط البوابة',copied:'نُسخ'},
+en:{title:'Biruni portal',signed:'Signed by',print:'key',bad:'Invalid signature — do not trust this portal',pinnedOk:'matches the pinned key',
+ pinnedBad:'is not the owner of the key pinned in the link',insecure:'Open the portal over https or from the file itself so the browser can check the signatures',
+ rollback:'Warning: this is an older copy than the latest one you saw of this portal',search:'Search items…',allTypes:'All types',allTags:'All tags',allGroups:'All groups',
+ public:'Public',myGroups:'My groups',follow:'Followed portals',myKey:'My key',keyOn:'Key',t_file:'File',t_dashboard:'Dashboard',t_mapservice:'Map service',t_link:'Link',
+ locked:'Encrypted',expired:'Expired',expires:'Expires',untrusted:'Untrusted',created:'Added',size:'Size',hash:'SHA-256',scope:'Scope of use',groups:'Groups',
+ from:'From portal',tags:'Tags',file:'File',address:'Address',open:'Open',download:'Download',unlock:'Open with my key',close:'Close',
+ expiredMsg:'This item has expired; it does not open.',untrustedMsg:'This item is not signed by the portal owner or was altered; it does not open.',notMember:'Your key is not a member of this item\'s groups.',
+ altered:'The downloaded file does not match its fingerprint; refused.',pick:'The browser could not read the file; pick it from the portal folder:',noItems:'No matching items.',
+ kTitle:'Member key',kNote:'Choose your key file (from the portal owner or from Biruni). The key stays in this browser only.',kPass:'Key passphrase (if any)',
+ kRemember:'Remember it on this device',ok:'Use',forget:'Forget the key',cancel:'Cancel',kBad:'Wrong passphrase, or the file is not a portal key.',
+ unreachable:'unreachable',fOk:'trusted',fBad:'untrusted',days:'days',hours:'hours',working:'Working…',done:'Done',
+ why_bad_signature:'bad signature',why_foreign_item:'item of another owner',why_not_an_item:'not an item','why_not the pinned key':'not the pinned key',why_insecure:'cannot check here',
+ 'why_not a portal':'not a portal',why_unreachable:'unreachable',copyLink:'Copy the portal link',copied:'Copied'}};
+const T=k=>(TX[L][k]!=null?TX[L][k]:(TX.en[k]!=null?TX.en[k]:k));
+document.documentElement.lang=L;document.documentElement.dir=L==='ar'?'rtl':'ltr';document.title=T('title');
+/* ---- bytes */
+const te=new TextEncoder();
+const B64={dec(s){s=String(s||'').replace(/-/g,'+').replace(/_/g,'/');while(s.length%4)s+='=';const b=atob(s),o=new Uint8Array(b.length);for(let i=0;i<b.length;i++)o[i]=b.charCodeAt(i);return o},
+ enc(u){let s='';for(let i=0;i<u.length;i++)s+=String.fromCharCode(u[i]);return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}};
+const HEX={dec(h){const o=new Uint8Array(h.length>>1);for(let i=0;i<o.length;i++)o[i]=parseInt(h.substr(2*i,2),16);return o},enc(u){return Array.from(u,x=>x.toString(16).padStart(2,'0')).join('')}};
+const join=(...a)=>{let n=0;for(const x of a)n+=x.length;const o=new Uint8Array(n);let k=0;for(const x of a){o.set(x,k);k+=x.length}return o};
+const SUB=(window.crypto&&crypto.subtle)||null;
+async function sha256(u){return HEX.enc(new Uint8Array(await SUB.digest('SHA-256',u)))}
+/* ---- field arithmetic mod 2^255-19 (ed25519 verify and X25519 where WebCrypto lacks them) */
+const EP=(1n<<255n)-19n,EL=(1n<<252n)+27742317777372353535851937790883648493n;
+const em=a=>{const r=a%EP;return r<0n?r+EP:r};
+function epw(b,e){let r=1n;b=em(b);while(e>0n){if(e&1n)r=r*b%EP;b=b*b%EP;e>>=1n}return r}
+const einv=a=>epw(a,EP-2n),ED=em(-121665n*einv(121666n)),EI=epw(2n,(EP-1n)/4n);
+function eadd(P,Q){const A=em((P[1]-P[0])*(Q[1]-Q[0])),B=em((P[1]+P[0])*(Q[1]+Q[0])),C=em(2n*P[3]*Q[3]*ED),D=em(2n*P[2]*Q[2]);
+ const E=B-A,F=D-C,G=D+C,H=B+A;return [em(E*F),em(G*H),em(F*G),em(E*H)]}
+function emul(P,k){let R=[0n,1n,1n,0n];while(k>0n){if(k&1n)R=eadd(R,P);P=eadd(P,P);k>>=1n}return R}
+const le=b=>{let v=0n;for(let i=b.length-1;i>=0;i--)v=(v<<8n)|BigInt(b[i]);return v};
+const leb=v=>{const b=new Uint8Array(32);for(let i=0;i<32;i++){b[i]=Number(v&255n);v>>=8n}return b};
+function eenc(P){const zi=einv(P[2]),x=em(P[0]*zi),b=leb(em(P[1]*zi));if(x&1n)b[31]|=128;return b}
+function edec(b0){const b=Uint8Array.from(b0),sg=b[31]>>7;b[31]&=127;const y=le(b);if(y>=EP)return null;
+ const u=em(y*y-1n),v=em(ED*y*y+1n);let x=em(u*epw(v,3n)*epw(em(u*epw(v,7n)),(EP-5n)/8n));const vx=em(v*x*x);
+ if(vx!==u){if(vx===em(-u))x=em(x*EI);else return null}if(x===0n&&sg)return null;if(Number(x&1n)!==sg)x=em(-x);return [x,y,1n,em(x*y)]}
+let EB=null;
+async function edVerify(pub,sig,msg){if(pub.length!==32||sig.length!==64)return false;
+ if(!window.__noWebEd){try{const k=await SUB.importKey('raw',pub,{name:'Ed25519'},false,['verify']);return await SUB.verify({name:'Ed25519'},k,sig,msg)}catch(e){}}
+ if(!EB){const b=new Uint8Array(32).fill(0x66);b[0]=0x58;EB=edec(b)}
+ const A=edec(pub),R=edec(sig.subarray(0,32));if(!A||!R)return false;const S=le(sig.subarray(32));if(S>=EL)return false;
+ const h=new Uint8Array(await SUB.digest('SHA-512',join(sig.subarray(0,32),pub,msg)));const k=le(h)%EL;
+ const l=eenc(emul(EB,S)),r=eenc(eadd(R,emul(A,k)));for(let i=0;i<32;i++)if(l[i]!==r[i])return false;return true}
+/* X25519 (RFC 7748 Montgomery ladder) */
+function xmul(kb,ub){const k=Uint8Array.from(kb);k[0]&=248;k[31]&=127;k[31]|=64;const K=le(k);const u=Uint8Array.from(ub);u[31]&=127;const x1=em(le(u));
+ let x2=1n,z2=0n,x3=x1,z3=1n,sw=0n;
+ for(let t=254;t>=0;t--){const kt=(K>>BigInt(t))&1n;sw^=kt;if(sw){let q=x2;x2=x3;x3=q;q=z2;z2=z3;z3=q}sw=kt;
+  const A=em(x2+z2),AA=em(A*A),B=em(x2-z2),BB=em(B*B),E=em(AA-BB),C=em(x3+z3),D=em(x3-z3),DA=em(D*A),CB=em(C*B);
+  x3=em((DA+CB)*(DA+CB));z3=em(x1*em((DA-CB)*(DA-CB)));x2=em(AA*BB);z2=em(E*(AA+121665n*E))}
+ if(sw){let q=x2;x2=x3;x3=q;q=z2;z2=z3;z3=q}return leb(em(x2*einv(z2)))}
+const X9=(()=>{const b=new Uint8Array(32);b[0]=9;return b})();
+const xpub=priv=>xmul(priv,X9);
+async function x25519(priv,pub){if(!window.__noWebX){try{const pk=await SUB.importKey('raw',pub,{name:'X25519'},false,[]);
+   const sk=await SUB.importKey('jwk',{kty:'OKP',crv:'X25519',d:B64.enc(priv),x:B64.enc(xpub(priv))},{name:'X25519'},false,['deriveBits']);
+   return new Uint8Array(await SUB.deriveBits({name:'X25519',public:pk},sk,256))}catch(e){}}
+ return xmul(priv,pub)}
+async function hkdf(secret,salt,info){const k=await SUB.importKey('raw',secret,'HKDF',false,['deriveBits']);
+ return new Uint8Array(await SUB.deriveBits({name:'HKDF',hash:'SHA-256',salt:salt,info:te.encode(info)},k,256))}
+async function unseal(key,blob,aad){const k=await SUB.importKey('raw',key,'AES-GCM',false,['decrypt']);
+ return new Uint8Array(await SUB.decrypt({name:'AES-GCM',iv:blob.subarray(0,12),additionalData:te.encode(aad)},k,blob.subarray(12)))}
+async function pbkdf2(pass,salt,it){const k=await SUB.importKey('raw',te.encode(pass),'PBKDF2',false,['deriveBits']);
+ return new Uint8Array(await SUB.deriveBits({name:'PBKDF2',hash:'SHA-256',salt:salt,iterations:it},k,256))}
+async function keyPrint(pub){const h=new Uint8Array(await SUB.digest('SHA-256',pub)),A='0123456789ABCDEFGHJKMNPQRSTVWXYZ';let n=0n;for(let i=0;i<5;i++)n=(n<<8n)|BigInt(h[i]);
+ let s='';for(let i=0;i<8;i++)s+=A[Number((n>>BigInt(35-5*i))&31n)];return s.slice(0,4)+'-'+s.slice(4)}
+/* ---- loading and checking */
+const S={portals:[],me:null,ready:null};
+const baseOf=u=>{u=String(u||'').replace(/portal\.json$/i,'');return u&&!/\/$/.test(u)?u+'/':u};
+async function fetchDoc(url){const r=await fetch(url,{cache:'no-store'});if(!r.ok)throw new Error('http '+r.status);return await r.json()}
+async function check(doc,pinned,base,follow){const P={doc:doc,base:base,follow:follow||null,ok:false,why:'',items:[],idx:null,print:''};
+ let idx;try{idx=JSON.parse(doc.index);P.idx=idx;HEX.dec(idx.owner.pub)}catch(e){P.why='not a portal';return P}
+ if(!SUB){P.why='insecure';for(const e of idx.items||[]){let m=null;try{m=JSON.parse(e.m)}catch(x){}if(m)P.items.push({e:e,m:m,ok:false,why:'insecure',P:P})}return P}
+ const pub=HEX.dec(idx.owner.pub);P.print=await keyPrint(pub);
+ const good=await edVerify(pub,B64.dec(doc.sig),te.encode(doc.index));
+ if(!good)P.why='bad signature';else if(pinned&&String(pinned).toLowerCase()!==idx.owner.pub)P.why='not the pinned key';else P.ok=true;
+ P.pinned=pinned?P.ok:null;
+ try{const key='biruni-portal-seq:'+idx.id,prev=+(localStorage.getItem(key)||0);if(P.ok){if((idx.seq||0)<prev)P.rollback=prev;else localStorage.setItem(key,String(idx.seq||0))}}catch(e){}
+ for(const e of idx.items||[]){const it={e:e,m:null,ok:false,why:'',P:P};
+  try{it.m=JSON.parse(e.m);const s=await edVerify(pub,B64.dec(e.s),te.encode(e.m));
+   if(!s)it.why='bad signature';else if(it.m.owner!==idx.owner.pub||it.m.portal!==idx.id)it.why='foreign item';else{it.ok=P.ok;it.why=P.ok?'':P.why}
+   it.expired=!!(it.m.expires&&Date.now()/1000>=it.m.expires)}catch(x){it.why='not an item'}
+  if(it.m)P.items.push(it)}
+ return P}
+let GEN=0;
+async function load(){const gen=++GEN;let doc=null,base='';const u=Q.get('u');
+ /* over http(s) portal.json is read fresh (portal.js may be cached); from file:// only portal.js can be read */
+ try{if(u){base=baseOf(u);doc=await fetchDoc(base+'portal.json')}
+  else if(location.protocol!=='file:'){try{doc=await fetchDoc('portal.json')}catch(e){if(!window.BIRUNI_PORTAL)throw e;doc=window.BIRUNI_PORTAL}}
+  else if(window.BIRUNI_PORTAL)doc=window.BIRUNI_PORTAL;else doc=await fetchDoc('portal.json')}
+ catch(e){if(gen===GEN){S.portals=[{ok:false,why:'unreachable',items:[],idx:null,base:base}];render()}return}
+ const main=await check(doc,Q.get('k'),base,null),list=[main];
+ if(main.idx)for(const f of main.idx.follows||[]){let fb=baseOf(f.url);if(!/^[a-z]+:/i.test(fb)&&!fb.startsWith('/'))fb=base+fb;
+  try{list.push(await check(await fetchDoc(fb+'portal.json'),f.pub,fb,f))}catch(e){list.push({follow:f,ok:false,why:'unreachable',items:[],idx:null,base:fb})}}
+ if(gen!==GEN)return;S.portals=list;render()}
+/* ---- the member key */
+function keyFromStore(){try{const t=sessionStorage.getItem('biruni-portal-me')||localStorage.getItem('biruni-portal-me');if(t){const d=JSON.parse(t);S.me={name:d.name,box:d.box,priv:HEX.dec(d.priv)}}}catch(e){}}
+async function useKey(text,pass,remember){const d=JSON.parse(text);if(d.kind!=='biruni-portal-key')throw new Error('kind');let priv;
+ if(d.priv)priv=HEX.dec(d.priv);else{if(!pass)throw new Error('pass');priv=await unseal(await pbkdf2(pass,B64.dec(d.kdf.salt),d.kdf.it),B64.dec(d.ct),'biruni-portal-key')}
+ if(HEX.enc(xpub(priv))!==d.box)throw new Error('mismatch');S.me={name:d.name||'',box:d.box,priv:priv};
+ const s=JSON.stringify({name:S.me.name,box:S.me.box,priv:HEX.enc(priv)});try{sessionStorage.setItem('biruni-portal-me',s);if(remember)localStorage.setItem('biruni-portal-me',s)}catch(e){}
+ render();return S.me.box}
+function forgetKey(){S.me=null;try{sessionStorage.removeItem('biruni-portal-me');localStorage.removeItem('biruni-portal-me')}catch(e){}render()}
+/* ---- opening items */
+async function getBlob(it){const m=it.m,url=it.P.base+m.file.path;let u=null;
+ try{const r=await fetch(url,{cache:'no-store'});if(r.ok)u=new Uint8Array(await r.arrayBuffer())}catch(e){}
+ if(!u)u=await pickFile();if((await sha256(u))!==m.file.sha256)throw new Error(T('altered'));return u}
+function pickFile(){return new Promise((res,rej)=>{const box=$('itemBox'),p=document.createElement('p');p.className='note';p.textContent=T('pick');
+ const i=document.createElement('input');i.type='file';i.onchange=async()=>{const f=i.files[0];if(!f)return rej(new Error('none'));res(new Uint8Array(await f.arrayBuffer()))};box.appendChild(p);box.appendChild(i)})}
+async function openBytes(it){if(!it.ok)throw new Error(T('untrustedMsg'));if(it.expired)throw new Error(T('expiredMsg'));
+ if(!it.m.file)throw new Error('not a file');if(!it.m.file.enc)return await getBlob(it);
+ if(!S.me)throw new Error(T('notMember'));const idx=it.P.idx;
+ for(const g of idx.groups||[]){const w=(it.e.keys||{})[g.id];if(!w)continue;const mem=(g.members||[]).find(x=>x.box===S.me.box);if(!mem)continue;
+  const eph=B64.dec(mem.env.e),k=await hkdf(await x25519(S.me.priv,eph),join(eph,HEX.dec(S.me.box)),'biruni-portal-group');
+  const gk=await unseal(k,B64.dec(mem.env.c),'group:'+idx.id+':'+g.id+':'+g.ver);
+  const cek=await unseal(gk,B64.dec(w.w),'cek:'+it.m.id+':'+g.id+':'+w.v);
+  return await unseal(cek,await getBlob(it),'item:'+it.m.id)}
+ throw new Error(T('notMember'))}
+function save(bytes,name,mime){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([bytes],{type:mime||'application/octet-stream'}));a.download=name||'file';
+ document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},4000)}
+function resolve(it,url){if(/^[a-z][a-z0-9+.-]*:/i.test(url)){return /^(https?|mailto):/i.test(url)?url:null}return it.P.base+url}
+/* ---- display */
+const memberOf=(P,g)=>!!(S.me&&(g.members||[]).some(x=>x.box===S.me.box));
+function allItems(){const out=[],fol=$('fFollow').checked;for(const P of S.portals){if(P.follow&&!fol)continue;for(const it of P.items)out.push(it)}return out}
+function groupName(P,id){const g=(P.idx&&P.idx.groups||[]).find(x=>x.id===id);return g?g.name:id}
+function left(exp){const s=exp-Date.now()/1000;return s>86400?Math.round(s/86400)+' '+T('days'):Math.max(1,Math.round(s/3600))+' '+T('hours')}
+function badge(text,cls){const b=document.createElement('span');b.className='badge '+cls;b.textContent=text;return b}
+function opt(sel,v,t){const o=document.createElement('option');o.value=v;o.textContent=t;sel.appendChild(o)}
+function fillFilters(){const items=allItems(),ty=$('fType'),tg=$('fTag'),gr=$('fGroup'),keep=[ty.value,tg.value,gr.value];
+ ty.textContent='';opt(ty,'',T('allTypes'));for(const k of ['file','dashboard','mapservice','link'])if(items.some(i=>i.m.type===k))opt(ty,k,T('t_'+k));
+ tg.textContent='';opt(tg,'',T('allTags'));for(const t of [...new Set(items.flatMap(i=>i.m.tags||[]))].sort())opt(tg,t,t);
+ gr.textContent='';opt(gr,'',T('allGroups'));opt(gr,'@public',T('public'));if(S.me)opt(gr,'@mine',T('myGroups'));
+ for(const P of S.portals)for(const g of (P.idx&&P.idx.groups)||[])opt(gr,(P.idx.id)+':'+g.id,g.name+(P.follow?' — '+(P.idx.name||''):''));
+ [ty.value,tg.value,gr.value]=keep;for(const s of [ty,tg,gr])if(s.selectedIndex<0)s.value=''}
+function matches(it){const q=$('q').value.trim().toLowerCase(),ty=$('fType').value,tg=$('fTag').value,gr=$('fGroup').value,m=it.m;
+ if(ty&&m.type!==ty)return false;if(tg&&!(m.tags||[]).includes(tg))return false;
+ if(gr==='@public'&&(m.groups||[]).length)return false;
+ if(gr==='@mine'&&!(m.groups||[]).some(g=>{const G=(it.P.idx.groups||[]).find(x=>x.id===g);return G&&memberOf(it.P,G)}))return false;
+ if(gr&&gr[0]!=='@'&&!(gr.split(':')[0]===it.P.idx.id&&(m.groups||[]).includes(gr.split(':')[1])))return false;
+ if(q){const hay=[m.title,m.desc,m.scope,(m.tags||[]).join(' '),m.file&&m.file.name,it.P.idx&&it.P.idx.name].join(' ').toLowerCase();if(!hay.includes(q))return false}
+ return true}
+function render(){const main=S.portals[0];if(!main)return;const idx=main.idx;
+ $('pName').textContent=idx?idx.name:T('title');$('pAbout').textContent=idx?(idx.about||''):'';
+ const pb=$('pBadge');pb.className='badge '+(main.ok?'b-ok':main.why==='insecure'?'b-warn':'b-bad');
+ pb.textContent=main.ok?('✓ '+T('signed')+' '+(idx.owner.name||'…')+' — '+T('print')+' '+main.print+(main.pinned?' · '+T('pinnedOk'):'')):
+  main.why==='not the pinned key'?('✗ '+(idx.owner.name||'')+' '+T('pinnedBad')):main.why==='insecure'?T('insecure'):('✗ '+T(main.why==='unreachable'?'why_unreachable':'bad'));
+ const bn=$('banner');const warn=main.rollback?T('rollback'):(main.why==='insecure'?T('insecure'):'');bn.textContent=warn;bn.classList.toggle('hide',!warn);
+ $('keyBtn').textContent=S.me?('🔑 '+(S.me.name||T('keyOn'))):('🔑 '+T('myKey'));
+ const fl=$('follows');fl.textContent='';const fols=S.portals.filter(P=>P.follow);if(fols.length){const s=document.createElement('b');s.textContent=T('follow')+':';s.className='note';fl.appendChild(s)}
+ for(const P of fols){fl.appendChild(badge((P.idx?P.idx.name:P.follow.name||P.follow.url)+' — '+(P.ok?T('fOk'):(P.why==='unreachable'?T('unreachable'):T('fBad')+' ('+T('why_'+P.why)+')')),P.ok?'b-ok':'b-bad'))}
+ fillFilters();const g=$('grid');g.textContent='';const list=allItems().filter(matches);
+ if(!list.length){const e=document.createElement('div');e.className='empty';e.textContent=T('noItems');g.appendChild(e)}
+ for(const it of list){const m=it.m,c=document.createElement('div');c.className='card'+(it.ok?'':' untrusted');c.tabIndex=0;c.dataset.id=m.id;
+  if(m.thumb&&it.ok){const im=document.createElement('img');im.alt='';im.loading='lazy';im.src=it.P.base+m.thumb;c.appendChild(im)}
+  const h=document.createElement('h3');h.textContent=m.title||m.id;c.appendChild(h);
+  const mt=document.createElement('div');mt.className='meta';mt.appendChild(badge(T('t_'+m.type),'b-mute'));
+  if((m.groups||[]).length)mt.appendChild(badge('🔒 '+T('locked'),'b-gold'));if(!it.ok)mt.appendChild(badge('⚠ '+T('untrusted'),'b-bad'));
+  if(it.expired)mt.appendChild(badge(T('expired'),'b-bad'));else if(m.expires)mt.appendChild(badge(T('expires')+' '+left(m.expires),'b-warn'));
+  if(it.P.follow)mt.appendChild(badge('↗ '+(it.P.idx.name||''),'b-mute'));c.appendChild(mt);
+  if((m.tags||[]).length){const t=document.createElement('div');t.className='meta';for(const x of m.tags){const s=document.createElement('span');s.className='tag';s.textContent=x;t.appendChild(s)}c.appendChild(t)}
+  c.onclick=()=>showItem(it);c.onkeydown=e=>{if(e.key==='Enter')showItem(it)};g.appendChild(c)}}
+function showItem(it){const m=it.m,box=$('itemBox');box.textContent='';const h=document.createElement('h2');h.textContent=m.title||m.id;box.appendChild(h);
+ const mt=document.createElement('div');mt.className='meta';mt.appendChild(badge(it.ok?('✓ '+T('signed')+' '+(it.P.idx.owner.name||'')):('⚠ '+T('untrusted')+' — '+T('why_'+it.why)),it.ok?'b-ok':'b-bad'));box.appendChild(mt);
+ if(m.desc){const p=document.createElement('p');p.textContent=m.desc;p.style.unicodeBidi='plaintext';box.appendChild(p)}
+ const dl=document.createElement('dl');const row=(k,v)=>{if(v==null||v==='')return;const dt=document.createElement('dt');dt.textContent=T(k);const dd=document.createElement('dd');dd.textContent=v;dl.appendChild(dt);dl.appendChild(dd)};
+ row('scope',m.scope);row('tags',(m.tags||[]).join('، '));row('groups',(m.groups||[]).map(g=>groupName(it.P,g)).join('، ')||T('public'));
+ row('created',new Date(m.created*1000).toLocaleString(L==='ar'?'ar-EG':'en-GB'));if(m.expires)row(it.expired?'expired':'expires',new Date(m.expires*1000).toLocaleString(L==='ar'?'ar-EG':'en-GB'));
+ if(m.file){row('file',m.file.name);row('size',(m.file.size/1024).toFixed(1)+' KB');row('hash',m.file.sha256)}if(m.url)row('address',m.url);if(it.P.follow)row('from',it.P.idx.name);
+ box.appendChild(dl);const err=document.createElement('div');err.className='err';const acts=document.createElement('div');acts.className='row';
+ const blocked=!it.ok?T('untrustedMsg'):it.expired?T('expiredMsg'):'';if(blocked)err.textContent=blocked;
+ const go=async(b,fn)=>{err.textContent='';const t=b.textContent;b.disabled=true;b.textContent=T('working');try{await fn();b.textContent=T('done')}catch(e){err.textContent=e&&e.message||String(e);b.textContent=t}b.disabled=false};
+ if(m.url&&!m.file){const b=document.createElement('button');b.className='pri';b.textContent=T('open');b.disabled=!!blocked;b.onclick=()=>{const u=resolve(it,m.url);if(u)window.open(u,'_blank','noopener')};acts.appendChild(b)}
+ if(m.file){const enc=m.file.enc,b=document.createElement('button');b.className='pri';b.textContent=enc&&!S.me?T('unlock'):(m.file.mime==='text/uri-list'?T('open'):T('download'));b.disabled=!!blocked;
+  b.onclick=()=>{if(enc&&!S.me){showKey();return}go(b,async()=>{const u=await openBytes(it);
+   if(m.file.mime==='text/uri-list'){const url=resolve(it,new TextDecoder().decode(u).trim());if(url)window.open(url,'_blank','noopener')}else save(u,m.file.name,m.file.mime)})};acts.appendChild(b)}
+ const c=document.createElement('button');c.textContent=T('close');c.onclick=()=>$('itemDlg').classList.add('hide');acts.appendChild(c);box.appendChild(acts);box.appendChild(err);
+ $('itemDlg').classList.remove('hide')}
+function showKey(){$('kErr').textContent='';$('kPass').value='';$('keyDlg').classList.remove('hide')}
+function wire(){$('q').placeholder=T('search');$('fFollowL').textContent=T('follow');$('kTitle').textContent=T('kTitle');$('kNote').textContent=T('kNote');$('kPass').placeholder=T('kPass');
+ $('kRememberL').textContent=T('kRemember');$('kOk').textContent=T('ok');$('kForget').textContent=T('forget');$('kCancel').textContent=T('cancel');
+ for(const id of ['q','fType','fTag','fGroup','fFollow'])$(id).addEventListener(id==='q'?'input':'change',render);
+ $('keyBtn').onclick=showKey;$('kCancel').onclick=()=>$('keyDlg').classList.add('hide');$('kForget').onclick=()=>{forgetKey();$('keyDlg').classList.add('hide')};
+ $('kOk').onclick=async()=>{const f=$('kFile').files[0];if(!f)return;try{await useKey(await f.text(),$('kPass').value,$('kRemember').checked);$('keyDlg').classList.add('hide')}catch(e){$('kErr').textContent=T('kBad')}};
+ for(const d of ['itemDlg','keyDlg'])$(d).addEventListener('click',e=>{if(e.target.id===d)$(d).classList.add('hide')});
+ document.addEventListener('keydown',e=>{if(e.key==='Escape')for(const d of ['itemDlg','keyDlg'])$(d).classList.add('hide')})}
+wire();keyFromStore();S.ready=load();
+window.BiruniPortal={state:S,ready:()=>S.ready,useKey:useKey,forgetKey:forgetKey,xmul:xmul,xpub:xpub,
+ item:id=>{for(const P of S.portals)for(const it of P.items)if(it.m.id===id)return it;return null},
+ openHash:async id=>{const it=window.BiruniPortal.item(id);return await sha256(await openBytes(it))},
+ reload:()=>{S.ready=load();return S.ready}};
+})();
+</script>
+</body></html>
