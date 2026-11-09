@@ -127,6 +127,22 @@ const unhex=h=>Uint8Array.from(h.match(/../g),x=>parseInt(x,16));
 const cat=(...a)=>{const o=new Uint8Array(a.reduce((n,x)=>n+x.length,0));let i=0;for(const x of a){o.set(x,i);i+=x.length}return o};
 const sha=async b=>new Uint8Array(await crypto.subtle.digest('SHA-256',b));
 const rid=()=>b64u.enc(crypto.getRandomValues(new Uint8Array(9)));
+/* the PC's identity (see bridge.py): the receiver signs with &s=, a phone checks against the pin &i= (kept per key,
+   so a page that rebuilds its address keeps it). No pin: no check (older QR codes). */
+const ID={sk:null,pub:null,pin:null};
+async function idInit(k){const h=new URLSearchParams(typeof location!=='undefined'?location.hash.slice(1):''),s=h.get('s'),i=h.get('i'),slot='biruni-pin-'+String(k).slice(0,16);
+ if(i&&/^[A-Za-z0-9_-]{22}$/.test(i)){ID.pin=i;try{localStorage.setItem(slot,i)}catch(e){}}
+ else{try{const v=localStorage.getItem(slot);if(v&&/^[A-Za-z0-9_-]{22}$/.test(v))ID.pin=v}catch(e){}}
+ if(s){try{ID.sk=await crypto.subtle.importKey('pkcs8',b64u.dec(s),{name:'ECDSA',namedCurve:'P-256'},true,['sign']);
+   const j=await crypto.subtle.exportKey('jwk',ID.sk);ID.pub=b64u.enc(cat(new Uint8Array([4]),b64u.dec(j.x),b64u.dec(j.y)))}
+  catch(e){ID.sk=null}}}
+async function IDSIGN(text){if(!ID.sk)return null;
+ return {pub:ID.pub,sig:b64u.enc(await crypto.subtle.sign({name:'ECDSA',hash:'SHA-256'},ID.sk,enc.encode(text)))}}
+async function IDOK(pub,sig,text){if(!ID.pin)return true;
+ try{if(typeof pub!=='string'||typeof sig!=='string')return false;const raw=b64u.dec(pub);
+  if(raw.length!==65||b64u.enc(await sha(raw)).slice(0,22)!==ID.pin)return false;
+  const k=await crypto.subtle.importKey('raw',raw,{name:'ECDSA',namedCurve:'P-256'},false,['verify']);
+  return await crypto.subtle.verify({name:'ECDSA',hash:'SHA-256'},k,b64u.dec(sig),enc.encode(text))}catch(e){return false}}
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 /* BIP340 Schnorr signatures on secp256k1 - Nostr relays only take signed events.
    A new throwaway identity per page; the content is what the key protects. */
@@ -160,7 +176,7 @@ async function nostrEvent(content,topic){if(!NID){let sk=0n;
 let BK=null;
 async function bridgeKey(k){const raw=b64u.dec(k);
  BK={k:await crypto.subtle.importKey('raw',raw,'AES-GCM',false,['encrypt','decrypt']),
-  topic:'biruni'+hex(await sha(cat(enc.encode('biruni-bridge-1:'),raw))).slice(0,40)};return BK}
+  topic:'biruni'+hex(await sha(cat(enc.encode('biruni-bridge-1:'),raw))).slice(0,40)};await idInit(k);return BK}
 const canZ=typeof CompressionStream!=='undefined'&&typeof DecompressionStream!=='undefined';
 async function zz(d,pack){const s=new Blob([d]).stream().pipeThrough(pack?new CompressionStream('deflate-raw'):
  new DecompressionStream('deflate-raw'));return new Uint8Array(await new Response(s).arrayBuffer())}
@@ -189,15 +205,33 @@ class NtfyRelay{constructor(sig){this.sig=sig;this.up=false;this.wait=3000;this.
   ws.onclose=()=>{const was=this.up;this.up=false;if(was)this.sig.changed();this.later()};ws.onerror=()=>{try{ws.close()}catch(x){}}}
  later(){setTimeout(()=>this.open(),this.wait+Math.random()*1000);this.wait=Math.min(this.wait*2,60000)}
  send(s){if(s.length<=4000)fetch(BR.ntfy+BK.topic+'?cache=no&firebase=no',{method:'POST',body:s}).catch(()=>{})}}
-const SIG={relays:[],seen:new Set(),on:null,onchange:null,
+const SIG={relays:[],seen:new Set(),loose:new Set(),on:null,onchange:null,
  start(onMsg,onChange){this.on=onMsg;this.onchange=onChange;
   this.relays=BR.relays.map(u=>new NostrRelay(u,this)).concat([new NtfyRelay(this)])},
  up(){return this.relays.filter(r=>r.up).length},
  changed(){if(this.onchange)this.onchange(this.up())},
- async send(obj,z){obj.n=rid();obj.ts=Date.now();this.seen.add(obj.n);const s=await seal(obj,z);let ev=null;
+ async send(obj,z){obj.n=rid();obj.ts=Date.now();this.seen.add(obj.n);
+  if(obj.t==='answer'&&ID.sk){const g=await IDSIGN('BRA1|'+obj.sid+'|'+obj.sdp);obj.ip=g.pub;obj.is=g.sig}   /* the PC signs */
+  const s=await seal(obj,z);let ev=null;
   try{ev=await nostrEvent(s,BK.topic)}catch(e){}for(const r of this.relays)r.send(s,ev)},
  async arrived(s){const o=await unseal(s);if(!o||!o.n||this.seen.has(o.n))return;this.seen.add(o.n);
-  if(Math.abs(Date.now()-(o.ts||0))>15*60000)return;if(this.on)this.on(o)}};
+  if(Math.abs(Date.now()-(o.ts||0))>15*60000)return;
+  /* an answer to this phone must come from the PC (signed) - unless it answers a call for a teammate (loose) */
+  if(o.t==='answer'&&ID.pin&&!this.loose.has(o.sid)&&!await IDOK(o.ip,o.is,'BRA1|'+o.sid+'|'+o.sdp)){
+   this.refused=(this.refused||0)+1;return}
+  if(this.on)this.on(o)}};
+/* a private line through a teammate's phone: the phone and the PC agree on a key of their own (ECDH on P-256),
+   so the phone that carries the messages cannot read them. Every frame after the first is sealed; its first
+   byte says what it is (0 a message, 1 a piece of a photo). */
+const E2E={async pair(){const kp=await crypto.subtle.generateKey({name:'ECDH',namedCurve:'P-256'},false,['deriveBits']);
+  return {kp:kp,pub:b64u.enc(await crypto.subtle.exportKey('raw',kp.publicKey))}},
+ async key(kp,pub){const pk=await crypto.subtle.importKey('raw',b64u.dec(pub),{name:'ECDH',namedCurve:'P-256'},false,[]);
+  const bits=await crypto.subtle.deriveBits({name:'ECDH',public:pk},kp.privateKey,256);
+  return crypto.subtle.importKey('raw',await sha(new Uint8Array(bits)),'AES-GCM',false,['encrypt','decrypt'])},
+ async seal(k,kind,bytes){const iv=crypto.getRandomValues(new Uint8Array(12));
+  return cat(iv,new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv:iv},k,cat(new Uint8Array([kind]),bytes))))},
+ async open(k,bytes){const b=new Uint8Array(bytes);
+  return new Uint8Array(await crypto.subtle.decrypt({name:'AES-GCM',iv:b.slice(0,12)},k,b.slice(12)))}};
 function gathered(pc,ms){return new Promise(r=>{if(pc.iceGatheringState==='complete')return r();
  const t=setTimeout(r,ms);pc.addEventListener('icegatheringstatechange',()=>{if(pc.iceGatheringState==='complete'){
  clearTimeout(t);r()}})})}
