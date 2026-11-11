@@ -4,6 +4,7 @@ e.g.  BIRUNI_SELFTEST="wait:4000;shot:C:/tmp/home.png;tab:edit;shot:C:/tmp/edit.
 
 Steps: wait:<ms> | shot:<png path> | tab:<key> | theme:<light|dark|system>
        | classic:<0|1> | basemap:<key> | start:<show|hide> | info | log:<path> | quit
+       | light:<0|1> | free | mem
 """
 import os
 import traceback
@@ -16,6 +17,49 @@ def _write_project():  # noqa: N802
     from qgis.core import QgsProject
 
     QgsProject.instance().write()
+
+
+def profile_start(plugin):
+    """BIRUNI_PROFILE_START=<file>: profile initGui and the work after QGIS is ready; the slowest calls go
+    to the file (written again after each part)."""
+    import cProfile
+    import io
+    import pstats
+    import time
+
+    path = os.environ["BIRUNI_PROFILE_START"]
+    prof, marks = cProfile.Profile(), []
+
+    def wrap(name):
+        orig = getattr(plugin, name)
+
+        def run(*a, **k):
+            t = time.perf_counter()
+            prof.enable()
+            try:
+                return orig(*a, **k)
+            finally:
+                prof.disable()
+                marks.append(f"{name}: {time.perf_counter() - t:.2f} s")
+                s = io.StringIO()
+                st = pstats.Stats(prof, stream=s).sort_stats("cumulative")
+                st.print_stats(80)
+                if os.environ.get("BIRUNI_PROFILE_FOCUS"):  # e.g. "theme.py:.*apply": what that call spends on
+                    st.print_callees(os.environ["BIRUNI_PROFILE_FOCUS"])
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write("\n".join(marks) + "\n\n" + s.getvalue())
+
+        setattr(plugin, name, run)
+
+    wrap("_on_initialized")
+    prof.enable()
+    t0 = time.perf_counter()
+
+    def done():
+        prof.disable()
+        marks.append(f"initGui: {time.perf_counter() - t0:.2f} s")
+
+    plugin._profile_done = done
 
 
 def schedule(plugin):
@@ -53,6 +97,17 @@ def schedule(plugin):
             elif kind == "dialog":  # open a modal dialog without blocking the script
                 QTimer.singleShot(0, {"newproject": plugin.project.new_project,
                                       "about": plugin.branding.show_about}[arg])
+            elif kind == "algdialog":  # <algorithm id>|<png path>: open a tool's dialog, grab it, close it
+                import processing
+                alg_id, png = arg.split("|", 1)
+                dlg = processing.createAlgorithmDialog(alg_id)
+                dlg.resize(900, 760)
+                dlg.show()
+                QApplication.processEvents()
+                os.makedirs(os.path.dirname(png), exist_ok=True)
+                dlg.grab().save(png)
+                dlg.close()
+                log(f"algdialog {alg_id} {png}")
             elif kind == "closemodal":
                 m = QApplication.activeModalWidget()
                 if m is not None:
@@ -242,6 +297,26 @@ def schedule(plugin):
                 delay = 2500
             elif kind == "start":
                 (plugin.start.show_page if arg == "show" else plugin.start.hide_page)()
+            elif kind == "size":  # size:1280x800 - resize the main window (normal state)
+                w, h = (int(x) for x in arg.lower().split("x"))
+                plugin.mw.showNormal()
+                plugin.mw.resize(w, h)
+            elif kind == "max":
+                plugin.mw.showMaximized()
+            elif kind == "light":  # light:1 / light:0 - switch light mode as the ribbon button does
+                from . import performance
+
+                if performance.is_on() != (arg == "1"):
+                    performance.toggle(plugin)
+                log(f"light mode {performance.is_on()} memory {performance.process_memory_mb()}")
+            elif kind == "free":  # free memory as the ribbon button does, and log before / after
+                from . import performance
+
+                log(f"free memory {performance.free_memory(plugin.iface)}")
+            elif kind == "mem":
+                from . import performance
+
+                log(f"memory {performance.process_memory_mb()}")
             elif kind == "info":
                 import qgis.utils
                 from qgis.PyQt.QtCore import Qt
@@ -275,6 +350,16 @@ def schedule(plugin):
                     f"welcome={plugin.start.welcome is not None} "
                     f"welcome_visible={plugin.start.welcome.isVisible() if plugin.start.welcome else None} "
                     f"start_visible={plugin.start.isVisible()} theme={plugin.theme.mode()} dark={plugin.theme.is_dark()}")
+            elif kind == "ribbonsize":  # the body against the pages it shows (titles of groups cut?)
+                from qgis.PyQt.QtWidgets import QLabel
+
+                rib = plugin.shell.ribbon
+                for key, page in rib.pages.items():
+                    caps = [c for c in page.findChildren(QLabel) if c.objectName() == "RibbonCaption"]
+                    cut = [c.text() for c in caps
+                           if c.isVisible() and c.mapTo(rib.body, c.rect().bottomLeft()).y() >= rib.body.height()]
+                    log(f"ribbon {key}: body {rib.body.height()} page {page.sizeHint().height()} "
+                        f"width {page.sizeHint().width()} cut {cut[:3]}")
             elif kind == "quit":
                 # Test projects are throw-away: never stop at "save changes?".
                 from qgis.core import QgsProject

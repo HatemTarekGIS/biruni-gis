@@ -4,16 +4,17 @@ import html
 
 from qgis.core import QgsApplication, QgsSettings
 from qgis.PyQt.QtCore import QSize, Qt
-from qgis.PyQt.QtWidgets import (QDockWidget, QHBoxLayout, QLabel, QLineEdit, QMenu, QPushButton, QSplitter,
-                                 QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget)
+from qgis.PyQt.QtWidgets import (QAbstractItemView, QDockWidget, QHBoxLayout, QLabel, QLineEdit, QMenu,
+                                 QPushButton, QSplitter, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget)
 
-from . import icons
+from . import icons, search_text
 from .i18n import tr
 from .toolbox_catalog import CATEGORIES, COMMANDS, LABELS
 
 FAV_KEY = "biruni/toolbox/favorites"
 RECENT_KEY = "biruni/toolbox/recent"
 ROLE = Qt.ItemDataRole.UserRole
+CATEGORY_ROLE = Qt.ItemDataRole.UserRole + 1
 
 
 def toolbox_qss(t):
@@ -44,6 +45,7 @@ class ToolboxDock(QDockWidget):
         self.plugin = plugin
         self.setObjectName("BiruniToolbox")
         self.tools = {}
+        self._hay = {}           # tool key -> folded search text
         body = QWidget()
         body.setObjectName("BiruniToolbox")
         v = QVBoxLayout(body)
@@ -104,6 +106,7 @@ class ToolboxDock(QDockWidget):
     def load(self):
         reg = QgsApplication.processingRegistry()
         self.tools = {}
+        self._hay = {}
         for _key, _title, icon_name, entries in CATEGORIES:
             for e in entries:
                 if e in self.tools:
@@ -121,6 +124,19 @@ class ToolboxDock(QDockWidget):
                     self.tools[e] = Tool(e, tr(label), help_text, icon_name, f"{label} {alg.displayName()} {alg.name()}")
                 else:
                     self.tools[e] = Tool(e, alg.displayName(), help_text, icon_name, alg.name())
+        self.country_entries, self.country_name = [], ""
+        try:  # the tools of the user's country (regions/), shown as their own category
+            from . import regions
+
+            self.country_entries = regions.toolbox_entries()
+            self.country_name = regions.region().name
+        except Exception:  # noqa: BLE001 - the toolbox works without it
+            pass
+        for e in self.country_entries:
+            alg = None if e in self.tools else reg.algorithmById(e)
+            if alg is not None:
+                self.tools[e] = Tool(e, alg.displayName(), alg.shortDescription() or alg.shortHelpString() or "",
+                                     "world-pin", alg.name())
         n = len(reg.algorithms())
         self.all_btn.setText(tr("All tools ({n}) …").format(n=n))
         self.populate()
@@ -134,20 +150,23 @@ class ToolboxDock(QDockWidget):
     # ---- view ------------------------------------------------------------
     def populate(self, *_):
         t = self.plugin.theme.tokens()
-        text = self.search.text().strip().lower()
+        words = search_text.fold(self.search.text()).split()
         self.tree.clear()
 
-        def matches(tool):
-            if not text:
+        def matches(tool):  # hamzas, accents and Persian letters do not matter («اضافة» finds «إضافة»)
+            if not words:
                 return True
-            hay = f"{tool.name} {tool.english} {tool.key} {tool.help}".lower()
-            return all(word in hay for word in text.split())
+            hay = self._hay.get(tool.key)
+            if hay is None:
+                hay = self._hay[tool.key] = search_text.fold(f"{tool.name} {tool.english} {tool.key} {tool.help}")
+            return all(w in hay for w in words)
 
-        def add_category(title, icon_name, keys, expanded):
+        def add_category(title, icon_name, keys, expanded, cat_key=""):
             keys = [k for k in keys if k in self.tools and matches(self.tools[k])]
             if not keys:
                 return
             cat = QTreeWidgetItem(self.tree, [title])
+            cat.setData(0, CATEGORY_ROLE, cat_key)
             cat.setIcon(0, icons.icon(icon_name, t["accent"]))
             f = cat.font(0)
             f.setBold(True)
@@ -159,13 +178,27 @@ class ToolboxDock(QDockWidget):
                 it.setData(0, ROLE, k)
                 it.setToolTip(0, tool.help)
                 it.setIcon(0, icons.icon(tool.icon, t["icon"]))
-            cat.setExpanded(expanded or bool(text))
+            cat.setExpanded(expanded or bool(words))
 
         add_category(tr("Favorites"), "star", self._favorites(), True)
         add_category(tr("Recent"), "clock-hour-4", self._recent(), True)
-        for _key, title, icon_name, entries in CATEGORIES:
-            add_category(tr(title), icon_name, entries, False)
+        if getattr(self, "country_entries", None):
+            add_category(tr("My country: {c}").format(c=self.country_name), "world-pin", self.country_entries, False,
+                         "country")
+        for key, title, icon_name, entries in CATEGORIES:
+            add_category(tr(title), icon_name, entries, False, key)
         self._describe(None)
+
+    def expand_category(self, key):
+        """Show one category open and in view (ribbon buttons that point at a part of the toolbox)."""
+        if self.search.text():
+            self.search.clear()  # repopulates
+        for i in range(self.tree.topLevelItemCount()):
+            it = self.tree.topLevelItem(i)
+            if it.data(0, CATEGORY_ROLE) == key:
+                it.setExpanded(True)
+                self.tree.scrollToItem(it, QAbstractItemView.ScrollHint.PositionAtTop)
+                self.tree.setCurrentItem(it)
 
     def _describe(self, key):
         tool = self.tools.get(key)

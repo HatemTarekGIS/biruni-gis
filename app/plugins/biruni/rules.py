@@ -8,7 +8,7 @@ attribute rules and default values.
 """
 from dataclasses import dataclass, field
 
-from qgis.core import (QgsDefaultValue, QgsEditorWidgetSetup, QgsFieldConstraints, QgsVectorLayer,
+from qgis.core import (Qgis, QgsDefaultValue, QgsEditorWidgetSetup, QgsFieldConstraints, QgsVectorLayer,
                        QgsVectorLayerUtils)
 from qgis.PyQt.QtCore import QMetaType, Qt
 from qgis.PyQt.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QHeaderView,
@@ -49,6 +49,30 @@ class FieldRule:
     def is_empty(self):
         return not (self.required or self.unique or self.values or self.minimum is not None
                     or self.maximum is not None or self.auto)
+
+
+def number_fields(layer):
+    """Indexes of the fields filled with "Next number"."""
+    out = []
+    for idx, f in enumerate(layer.fields()):
+        expr = layer.defaultValueDefinition(idx).expression()
+        if expr and expr == AUTO["number"][1].format(f=f.name()):
+            out.append(idx)
+    return out
+
+
+def renumber(layer, feats):
+    """Give the new features ``feats`` (not added yet) following "Next number" values. The default value is
+    worked out for each feature before any is added, so features made together would all get the same
+    number, and pieces copied from a feature would keep its number."""
+    for idx in number_fields(layer):
+        # as the default expression counts (unsaved features too); maximumValue() gives -2^31 on an empty layer
+        value, ok = layer.aggregate(Qgis.Aggregate.Max, layer.fields().at(idx).name())
+        top = _number(value) if ok else None
+        top = int(top) if top is not None else 0
+        text = layer.fields().at(idx).type() == QMetaType.Type.QString
+        for i, f in enumerate(feats, 1):
+            f.setAttribute(idx, str(top + i) if text else top + i)
 
 
 def _quote(v):

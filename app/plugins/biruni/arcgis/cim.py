@@ -612,7 +612,7 @@ class Converter:
                 self.apply_raster(layer, cim["colorizer"])
             return
         gt = layer.geometryType()
-        table = cim.get("featureTable") or {}
+        table = cim.get("featureTable") or (cim if cim.get("type") == "CIMStandaloneTable" else {})
         expr = table.get("definitionExpression")
         if expr and not layer.setSubsetString(expr):
             self.warn(tr("definition query not applied: {query}").format(query=expr))

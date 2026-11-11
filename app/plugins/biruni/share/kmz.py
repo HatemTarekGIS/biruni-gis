@@ -66,9 +66,12 @@ def export_kmz(layers, path, project=None):
     srs.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
     written = {}
     try:
-        for lyr in layers:
+        for k, lyr in enumerate(layers, 1):
             kind = geometry_kind(lyr)
-            out = ds.CreateLayer(lyr.name(), srs, ogr.wkbUnknown)
+            # LIBKML turns non-ASCII layer names into unreadable file names inside the KMZ (Arabic names broke
+            # it): the internal name is plain ASCII and the folder shows the real name.
+            internal = lyr.name() if lyr.name().isascii() else f"layer_{k}"
+            out = ds.CreateLayer(internal, srs, ogr.wkbUnknown, options=[f"NAME={lyr.name()}"])
             out.CreateField(ogr.FieldDefn("Name", ogr.OFTString))
             used = {"name", "description"}
             cols = []
@@ -111,4 +114,6 @@ def export_kmz(layers, path, project=None):
             written[lyr.name()] = n
     finally:
         ds = None  # noqa: F841 - closing the data source writes the file
+    from ..scrub import after_export
+    after_export([path])   # no user names or local folders in what leaves the office
     return path, written

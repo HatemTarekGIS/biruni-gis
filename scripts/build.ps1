@@ -52,8 +52,32 @@ function Build-Launcher([string]$OutExe) {
     Remove-Item $tmp
 }
 
+function Repair-Translations($engine) {
+    # QGIS translations have %1 placeholders written as "1%" or "% 1" (179 in Arabic, 2215 in Tamil, a few dozen
+    # in most others): repair them in every language (safe to repeat)
+    $qm = Get-ChildItem (Join-Path $engine "apps\qgis\i18n") -Filter "qgis_*.qm" -ErrorAction SilentlyContinue
+    if (-not $qm) { return }
+    python -I (Join-Path $PSScriptRoot "fix_qm.py") @($qm.FullName)
+    if ($LASTEXITCODE -ne 0) { throw "fix_qm.py failed" }
+}
+
+function Patch-Engine($engine) {
+    # lighter start: geopandas/pandas load only when QgsVectorLayer.as_geopandas() is called (safe to repeat)
+    python -I (Join-Path $PSScriptRoot "patch_engine.py") $engine
+    if ($LASTEXITCODE -ne 0) { throw "patch_engine.py failed" }
+}
+
+function Add-Tools($engine) {
+    # the command-line tools of engine-tools.txt (WhiteboxTools core, LibreDWG) into engine\tools (safe to repeat)
+    python -I (Join-Path $PSScriptRoot "add_tools.py") $engine (Join-Path $Root "_downloads\tools")
+    if ($LASTEXITCODE -ne 0) { throw "add_tools.py failed" }
+}
+
 if ($Dev) {
     $exe = Join-Path $Root "build\Biruni GIS.exe"
+    Repair-Translations (Join-Path $Root "engine")
+    Patch-Engine (Join-Path $Root "engine")
+    Add-Tools (Join-Path $Root "engine")
     Build-Launcher $exe
     "engine=$Root\engine`r`napp=$App" | Set-Content -Encoding ascii (Join-Path $Root "build\biruni-dev.ini")
     Write-Host "dev launcher: $exe"
@@ -89,6 +113,9 @@ Get-Content (Join-Path $PSScriptRoot "engine-exclude.txt") | Where-Object { $_ -
     if (Test-Path $f) { Remove-Item $f -Force } else { Write-Warning "not found: $_" }
 }
 Remove-Item (Join-Path $Stage "engine\include") -Recurse -Force -ErrorAction SilentlyContinue
+Repair-Translations (Join-Path $Stage "engine")
+Patch-Engine (Join-Path $Stage "engine")
+Add-Tools (Join-Path $Stage "engine")
 
 Write-Host "3/5 copying the Biruni app payload"
 robocopy $App (Join-Path $Stage "app") /E /XD __pycache__ /XF *.pyc /NFL /NDL /NJH /NJS /NP | Out-Null

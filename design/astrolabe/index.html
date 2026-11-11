@@ -1,0 +1,1009 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>نموذج الأسطرلاب</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* layout: a one-screen tool - a slim bar, the map fills the rest, the astrolabe floats over the map */
+  --bg:#F3F6F5; --panel:#FFFFFF; --ink:#14302B; --dim:#5C716C; --line:#C8D3CF;
+  --accent:#0E7C6B; --on-accent:#FFFFFF; --brass:#9A6E12; --ghost:#D4491A; --result:#3B4FB8;
+  --map:#E6ECEA; --parcel:#F9FBFA; --parcel-line:#8EA19C; --road:#C5CFCC; --road-mark:#FFFFFF; --tree:#58A073;
+  --ring1:#DCEEEA; --ring2:#F1F4F3; --ring3:#F3E9D2;
+  --body:"IBM Plex Sans Arabic","Segoe UI",Tahoma,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0E1615; --panel:#18221F; --ink:#E4EEEB; --dim:#90A49F; --line:#2C3B38;
+    --accent:#35B8A2; --on-accent:#06201B; --brass:#DDB25C; --ghost:#FF8552; --result:#93A1FF;
+    --map:#111A19; --parcel:#1C2826; --parcel-line:#4D625D; --road:#2B3936; --road-mark:#51645F; --tree:#4C9669;
+    --ring1:#173530; --ring2:#1E2A28; --ring3:#3A3120;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0E1615; --panel:#18221F; --ink:#E4EEEB; --dim:#90A49F; --line:#2C3B38;
+  --accent:#35B8A2; --on-accent:#06201B; --brass:#DDB25C; --ghost:#FF8552; --result:#93A1FF;
+  --map:#111A19; --parcel:#1C2826; --parcel-line:#4D625D; --road:#2B3936; --road-mark:#51645F; --tree:#4C9669;
+  --ring1:#173530; --ring2:#1E2A28; --ring3:#3A3120;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font:400 15px/1.5 var(--body);display:flex;flex-direction:column;overflow:hidden}
+button{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 20px;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--line)}
+.bar h1{font:700 21px/1.1 var(--body);margin:0}
+.bar p{margin:0;color:var(--dim);font-size:14px;flex:1 1 260px;text-wrap:balance}
+.bar .acts{display:flex;gap:8px;flex-wrap:wrap}
+.btn{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:6px 12px;cursor:pointer;font-weight:500}
+.btn:hover{border-color:var(--accent)}
+.btn.main{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.btn:disabled{opacity:.45;cursor:default}
+.t1{color:var(--accent);font-weight:600}
+.t2{font-weight:700}
+.t3{color:var(--brass);font-weight:600;font-variant-numeric:tabular-nums}
+.x{color:var(--dim)}
+
+#stage{position:relative;flex:1;min-height:0;background:var(--map);overflow:hidden}
+#map{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:crosshair}
+
+#legend{position:absolute;top:12px;inset-inline-end:12px;background:var(--panel);border:1px solid var(--line);border-radius:10px;
+  padding:8px 12px;font-size:13px;min-width:160px;max-width:230px}
+#legend h2{font:600 12px var(--body);color:var(--dim);margin:0 0 4px}
+#legend ul{list-style:none;margin:0;padding:0;display:grid;gap:3px}
+#legend li{display:flex;align-items:center;gap:8px}
+#legend i{width:12px;height:12px;border-radius:3px;border:1.5px solid var(--parcel-line);background:var(--parcel);flex:none}
+#legend i.road{background:var(--road);border-color:var(--road)}
+#legend i.tree{background:var(--tree);border-color:var(--tree);border-radius:50%}
+#legend i.res{background:transparent;border-color:var(--result)}
+#legend li.res{color:var(--result);font-weight:500}
+#legend li span{flex:1}
+#legend li button{border:0;background:none;color:var(--dim);cursor:pointer;padding:0 2px;font-size:15px;line-height:1}
+
+#zoom{position:absolute;bottom:44px;left:12px;display:grid;gap:4px}
+#zoom .btn{width:34px;height:34px;padding:0;font-size:18px;line-height:1}
+
+#foot{position:absolute;bottom:8px;left:60px;right:12px;display:grid;gap:6px;justify-items:center;pointer-events:none}
+#hist{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;max-width:100%;pointer-events:auto}
+#hist:empty{display:none}
+#hist button{max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border:1px solid var(--line);background:var(--panel);
+  border-radius:16px;padding:2px 12px;font-size:12.5px;cursor:pointer}
+#hist button:hover{border-color:var(--accent)}
+#hint{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:4px 12px;font-size:12.5px;color:var(--dim);text-align:center;max-width:100%}
+
+#toast{position:absolute;top:12px;left:16px;right:16px;margin:auto;width:fit-content;max-width:min(calc(100% - 32px),640px);display:flex;gap:12px;align-items:center;
+  background:var(--ink);color:var(--panel);border-radius:10px;padding:8px 14px;font-size:14px;z-index:6}
+#toast[hidden]{display:none}
+#toast .t1,#toast .t2,#toast .t3,#toast .x{color:inherit}
+#toast button{background:none;border:0;color:inherit;font-weight:700;text-decoration:underline;cursor:pointer;padding:0;white-space:nowrap}
+
+#astro{position:absolute;z-index:4}
+#astro[hidden]{display:none}
+#disc{display:block;width:100%;height:auto;filter:drop-shadow(0 6px 18px rgba(0,0,0,.28));user-select:none;-webkit-user-select:none;touch-action:none;cursor:grab;direction:rtl}
+#sentence{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);width:max-content;max-width:min(92vw,600px);
+  background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px 14px;font-size:15.5px;text-align:center;
+  box-shadow:0 3px 10px rgba(0,0,0,.14)}
+#astro.below #sentence{bottom:auto;top:calc(100% + 8px)}
+#sentence .past{font-size:13.5px;opacity:.75}
+#sentence .no{display:inline-block;min-width:1.5em;border-radius:50%;background:var(--ring1);color:var(--ink);font-size:12px;font-weight:700;margin-inline-end:4px}
+#sentence .note{font-size:13px;color:var(--dim)}
+#sentence .note.err{color:var(--ghost);font-weight:600}
+#sentence button.t3{background:none;border:0;border-bottom:1.5px dotted var(--brass);padding:0 2px;cursor:text}
+#sentence input{width:5.2em;font:inherit;color:var(--ink);background:var(--bg);border:1.5px solid var(--brass);border-radius:6px;padding:0 6px;text-align:center}
+.corner{position:absolute;height:30px;min-width:30px;border-radius:15px;border:1px solid var(--line);background:var(--panel);cursor:pointer;line-height:1;font-size:14px;font-weight:600;padding:0 9px}
+.corner:hover{border-color:var(--accent)}
+#closeBtn{top:-2px;inset-inline-end:-2px;font-size:17px;padding:0}
+#thenBtn{bottom:-2px;inset-inline-end:-2px;background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+#backBtn{bottom:-2px;inset-inline-start:-2px}
+#backBtn[hidden]{display:none}
+
+.plate{fill:var(--panel);opacity:.96;stroke:var(--line)}
+.limb{stroke:var(--dim);stroke-width:1}
+.band{fill:none}
+.b1{stroke:var(--ring1)} .b2{stroke:var(--ring2)} .b3{stroke:var(--ring3)}
+.wedge{fill:var(--accent);opacity:.13}
+.sep{stroke:var(--line);stroke-width:1}
+.lab{fill:var(--dim);font:500 13px var(--body);text-anchor:middle;dominant-baseline:central}
+.lab.sm{font-size:11.5px}
+.lab.on{fill:var(--ink);font-weight:700;font-size:14px}
+.lab.sm.on{font-size:12.5px}
+.num{fill:var(--dim);font:500 11px var(--body);text-anchor:middle;dominant-baseline:central;font-variant-numeric:tabular-nums}
+.tick{stroke:var(--dim);stroke-width:1}
+.tick.maj{stroke:var(--ink);stroke-width:1.4}
+.index{stroke:var(--brass);stroke-width:2}
+.ptr{fill:var(--brass)}
+.fr{fill:none;stroke:var(--accent);stroke-width:1.6;opacity:0}
+.fr.on{opacity:.9}
+.hub{fill:var(--accent);cursor:pointer}
+.hubt{fill:var(--on-accent);font:700 20px var(--body);text-anchor:middle;dominant-baseline:central;pointer-events:none}
+.hubs{fill:var(--on-accent);opacity:.75;font:500 9.5px var(--body);text-anchor:middle;pointer-events:none}
+g.dim{opacity:.4}
+
+@media (max-width:560px){
+  #legend,#hint{display:none}
+  .bar h1{font-size:19px}
+  #sentence{font-size:14px}
+}
+</style>
+</head>
+<body>
+<header class="bar">
+  <h1>الأسطرلاب</h1>
+  <p>أدِر الحلقات الثلاث: <span class="t1">على ماذا</span>، <span class="t2">ماذا أفعل</span>، <span class="t3">بكم أو مع ماذا</span>. تظهر النتيجة على الخريطة قبل التنفيذ، و«ثم» تضيف خطوة على الناتج.</p>
+  <div class="acts">
+    <button class="btn main" id="openBtn" type="button">افتح الأسطرلاب</button>
+    <button class="btn" id="demoBtn" type="button">مثال: توسعة الطريق</button>
+    <button class="btn" id="againBtn" type="button" disabled>كرِّر الأخير</button>
+    <button class="btn" id="undoBtn" type="button" disabled>تراجع</button>
+    <button class="btn" id="resetBtn" type="button">من البداية</button>
+  </div>
+</header>
+<main id="stage">
+  <canvas id="map" aria-label="خريطة تجريبية: قطع وطرق وأشجار"></canvas>
+  <aside id="legend" aria-label="الطبقات"><h2>الطبقات</h2><ul id="layers"></ul></aside>
+  <div id="zoom"><button class="btn" id="zin" type="button" aria-label="تكبير">+</button><button class="btn" id="zout" type="button" aria-label="تصغير">−</button></div>
+  <div id="foot">
+    <div id="hist" aria-label="سجل الأوامر: انقر أمرًا لإعادة فتحه"></div>
+    <div id="hint">الزر الأيمن أو ضغطة مطوّلة: فتح الأسطرلاب · نقرة: تحديد عنصر · Shift مع الإدارة: ضبط دقيق · Enter: تنفيذ · Shift+Enter: ثم · R: تكرار آخر أمر · Esc: إغلاق</div>
+  </div>
+  <div id="astro" hidden>
+    <div id="sentence" aria-live="polite"></div>
+    <svg id="disc" viewBox="-200 -200 400 400" role="application" aria-label="الأسطرلاب: ثلاث حلقات تُدار لتكوين الأمر"></svg>
+    <button class="corner" id="closeBtn" type="button" aria-label="إغلاق">×</button>
+    <button class="corner" id="thenBtn" type="button" title="أضف خطوة تعمل على ناتج هذه الخطوة (Shift+Enter)">ثم ＋</button>
+    <button class="corner" id="backBtn" type="button" title="العودة إلى الخطوة السابقة" hidden>↶ خطوة</button>
+  </div>
+  <div id="toast" hidden role="status"></div>
+</main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsts/2.7.1/jsts.min.js"></script>
+<script>
+(() => {
+'use strict';
+/*ENGINE{*/
+const mod = (a, n) => ((a % n) + n) % n, clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const norm = a => mod(a + 180, 360) - 180;
+const fmt = (v, d = 1) => v.toLocaleString('en-US', {maximumFractionDigits: d});
+
+/* ---------- the map's data (metres; y grows downwards) ---------- */
+function buildFeats() {
+  const A0 = -0.12, O = [70, 70], out = [];
+  const Lp = (u, v) => [O[0] + u * Math.cos(A0) - v * Math.sin(A0), O[1] + u * Math.sin(A0) + v * Math.cos(A0)];
+  let id = 1;
+  const add = (layer, type, pts) => out.push({id: id++, layer, type, pts, holes: [], sel: false});
+  const rect = (u, v, w, h) => add('parcels', 'poly', [Lp(u, v), Lp(u + w, v), Lp(u + w, v + h), Lp(u, v + h)]);
+  for (let r = 0; r < 2; r++) for (let c = 0; c < 6; c++) rect(c * 28, r * 36, 28, 36);
+  for (let r = 0; r < 2; r++) for (let c = 0; c < 6; c++) rect(c * 28, 96 + r * 36, 28, 36);
+  for (let r = 0; r < 2; r++) for (let c = 0; c < 3; c++) rect(192 + c * 28, r * 36, 28, 36);
+  add('parcels', 'poly', [Lp(192, 96), Lp(248, 96), Lp(248, 132), Lp(220, 132), Lp(220, 168), Lp(192, 168)]);
+  rect(220, 132, 28, 36); rect(248, 96, 28, 72);
+  add('roads', 'line', [Lp(-24, 84), Lp(300, 84)]);
+  add('roads', 'line', [Lp(180, -24), Lp(180, 192)]);
+  add('roads', 'line', [Lp(-24, 186), Lp(60, 188), Lp(130, 196), Lp(200, 212), Lp(250, 234), Lp(300, 262)]);
+  for (let k = 0; k < 6; k++) { add('trees', 'point', [Lp(14 + 28 * k, 76)]); add('trees', 'point', [Lp(14 + 28 * k, 92)]); }
+  [3, 4, 9].forEach(i => { out[i - 1].sel = true; });
+  return out;
+}
+
+/* ---------- geometry ---------- */
+function bbox(list) {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const f of list) for (const p of f.pts) { x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]); x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]); }
+  return {x0, y0, x1, y1};
+}
+function area(pts) { let a = 0; for (let i = 0, n = pts.length; i < n; i++) { const p = pts[i], q = pts[(i + 1) % n]; a += p[0] * q[1] - q[0] * p[1]; } return a / 2; }
+const polyArea = f => Math.abs(area(f.pts)) - (f.holes || []).reduce((s, h) => s + Math.abs(area(h)), 0);
+function length(pts) { let l = 0; for (let i = 1; i < pts.length; i++) l += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); return l; }
+function centroid(f) {
+  const p = f.pts;
+  if (f.type === 'point') return p[0];
+  if (f.type === 'line') {
+    let half = length(p) / 2;
+    for (let i = 1; i < p.length; i++) {
+      const d = Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]);
+      if (half <= d) { const t = half / (d || 1); return [p[i - 1][0] + (p[i][0] - p[i - 1][0]) * t, p[i - 1][1] + (p[i][1] - p[i - 1][1]) * t]; }
+      half -= d;
+    }
+    return p[p.length - 1];
+  }
+  let a = 0, x = 0, y = 0;
+  for (let i = 0, n = p.length; i < n; i++) { const u = p[i], v = p[(i + 1) % n], k = u[0] * v[1] - v[0] * u[1]; a += k; x += (u[0] + v[0]) * k; y += (u[1] + v[1]) * k; }
+  return a ? [x / (3 * a), y / (3 * a)] : p[0];
+}
+function hull(points) {
+  const P = points.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  if (P.length < 3) return P;
+  const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lo = [], up = [];
+  for (const p of P) { while (lo.length >= 2 && cross(lo[lo.length - 2], lo[lo.length - 1], p) <= 0) lo.pop(); lo.push(p); }
+  for (let i = P.length - 1; i >= 0; i--) { const p = P[i]; while (up.length >= 2 && cross(up[up.length - 2], up[up.length - 1], p) <= 0) up.pop(); up.push(p); }
+  lo.pop(); up.pop();
+  return lo.concat(up);
+}
+/* the part of a polygon on one side of a line (u.p <= t, or >= t) */
+function clipHalf(pts, ux, uy, t, less) {
+  const out = [], n = pts.length, s = p => less ? t - (p[0] * ux + p[1] * uy) : (p[0] * ux + p[1] * uy) - t;
+  for (let i = 0; i < n; i++) {
+    const a = pts[i], b = pts[(i + 1) % n], sa = s(a), sb = s(b);
+    if (sa >= 0) out.push(a);
+    if ((sa >= 0) !== (sb >= 0)) { const k = sa / (sa - sb); out.push([a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k]); }
+  }
+  return out;
+}
+/* a polygon cut into n parts of equal area, across its longest side */
+function splitPoly(pts, n) {
+  let best = 0, ux = 1, uy = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i], b = pts[(i + 1) % pts.length], d = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (d > best) { best = d; ux = (b[0] - a[0]) / d; uy = (b[1] - a[1]) / d; }
+  }
+  const pr = pts.map(p => p[0] * ux + p[1] * uy), lo = Math.min(...pr), hi = Math.max(...pr), A = Math.abs(area(pts)), cuts = [lo];
+  for (let k = 1; k < n; k++) {
+    let a = lo, b = hi;
+    for (let i = 0; i < 40; i++) { const m = (a + b) / 2; if (Math.abs(area(clipHalf(pts, ux, uy, m, true))) < A * k / n) a = m; else b = m; }
+    cuts.push((a + b) / 2);
+  }
+  cuts.push(hi);
+  const parts = [];
+  for (let k = 0; k < n; k++) {
+    const p = clipHalf(clipHalf(pts, ux, uy, cuts[k], false), ux, uy, cuts[k + 1], true);
+    if (p.length >= 3) parts.push(p);
+  }
+  return parts;
+}
+function measureText(f, unit) {
+  if (f.type === 'point') return `${fmt(f.pts[0][0])}، ${fmt(f.pts[0][1])}`;
+  if (f.type === 'line') { const l = length(f.pts); return unit === 'm2' ? fmt(l) + ' م' : unit === 'ha' ? fmt(l / 1000, 3) + ' كم' : fmt(l * 3.28084, 0) + ' قدم'; }
+  const a = polyArea(f);
+  return unit === 'm2' ? fmt(a) + ' م²' : unit === 'ha' ? fmt(a / 10000, 3) + ' هكتار' : fmt(a * 10.7639, 0) + ' قدم²';
+}
+
+/* the geometry engine (buffer, union, intersection, difference) */
+const J = typeof jsts !== 'undefined' && jsts.geom ? (() => {
+  const gf = new jsts.geom.GeometryFactory(), C = p => new jsts.geom.Coordinate(p[0], p[1]);
+  const ring = pts => gf.createLinearRing(pts.concat([pts[0]]).map(C));
+  const to = f => f.type === 'poly' ? gf.createPolygon(ring(f.pts), (f.holes || []).map(ring))
+    : f.type === 'line' ? gf.createLineString(f.pts.map(C)) : gf.createPoint(C(f.pts[0]));
+  const xy = cs => cs.map(c => [c.x, c.y]), open = cs => { const a = xy(cs); a.pop(); return a; };
+  function from(g, out = []) {
+    if (!g || g.isEmpty()) return out;
+    const t = g.getGeometryType();
+    if (t === 'Polygon') {
+      const holes = [], pts = open(g.getExteriorRing().getCoordinates());
+      for (let i = 0; i < g.getNumInteriorRing(); i++) holes.push(open(g.getInteriorRingN(i).getCoordinates()));
+      if (pts.length >= 3) out.push({type: 'poly', pts, holes});
+    } else if (t === 'LineString' || t === 'LinearRing') { const pts = xy(g.getCoordinates()); if (pts.length >= 2) out.push({type: 'line', pts}); }
+    else if (t === 'Point') out.push({type: 'point', pts: xy(g.getCoordinates())});
+    else for (let i = 0; i < g.getNumGeometries(); i++) from(g.getGeometryN(i), out);
+    return out;
+  }
+  return {to, from, coll: fs => gf.createGeometryCollection(fs.map(to))};
+})() : null;
+const DIM = {poly: 2, line: 1, point: 0};
+
+/* ---------- a command is a list of steps; each step: on what (t), what (v), how much or with what ---------- */
+function resolve(key, work, last, env) {
+  if (key === 'sel') return work.filter(f => f.sel);
+  if (key === 'visible') return work.filter(env.inView);
+  if (key === 'prev') return last || [];
+  return work.filter(f => f.layer === key);
+}
+function applyStep(st, work, last, env, layer) {
+  const T = resolve(st.t, work, last, env);
+  const o = {n: T.length, err: '', note: '', geoms: [], labels: [], sel: [], pivot: null, last: T, made: false};
+  if (!T.length) { o.err = st.t === 'sel' ? 'لا يوجد تحديد. انقر على عناصر الخريطة لتحديدها.' : 'لا توجد عناصر في هذا الهدف.'; return o; }
+  const make = gs => {
+    const fs = gs.map(g => ({id: env.nid(), layer, type: g.type, pts: g.pts, holes: g.holes || [], sel: false}));
+    work.push(...fs); o.geoms = fs; o.last = fs; o.made = true;
+    if (!fs.length) o.err = 'لا ينتج عن هذا الأمر شيء هنا.';
+  };
+  const engine = () => { if (!J) o.err = 'تعذّر تحميل محرك الهندسة. تحقق من الاتصال ثم أعد فتح الصفحة.'; return !!J; };
+  const others = () => {
+    if (st.other === st.t && st.v !== 'select') { o.err = 'اختر في الحلقة الخارجية طبقة غير الهدف.'; return []; }
+    const O = resolve(st.other, work, last, env);
+    if (!O.length) o.err = st.other === 'sel' ? 'لا يوجد تحديد ليُستعمل هنا.' : 'الطبقة المختارة في الحلقة الخارجية فارغة.';
+    return O;
+  };
+  try {
+    switch (st.v) {
+      case 'buffer': if (engine()) make(J.from(J.coll(T).buffer(st.val))); break;
+      case 'union': if (engine()) make(J.from(J.coll(T).union())); break;
+      case 'intersect': case 'erase': {
+        if (!engine()) break;
+        const O = others(); if (!O.length) break;
+        const jo = O.map(q => ({f: q, g: J.to(q)})), gs = [];
+        for (const t of T) {
+          const jt = J.to(t);
+          if (st.v === 'intersect') {
+            for (const q of jo) if (q.f.id !== t.id && jt.intersects(q.g)) {
+              const want = Math.min(DIM[t.type], DIM[q.f.type]);
+              gs.push(...J.from(jt.intersection(q.g)).filter(p => DIM[p.type] === want));
+            }
+          } else {
+            let g = jt;
+            for (const q of jo) if (q.f.id !== t.id && !g.isEmpty() && g.intersects(q.g)) g = g.difference(q.g);
+            gs.push(...J.from(g).filter(p => DIM[p.type] === DIM[t.type]));
+          }
+        }
+        make(gs); break;
+      }
+      case 'select': {
+        if (!engine()) break;
+        const O = others(); if (!O.length) break;
+        const jo = O.map(J.to), found = T.filter(t => { const jt = J.to(t); return jo.some(q => jt.intersects(q)); });
+        work.forEach(f => { f.sel = false; }); found.forEach(f => { f.sel = true; });
+        o.sel = found; o.last = found; o.note = `سيُحدَّد ${found.length} من ${T.length}`; break;
+      }
+      case 'rotate': case 'scale': {
+        const b = bbox(T), c = [(b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2];
+        let fn;
+        if (st.v === 'rotate') { const a = st.val * Math.PI / 180, cs = Math.cos(a), sn = Math.sin(a); fn = q => [c[0] + (q[0] - c[0]) * cs - (q[1] - c[1]) * sn, c[1] + (q[0] - c[0]) * sn + (q[1] - c[1]) * cs]; }
+        else { const k = st.val / 100; fn = q => [c[0] + (q[0] - c[0]) * k, c[1] + (q[1] - c[1]) * k]; }
+        for (const f of T) { f.pts = f.pts.map(fn); f.holes = (f.holes || []).map(h => h.map(fn)); }
+        o.geoms = T.map(f => ({...f})); o.pivot = c; break;   // as they are after this step (a later step moves them again)
+      }
+      case 'split': {
+        const Pz = T.filter(f => f.type === 'poly' && !(f.holes && f.holes.length));
+        if (!Pz.length) { o.err = 'التقسيم للمضلعات فقط.'; break; }
+        const made = [];
+        for (const f of Pz) {
+          const fs = splitPoly(f.pts, st.val).map(p => ({id: env.nid(), layer: f.layer, type: 'poly', pts: p, holes: [], sel: f.sel}));
+          work.splice(work.indexOf(f), 1, ...fs); made.push(...fs);
+        }
+        o.geoms = made; o.last = made; o.note = `${Pz.length} ← ${made.length} قطعة`;
+        if (made.length <= 36) o.labels = made.map(f => ({p: centroid(f), text: fmt(polyArea(f)) + ' م²'}));
+        break;
+      }
+      case 'centroid': make(T.map(f => ({type: 'point', pts: [centroid(f)]}))); break;
+      case 'hull': {
+        const one = pts => { const h = hull(pts); return {type: h.length > 2 ? 'poly' : h.length === 2 ? 'line' : 'point', pts: h}; };
+        make(st.opt === 'each' ? T.map(f => one(f.pts)) : [one(T.flatMap(f => f.pts))]); break;
+      }
+      default: o.labels = T.map(f => ({p: centroid(f), text: measureText(f, st.opt)}));
+    }
+  } catch (e) { o.err = 'تعذّر حساب هذا الأمر على هذه الأشكال.'; }
+  return o;
+}
+function run(steps, feats, env) {
+  const work = feats.map(f => ({...f}));
+  let last = null;
+  const outs = [];
+  steps.forEach((st, i) => { const o = applyStep(st, work, last, env, '~' + i); outs.push(o); last = o.err ? [] : o.last; });
+  return {work, outs};
+}
+/*}ENGINE*/
+
+const $ = id => document.getElementById(id);
+const stage = $('stage'), cv = $('map'), ctx = cv.getContext('2d');
+const astro = $('astro'), disc = $('disc'), sentence = $('sentence'), toastEl = $('toast');
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const FONT = '"IBM Plex Sans Arabic","Segoe UI",Tahoma,sans-serif';
+let W = 0, H = 0, DPR = 1, C = {};
+const view = {s: 2, ox: 0, oy: 0};
+
+/* ---------- state ---------- */
+const BASE = [{key: 'parcels', name: 'القطع'}, {key: 'roads', name: 'الطرق'}, {key: 'trees', name: 'الأشجار'}];
+let feats = [], layers = [], labelSets = [], undo = [], history = [], chain = [], nid = 1000, rc = 0, pv = null;
+function build() { feats = buildFeats(); layers = BASE.map(l => ({...l, base: true})); labelSets = []; undo = []; history = []; chain = []; rc = 0; }
+const toWorld = (x, y) => [x / view.s + view.ox, y / view.s + view.oy];
+const toScreen = p => [(p[0] - view.ox) * view.s, (p[1] - view.oy) * view.s];
+function inView(f) {
+  const b = bbox([f]), a = toWorld(0, 0), z = toWorld(W, H);
+  return b.x1 >= a[0] && b.x0 <= z[0] && b.y1 >= a[1] && b.y0 <= z[1];
+}
+const env = {inView, nid: () => nid++};
+function inPoly(pts, x, y) {
+  let c = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const a = pts[i], b = pts[j];
+    if ((a[1] > y) !== (b[1] > y) && x < (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1]) + a[0]) c = !c;
+  }
+  return c;
+}
+function distLine(pts, x, y) {
+  let best = Infinity;
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1], b = pts[i], dx = b[0] - a[0], dy = b[1] - a[1];
+    const t = clamp(((x - a[0]) * dx + (y - a[1]) * dy) / (dx * dx + dy * dy || 1), 0, 1);
+    best = Math.min(best, Math.hypot(x - a[0] - t * dx, y - a[1] - t * dy));
+  }
+  return best;
+}
+function hit(x, y) {
+  const tol = 7 / view.s, rev = feats.slice().reverse();
+  for (const f of rev) if (f.type === 'point' && Math.hypot(f.pts[0][0] - x, f.pts[0][1] - y) < tol + 2 / view.s) return f;
+  for (const f of rev) if (f.type === 'line' && distLine(f.pts, x, y) < tol) return f;
+  for (const f of rev) if (f.type === 'poly' && inPoly(f.pts, x, y)) return f;
+  return null;
+}
+
+/* ---------- the three rings ---------- */
+const none = () => ({type: 'choice', items: [{key: 'none', label: 'بلا قيمة'}], index: 0, dim: true});
+const other = () => ({type: 'choice', layer: true, items: [{key: 'roads', label: 'الطرق'}], index: 0});
+const VERBS = [
+  {key: 'buffer', label: 'حرم', param: {type: 'scale', min: 1, max: 100, step: 1, k: 3, minor: 1, major: 10, unit: ' م', value: 10, fine: true}},
+  {key: 'split', label: 'تقسيم', param: {type: 'scale', min: 2, max: 12, step: 1, k: 30, minor: 1, major: 1, unit: ' أجزاء', value: 3}},
+  {key: 'union', label: 'دمج', param: none()},
+  {key: 'intersect', label: 'تقاطع', param: other()},
+  {key: 'erase', label: 'طرح', param: other()},
+  {key: 'select', label: 'تحديد', param: other()},
+  {key: 'rotate', label: 'تدوير', param: {type: 'scale', min: -180, max: 180, step: 1, k: 1, minor: 5, major: 30, unit: '°', value: 30, fine: true}},
+  {key: 'scale', label: 'تكبير', param: {type: 'scale', min: 25, max: 300, step: 1, k: 1, minor: 5, major: 25, unit: '٪', value: 150}},
+  {key: 'centroid', label: 'المركز', param: none()},
+  {key: 'hull', label: 'غلاف', param: {type: 'choice', items: [{key: 'all', label: 'للكل معًا'}, {key: 'each', label: 'لكل عنصر'}], index: 0}},
+  {key: 'measure', label: 'قياس', param: {type: 'choice', items: [{key: 'm2', label: 'م²'}, {key: 'ha', label: 'هكتار'}, {key: 'ft2', label: 'قدم²'}], index: 0}}];
+VERBS.forEach(v => { const p = v.param; p.angle = p.type === 'scale' ? (p.value - p.min) * p.k : 0; });
+const verbOf = k => VERBS.find(v => v.key === k);
+const R = [{type: 'choice', items: [{key: 'sel', label: 'المحدَّد'}], index: 0, angle: 0}, {type: 'choice', items: VERBS, index: 0, angle: 0}, VERBS[0].param];
+const RR = [[50, 94], [96, 142], [144, 190]];
+let focusRing = 2;
+const keyOf = ring => ring.items[ring.index] ? ring.items[ring.index].key : null;
+function setKey(ring, key) {
+  let i = ring.items.findIndex(x => x.key === key);
+  if (i < 0) i = 0;
+  ring.index = i; ring.angle = -i * 360 / ring.items.length;
+}
+/* the layers the rings offer follow the map: new layers, and the output of the step before */
+function syncRings() {
+  const res = layers.filter(l => !l.base).slice(-2).map(l => ({key: l.key, label: l.short}));
+  const prev = chain.length ? [{key: 'prev', label: 'الناتج'}] : [];
+  const base = BASE.map(l => ({key: l.key, label: l.name}));
+  const put = (ring, items) => { const k = keyOf(ring); ring.items = items; setKey(ring, k); };
+  put(R[0], [{key: 'sel', label: 'المحدَّد'}, ...base, {key: 'visible', label: 'الظاهر'}, ...res, ...prev]);
+  VERBS.forEach(v => { if (v.param.layer) put(v.param, [{key: 'sel', label: 'المحدَّد'}, ...base, ...res, ...prev]); });
+  buildRing(0); buildRing(2);
+}
+
+const NS = 'http://www.w3.org/2000/svg';
+const el = (n, a, p) => { const e = document.createElementNS(NS, n); for (const k in a) e.setAttribute(k, a[k]); if (p) p.appendChild(e); return e; };
+const P = (r, t) => { t = t * Math.PI / 180; return [r * Math.sin(t), -r * Math.cos(t)]; };
+const G = [], FR = [];
+(function plate() {
+  el('circle', {r: 199, class: 'plate'}, disc);
+  for (let d = 0; d < 360; d += 5) { const a = P(192, d), b = P(d % 30 ? 196 : 199, d); el('line', {x1: a[0], y1: a[1], x2: b[0], y2: b[1], class: 'limb'}, disc); }
+  RR.forEach((r, i) => el('circle', {r: (r[0] + r[1]) / 2, 'stroke-width': r[1] - r[0], class: 'band b' + (i + 1)}, disc));
+  const a = P(50, -15), b = P(190, -15), c = P(190, 15), d = P(50, 15);
+  el('path', {class: 'wedge', d: `M${a} L${b} A190 190 0 0 1 ${c} L${d} A50 50 0 0 0 ${a} Z`}, disc);
+  for (let i = 0; i < 3; i++) G.push(el('g', {}, disc));
+  el('line', {x1: 0, y1: -173, x2: 0, y2: -192, class: 'index'}, disc);
+  el('path', {class: 'ptr', d: 'M-7 -200 L7 -200 L0 -188 Z'}, disc);
+  RR.forEach(r => { const g = el('g', {class: 'fr'}, disc); el('circle', {r: r[0]}, g); el('circle', {r: r[1]}, g); FR.push(g); });
+  el('circle', {r: 44, class: 'hub'}, disc);
+  el('text', {class: 'hubt', y: -3}, disc).textContent = 'نفّذ';
+  el('text', {class: 'hubs', y: 22}, disc).textContent = 'Enter';
+})();
+
+function buildRing(z) {
+  const g = G[z], ring = R[z], rm = (RR[z][0] + RR[z][1]) / 2;
+  g.textContent = ''; ring.labs = [];
+  g.setAttribute('class', ring.dim ? 'dim' : '');
+  if (ring.type === 'choice') {
+    const n = ring.items.length, step = 360 / n;
+    ring.cls = 'lab' + (n > 6 && z === 0 ? ' sm' : '');
+    ring.items.forEach((it, i) => {
+      if (n > 1) { const a = P(RR[z][0] + 5, (i + .5) * step), b = P(RR[z][1] - 5, (i + .5) * step); el('line', {x1: a[0], y1: a[1], x2: b[0], y2: b[1], class: 'sep'}, g); }
+      const t = el('text', {class: ring.cls}, g); t.textContent = it.label;
+      ring.labs.push({el: t, L: i * step, r: rm});
+    });
+  } else {
+    const count = Math.round((ring.max - ring.min) / ring.minor), full = (ring.max - ring.min) * ring.k >= 360;
+    for (let i = 0; i <= count; i++) {
+      const v = ring.min + i * ring.minor, L = -(v - ring.min) * ring.k, maj = v % ring.major === 0;
+      if (full && i === count) break;
+      const a = P(maj ? 176 : 182, L), b = P(189, L);
+      el('line', {x1: a[0], y1: a[1], x2: b[0], y2: b[1], class: 'tick' + (maj ? ' maj' : '')}, g);
+      if (maj) { const t = el('text', {class: 'num'}, g); t.textContent = v; ring.labs.push({el: t, L, r: 162}); }
+    }
+  }
+  applyAngle(z);
+}
+function applyAngle(z) {
+  const ring = R[z];
+  G[z].setAttribute('transform', `rotate(${ring.angle})`);
+  ring.labs.forEach((lab, i) => {
+    const flip = Math.abs(norm(lab.L + ring.angle)) > 90;
+    lab.el.setAttribute('transform', `rotate(${lab.L}) translate(0 ${-lab.r}) rotate(${flip ? 180 : 0})`);
+    if (ring.type === 'choice') lab.el.setAttribute('class', ring.cls + (i === ring.index ? ' on' : ''));
+  });
+}
+function tween(z, to) {
+  const ring = R[z], from = ring.angle, t0 = performance.now();
+  cancelAnimationFrame(ring.tw);
+  if (reduced || Math.abs(to - from) < .01) { ring.angle = to; applyAngle(z); return; }
+  const step = t => {
+    const u = Math.min(1, (t - t0) / 190), e = 1 - Math.pow(1 - u, 3);
+    ring.angle = from + (to - from) * e;
+    if (R[z] === ring) applyAngle(z);
+    if (u < 1) ring.tw = requestAnimationFrame(step);
+  };
+  ring.tw = requestAnimationFrame(step);
+}
+function settle(z) {
+  const ring = R[z];
+  if (ring.type === 'choice') tween(z, ring.angle + norm(-ring.index * 360 / ring.items.length - ring.angle));
+  else tween(z, (ring.value - ring.min) * ring.k);
+}
+/* a verb that works with another layer cannot work with its own target: move the target aside */
+function apart() {
+  const p = VERBS[R[1].index].param;
+  if (!p.layer || VERBS[R[1].index].key === 'select' || keyOf(R[0]) !== keyOf(p)) return;
+  setKey(R[0], keyOf(p) === 'parcels' ? 'roads' : 'parcels'); buildRing(0);
+}
+function changed(z) {
+  if (z === 1) { R[2] = VERBS[R[1].index].param; apart(); buildRing(2); }
+  refresh();
+}
+function setIndex(z, i) {
+  const ring = R[z], j = mod(i, ring.items.length);
+  if (ring.dim) return;
+  if (j !== ring.index) { ring.index = j; changed(z); }
+  settle(z);
+}
+const snapTo = (v, q) => parseFloat((Math.round(v / q) * q).toFixed(2));
+function setValue(v, q) {
+  const ring = R[2];
+  if (ring.type !== 'scale' || isNaN(v)) return;
+  v = clamp(snapTo(v, q || ring.step), ring.min, ring.max);
+  if (v !== ring.value) { ring.value = v; changed(2); }
+  settle(2);
+}
+function stepRing(z, dir, fine) {
+  const ring = R[z];
+  if (ring.type === 'choice') setIndex(z, ring.index + dir);
+  else { const q = fine && ring.fine ? ring.step / 10 : ring.step; setValue(ring.value + dir * q, q); }
+}
+function rotateBy(z, d, fine) {
+  const ring = R[z];
+  if (ring.dim) return;
+  cancelAnimationFrame(ring.tw);
+  if (ring.type === 'choice') {
+    const n = ring.items.length;
+    ring.angle += d;
+    const i = mod(Math.round(-ring.angle / (360 / n)), n);
+    if (i !== ring.index) { ring.index = i; changed(z); }
+  } else {
+    fine = fine && ring.fine;
+    ring.angle = clamp(ring.angle + d * (fine ? .1 : 1), 0, (ring.max - ring.min) * ring.k);
+    const v = clamp(snapTo(ring.min + ring.angle / ring.k, fine ? ring.step / 10 : ring.step), ring.min, ring.max);
+    if (v !== ring.value) { ring.value = v; changed(z); }
+  }
+  applyAngle(z);
+}
+function clickRing(z, th) {
+  const ring = R[z];
+  if (ring.type === 'choice') setIndex(z, Math.round(norm(th - ring.angle) / (360 / ring.items.length)));
+  else setValue(ring.value - norm(th) / ring.k);
+}
+function markFocus() { FR.forEach((g, i) => g.setAttribute('class', 'fr' + (i === focusRing ? ' on' : ''))); }
+
+/* ---------- steps: read from the rings, put back on the rings, said as a sentence ---------- */
+function curStep() {
+  const v = VERBS[R[1].index], p = v.param, st = {t: keyOf(R[0]), v: v.key};
+  if (p.type === 'scale') st.val = p.value; else if (p.layer) st.other = keyOf(p); else st.opt = keyOf(p);
+  return st;
+}
+function loadStep(st) {
+  setKey(R[0], st.t);
+  R[1].index = Math.max(0, VERBS.findIndex(v => v.key === st.v)); R[1].angle = -R[1].index * 360 / VERBS.length;
+  const p = VERBS[R[1].index].param;
+  if (p.type === 'scale') { p.value = st.val; p.angle = (p.value - p.min) * p.k; } else setKey(p, p.layer ? st.other : st.opt);
+  R[2] = p;
+  for (let z = 0; z < 3; z++) buildRing(z);
+}
+const lname = k => { const l = layers.find(x => x.key === k); return l ? l.name : 'محذوفة'; };
+const tname = (k, n) => k === 'sel' ? `العناصر المحددة (${n})` : k === 'visible' ? `كل ما يظهر في الخريطة (${n})` : k === 'prev' ? `ناتج الخطوة السابقة (${n})` : `طبقة ${lname(k)} (${n})`;
+const oname = k => k === 'sel' ? 'العناصر المحددة' : k === 'prev' ? 'ناتج الخطوة السابقة' : `طبقة ${lname(k)}`;
+function valText(st) {
+  const p = verbOf(st.v).param;
+  if ('val' in st) return st.v === 'rotate' ? `<span dir="ltr" style="unicode-bidi:isolate">${fmt(st.val, 2)}°</span>` : fmt(st.val, 2) + p.unit;
+  if ('other' in st) return oname(st.other);
+  return (p.items.find(x => x.key === st.opt) || p.items[0]).label;
+}
+function stepHtml(st, o, edit) {
+  const T = ['t1', tname(st.t, o ? o.n : 0)], val = ['t3', valText(st)], N = ['x', '← طبقة جديدة'];
+  const parts = {
+    buffer: [['t2', 'حرم'], val, ['x', 'حول'], T, N],
+    split: [['t2', 'تقسيم'], T, ['x', 'إلى'], val, ['x', 'متساوية المساحة']],
+    union: [['t2', 'دمج'], T, ['x', 'في شكل واحد'], N],
+    intersect: [['t2', 'تقاطع'], T, ['x', 'مع'], val, N],
+    erase: [['t2', 'طرح'], val, ['x', 'من'], T, N],
+    select: [['t2', 'تحديد'], ['x', 'ما يلامس'], val, ['x', 'من'], T],
+    rotate: [['t2', 'تدوير'], T, ['x', 'بزاوية'], val],
+    scale: [['t2', 'تغيير حجم'], T, ['x', 'إلى'], val],
+    centroid: [['t2', 'نقطة المركز'], ['x', 'لكل عنصر من'], T, N],
+    hull: [['t2', 'غلاف'], ['x', 'حول'], T, val, N],
+    measure: [['t2', 'قياس'], T, ['x', 'بوحدة'], val]}[st.v];
+  return parts.map(([c, t]) => c === 't3' && edit && 'val' in st
+    ? `<button type="button" class="t3" id="valBtn" title="انقر لكتابة قيمة دقيقة">${t}</button>` : `<span class="${c}">${t}</span>`).join(' ');
+}
+const stepsHtml = (steps, outs) => steps.map((st, i) => stepHtml(st, outs && outs[i], false)).join(' <span class="x">، ثم</span> ');
+function updateSentence() {
+  if (astro.hidden || !pv) return;
+  const steps = [...chain, curStep()], last = steps.length - 1, o = pv.outs[last];
+  let h = '';
+  steps.forEach((st, i) => {
+    const no = steps.length > 1 ? `<span class="no">${i + 1}</span>` : '';
+    h += i < last ? `<div class="past">${no}${stepHtml(st, pv.outs[i], false)}</div>` : `<div>${no}${stepHtml(st, o, true)}</div>`;
+  });
+  if (o.err) h += `<div class="note err">${o.err}</div>`; else if (o.note) h += `<div class="note">${o.note}</div>`;
+  sentence.innerHTML = h;
+  $('backBtn').hidden = !chain.length;
+}
+function layerName(st) {
+  const v = fmt(st.val || 0, 2);
+  const m = {buffer: [`حرم ${v} م`, `حرم ${v}`], union: ['دمج', 'دمج'], intersect: ['تقاطع', 'تقاطع'], erase: ['طرح', 'طرح'], centroid: ['مراكز', 'مراكز'], hull: ['غلاف', 'غلاف']}[st.v] || ['ناتج', 'ناتج'];
+  const same = layers.filter(l => l.short === m[1] || (l.short || '').startsWith(m[1] + ' ')).length;
+  return same ? {name: `${m[0]} (${same + 1})`, short: `${m[1]} ${same + 1}`} : {name: m[0], short: m[1]};
+}
+const snapshot = () => JSON.stringify({feats, layers, labelSets, rc, history});
+function executeSteps(steps, htmlOf) {
+  const {work, outs} = run(steps, feats, env), bad = outs.find(o => o.err);
+  if (bad) { toast(bad.err); return false; }
+  undo.push(snapshot());
+  let wk = work, newest = null;
+  outs.forEach((o, i) => {
+    if (!o.made) return;
+    const nx = steps[i + 1], used = nx && (nx.t === 'prev' || nx.other === 'prev') && (outs[i + 1].made || nx.v === 'select');
+    if (used) { wk = wk.filter(f => f.layer !== '~' + i); return; }   // a stepping stone, not a result
+    const key = 'r' + (++rc);
+    layers.push({key, ...layerName(steps[i])});
+    wk.forEach(f => { if (f.layer === '~' + i) f.layer = key; });
+    newest = key;
+  });
+  feats = wk;
+  outs.forEach((o, i) => { if (steps[i].v === 'measure') labelSets.push({name: 'قياسات', labels: o.labels}); });
+  const said = htmlOf || stepsHtml(steps, outs);
+  history.push({steps: JSON.parse(JSON.stringify(steps)), html: said});
+  chain = []; astro.hidden = true; $('openBtn').textContent = 'افتح الأسطرلاب';
+  syncRings();
+  if (newest) { VERBS.forEach(v => { if (v.param.layer) setKey(v.param, newest); }); buildRing(2); }
+  legend(); hist(); refresh();
+  toast('تم: ' + said, true);
+  return true;
+}
+const execute = () => executeSteps([...chain, curStep()]);
+function then() {
+  if (!pv) return;
+  const o = pv.outs[pv.outs.length - 1];
+  if (o.err) { toast(o.err); return; }
+  chain.push(curStep());
+  syncRings();
+  setKey(R[0], 'prev'); VERBS.forEach(v => { if (v.param.layer) setKey(v.param, 'prev'); });
+  apart(); buildRing(0); buildRing(2);
+  refresh();
+}
+function back() {
+  const st = chain.pop();
+  if (!st) return;
+  syncRings(); loadStep(st); refresh();
+}
+function loadSteps(steps) {
+  chain = JSON.parse(JSON.stringify(steps.slice(0, -1)));
+  syncRings(); loadStep(steps[steps.length - 1]);
+  if (astro.hidden) openBySelection(); else refresh();
+}
+function doUndo() {
+  const s = undo.pop();
+  if (!s) return;
+  const d = JSON.parse(s);
+  feats = d.feats; layers = d.layers; labelSets = d.labelSets; rc = d.rc; history = d.history;
+  toastEl.hidden = true; syncRings(); legend(); hist(); refresh();
+}
+
+/* ---------- drawing ---------- */
+function tokens() {
+  const cs = getComputedStyle(document.documentElement), g = n => cs.getPropertyValue(n).trim();
+  C = {map: g('--map'), parcel: g('--parcel'), pline: g('--parcel-line'), road: g('--road'), mark: g('--road-mark'), tree: g('--tree'),
+       accent: g('--accent'), ghost: g('--ghost'), result: g('--result'), ink: g('--ink'), dim: g('--dim'), panel: g('--panel'), line: g('--line')};
+}
+const world = g => g.setTransform(DPR * view.s, 0, 0, DPR * view.s, -view.ox * view.s * DPR, -view.oy * view.s * DPR);
+const screen = g => g.setTransform(DPR, 0, 0, DPR, 0, 0);
+function path(g, f) {
+  g.beginPath();
+  const ring = (pts, close) => { pts.forEach((p, i) => i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])); if (close) g.closePath(); };
+  ring(f.pts, f.type === 'poly');
+  if (f.type === 'poly' && f.holes) for (const h of f.holes) ring(h, true);
+}
+function drawGeoms(geoms, color, ghost, a) {
+  world(ctx);
+  const px = 1 / view.s;
+  for (const f of geoms) {
+    ctx.strokeStyle = color; ctx.fillStyle = color; ctx.globalAlpha = a;
+    if (f.type === 'point') {
+      ctx.setLineDash([]); ctx.beginPath(); ctx.arc(f.pts[0][0], f.pts[0][1], 4.5 * px, 0, 7); ctx.fill();
+      ctx.strokeStyle = C.panel; ctx.lineWidth = 1.5 * px; ctx.stroke();
+    } else {
+      path(ctx, f);
+      if (f.type === 'poly') { ctx.globalAlpha = a * (ghost ? .19 : .14); ctx.fill('evenodd'); ctx.globalAlpha = a; }
+      ctx.lineWidth = (f.type === 'line' ? 2.4 : 1.8) * px; ctx.setLineDash(ghost ? [7 * px, 4 * px] : []); ctx.stroke();
+    }
+  }
+  ctx.setLineDash([]); ctx.globalAlpha = 1;
+}
+function drawLabels(labels, color) {
+  screen(ctx);
+  ctx.font = `600 12px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.direction = 'rtl'; ctx.lineJoin = 'round';
+  for (const l of labels) {
+    const s = toScreen(l.p);
+    ctx.strokeStyle = C.panel; ctx.lineWidth = 3.5; ctx.strokeText(l.text, s[0], s[1]);
+    ctx.fillStyle = color; ctx.fillText(l.text, s[0], s[1]);
+  }
+}
+function drawGhost(o, a) {
+  const px = 1 / view.s;
+  if (o.err) return;
+  drawGeoms(o.geoms, C.ghost, true, a);
+  if (o.sel.length) {
+    world(ctx); ctx.strokeStyle = C.ghost; ctx.globalAlpha = a; ctx.lineWidth = 3 * px;
+    for (const f of o.sel) { if (f.type === 'point') { ctx.beginPath(); ctx.arc(f.pts[0][0], f.pts[0][1], 7 * px, 0, 7); } else path(ctx, f); ctx.stroke(); }
+    ctx.globalAlpha = 1;
+  }
+  if (o.pivot) { const s = toScreen(o.pivot); screen(ctx); ctx.strokeStyle = C.ghost; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(s[0] - 6, s[1]); ctx.lineTo(s[0] + 6, s[1]); ctx.moveTo(s[0], s[1] - 6); ctx.lineTo(s[0], s[1] + 6); ctx.stroke(); }
+  if (a === 1) drawLabels(o.labels, C.ghost);
+}
+function draw() {
+  if (!W) return;
+  const px = 1 / view.s;
+  screen(ctx); ctx.globalAlpha = 1; ctx.fillStyle = C.map; ctx.fillRect(0, 0, W, H);
+  // the survey grid: a small cross every 50 m (100 m when zoomed out)
+  const gs = view.s * 50 > 44 ? 50 : 100, a = toWorld(0, 0), z = toWorld(W, H);
+  ctx.strokeStyle = C.pline; ctx.globalAlpha = .55; ctx.lineWidth = 1; ctx.beginPath();
+  for (let x = Math.ceil(a[0] / gs) * gs; x < z[0]; x += gs) for (let y = Math.ceil(a[1] / gs) * gs; y < z[1]; y += gs) {
+    const s = toScreen([x, y]); ctx.moveTo(s[0] - 4, s[1]); ctx.lineTo(s[0] + 4, s[1]); ctx.moveTo(s[0], s[1] - 4); ctx.lineTo(s[0], s[1] + 4);
+  }
+  ctx.stroke(); ctx.globalAlpha = 1;
+  world(ctx); ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  const roads = feats.filter(f => f.layer === 'roads' && f.type === 'line');
+  for (const f of roads) { path(ctx, f); ctx.strokeStyle = C.road; ctx.lineWidth = 10; ctx.stroke(); }
+  ctx.lineCap = 'butt';
+  for (const f of roads) { path(ctx, f); ctx.strokeStyle = C.mark; ctx.lineWidth = 1.2 * px; ctx.setLineDash([5, 5]); ctx.stroke(); }
+  ctx.setLineDash([]);
+  for (const f of feats) if (f.layer === 'parcels' && f.type === 'poly') { path(ctx, f); ctx.fillStyle = C.parcel; ctx.fill('evenodd'); ctx.strokeStyle = C.pline; ctx.lineWidth = 1 * px; ctx.stroke(); }
+  for (const f of feats) if (f.layer === 'trees' && f.type === 'point') { ctx.beginPath(); ctx.arc(f.pts[0][0], f.pts[0][1], 3.6 * px, 0, 7); ctx.fillStyle = C.tree; ctx.fill(); }
+  const isBase = f => (f.layer === 'roads' && f.type === 'line') || (f.layer === 'parcels' && f.type === 'poly') || (f.layer === 'trees' && f.type === 'point');
+  drawGeoms(feats.filter(f => !isBase(f)), C.result, false, 1);
+  world(ctx);
+  for (const f of feats) if (f.sel) {
+    ctx.strokeStyle = C.accent; ctx.fillStyle = C.accent;
+    if (f.type === 'point') { ctx.beginPath(); ctx.arc(f.pts[0][0], f.pts[0][1], 6.5 * px, 0, 7); ctx.lineWidth = 2 * px; ctx.stroke(); }
+    else { path(ctx, f); if (f.type === 'poly') { ctx.globalAlpha = .22; ctx.fill('evenodd'); ctx.globalAlpha = 1; } ctx.lineWidth = (f.type === 'line' ? 3 : 2.2) * px; ctx.stroke(); }
+  }
+  for (const set of labelSets) drawLabels(set.labels, C.result);
+  if (pv) pv.outs.forEach((o, i) => drawGhost(o, i === pv.outs.length - 1 ? 1 : .45));
+  // scale bar
+  screen(ctx);
+  const len = [500, 200, 100, 50, 20, 10, 5, 2, 1].find(l => l * view.s <= 130) || 1, wpx = len * view.s, y = H - 16;
+  ctx.strokeStyle = C.ink; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(60, y - 5); ctx.lineTo(60, y); ctx.lineTo(60 + wpx, y); ctx.lineTo(60 + wpx, y - 5); ctx.stroke();
+  ctx.font = `500 11.5px ${FONT}`; ctx.fillStyle = C.ink; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.direction = 'rtl';
+  ctx.fillText(len + ' م', 60 + wpx / 2, y - 3);
+}
+/* everything shown follows the state: the preview of the steps, the sentence, the map */
+function refresh() {
+  pv = astro.hidden ? null : run([...chain, curStep()], feats, env);
+  updateSentence(); draw();
+}
+function legend() {
+  const n = k => feats.filter(f => f.layer === k).length, cls = {parcels: '', roads: 'road', trees: 'tree'};
+  $('layers').innerHTML = layers.map(l => l.base ? `<li><i class="${cls[l.key]}"></i><span>${l.name} (${n(l.key)})</span></li>`
+    : `<li class="res"><i class="res"></i><span>${l.name} (${n(l.key)})</span><button type="button" data-del="${l.key}" aria-label="حذف الطبقة ${l.name}">×</button></li>`).join('') +
+    labelSets.map((s, i) => `<li class="res"><i class="res"></i><span>${s.name} (${s.labels.length})</span><button type="button" data-lab="${i}" aria-label="حذف القياسات">×</button></li>`).join('');
+  $('undoBtn').disabled = !undo.length;
+  $('againBtn').disabled = !history.length;
+}
+$('layers').addEventListener('click', e => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  undo.push(snapshot());
+  if (b.dataset.del) { feats = feats.filter(f => f.layer !== b.dataset.del); layers = layers.filter(l => l.key !== b.dataset.del); }
+  else labelSets.splice(+b.dataset.lab, 1);
+  syncRings(); legend(); refresh();
+});
+function hist() {
+  $('hist').innerHTML = history.slice(-4).map((h, i, a) => `<button type="button" data-h="${history.length - a.length + i}" title="انقر لإعادة فتح هذا الأمر">${h.html}</button>`).join('');
+}
+$('hist').addEventListener('click', e => { const b = e.target.closest('button'); if (b) loadSteps(history[+b.dataset.h].steps); });
+let toastT = 0;
+function toast(html, withUndo) {
+  toastEl.innerHTML = `<span>${html}</span>` + (withUndo ? '<button type="button" id="toastUndo">تراجع</button>' : '');
+  toastEl.hidden = false;
+  clearTimeout(toastT); toastT = setTimeout(() => { toastEl.hidden = true; }, 6500);
+}
+toastEl.addEventListener('click', e => { if (e.target.id === 'toastUndo') doUndo(); });
+
+/* ---------- opening and placing the astrolabe ---------- */
+let astroPos = {x: 0, y: 0}, D = 380;
+const discSize = () => W < 560 ? Math.min(W - 16, 330) : clamp(Math.min(W, H) * .5, 300, 400);
+function placeAstro(l, t) {
+  l = clamp(l, 8, Math.max(8, W - D - 8)); t = clamp(t, 8, Math.max(8, H - D - 8));
+  astroPos = {x: l, y: t};
+  astro.style.left = l + 'px'; astro.style.top = t + 'px';
+  astro.classList.toggle('below', t < 60 + 26 * chain.length);
+}
+function openAstro(x, y) {
+  D = discSize();
+  astro.hidden = false; astro.style.width = D + 'px';
+  let cx = x, cy = y;
+  if (W < 560) { cx = W / 2; cy = H - D / 2 - 8; }
+  else {
+    const T = resolve(keyOf(R[0]), feats, null, env);
+    if (T.length && T.length < feats.length / 2) {
+      // beside what it works on, so the preview stays in sight
+      const b = bbox(T), p0 = toScreen([b.x0, b.y0]), p1 = toScreen([b.x1, b.y1]), mx = (p0[0] + p1[0]) / 2, my = (p0[1] + p1[1]) / 2, gap = 34;
+      const cands = [[p1[0] + D / 2 + gap, my], [p0[0] - D / 2 - gap, my], [mx, p1[1] + D / 2 + gap], [mx, p0[1] - D / 2 - gap - 50]]
+        .filter(c => c[0] - D / 2 >= 8 && c[0] + D / 2 <= W - 8 && c[1] - D / 2 >= 60 && c[1] + D / 2 <= H - 8)
+        .sort((u, v) => (u[0] === mx ? 1e4 : 0) + Math.hypot(u[0] - x, u[1] - y) - (v[0] === mx ? 1e4 : 0) - Math.hypot(v[0] - x, v[1] - y));
+      if (cands.length) { cx = cands[0][0]; cy = cands[0][1]; }
+    }
+  }
+  placeAstro(cx - D / 2, cy - D / 2);
+  $('openBtn').textContent = 'أغلق الأسطرلاب';
+  markFocus(); refresh();
+}
+function closeAstro() { astro.hidden = true; chain = []; syncRings(); $('openBtn').textContent = 'افتح الأسطرلاب'; refresh(); }
+function fit() {
+  // on a wide screen the map keeps clear of a strip at the side, where the astrolabe can stand
+  const b = bbox(feats), h = W < 560 ? Math.max(120, H - discSize() - 70) : H, dock = W >= 900 ? discSize() + 40 : 0, w = W - dock;
+  view.s = Math.min(w / (b.x1 - b.x0), h / (b.y1 - b.y0)) * .84;
+  view.ox = (b.x0 + b.x1) / 2 - (dock + w / 2) / view.s; view.oy = (b.y0 + b.y1) / 2 - h / 2 / view.s;
+}
+function openBySelection() {
+  const T = feats.filter(f => f.sel);
+  if (T.length) { const b = bbox(T), s = toScreen([(b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2]); openAstro(s[0], s[1]); }
+  else openAstro(W * .3, H / 2);
+}
+function zoomAt(x, y, f) {
+  const w = toWorld(x, y);
+  view.s = clamp(view.s * f, .4, 14);
+  view.ox = w[0] - x / view.s; view.oy = w[1] - y / view.s;
+  refresh();
+}
+
+/* ---------- the map's pointer ---------- */
+let pd = null, lp = 0, lastPt = {x: 200, y: 200};
+const pt = e => { const r = cv.getBoundingClientRect(); return {x: e.clientX - r.left, y: e.clientY - r.top}; };
+cv.addEventListener('pointerdown', e => {
+  if (e.button !== 0) return;
+  cv.setPointerCapture(e.pointerId);
+  const p = pt(e);
+  pd = {x: p.x, y: p.y, ox: view.ox, oy: view.oy, moved: false, long: false};
+  if (e.pointerType !== 'mouse') lp = setTimeout(() => { if (pd && !pd.moved) { pd.long = true; openAstro(p.x, p.y); } }, 500);
+});
+cv.addEventListener('pointermove', e => {
+  const p = pt(e); lastPt = p;
+  if (!pd || pd.long) return;
+  const dx = p.x - pd.x, dy = p.y - pd.y;
+  if (!pd.moved && Math.hypot(dx, dy) < 5) return;
+  pd.moved = true; clearTimeout(lp);
+  view.ox = pd.ox - dx / view.s; view.oy = pd.oy - dy / view.s;
+  refresh();
+});
+const endMap = e => {
+  clearTimeout(lp);
+  const g = pd; pd = null;
+  if (!g || g.moved || g.long || e.type === 'pointercancel') return;
+  const w = toWorld(g.x, g.y), f = hit(w[0], w[1]);
+  if (f) { f.sel = !f.sel; refresh(); }
+};
+cv.addEventListener('pointerup', endMap); cv.addEventListener('pointercancel', endMap);
+cv.addEventListener('wheel', e => { e.preventDefault(); const p = pt(e); zoomAt(p.x, p.y, Math.exp(-e.deltaY * .0015)); }, {passive: false});
+cv.addEventListener('contextmenu', e => { e.preventDefault(); const p = pt(e); openAstro(p.x, p.y); });
+astro.addEventListener('contextmenu', e => e.preventDefault());
+
+/* ---------- the astrolabe's pointer ---------- */
+let drag = null;
+function polar(e) {
+  const r = disc.getBoundingClientRect(), k = 400 / r.width, x = (e.clientX - r.left) * k - 200, y = (e.clientY - r.top) * k - 200;
+  return {r: Math.hypot(x, y), th: Math.atan2(x, -y) * 180 / Math.PI};
+}
+function zone(r) {
+  if (r < 46) return -1;
+  const i = RR.findIndex(b => r >= b[0] - 2 && r <= b[1] + 2);
+  return i < 0 ? null : i;
+}
+disc.addEventListener('pointerdown', e => {
+  if (e.button === 2) return;
+  const q = polar(e), z = zone(q.r);
+  if (z === null) return;
+  e.preventDefault(); disc.setPointerCapture(e.pointerId);
+  drag = {z, last: q.th, start: q.th, moved: 0, sx: e.clientX, sy: e.clientY, ax: astroPos.x, ay: astroPos.y, moving: false};
+  if (z >= 0) { focusRing = z; markFocus(); disc.style.cursor = 'grabbing'; }
+});
+disc.addEventListener('pointermove', e => {
+  if (!drag) return;
+  if (drag.z === -1) {
+    const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
+    if (drag.moving || Math.hypot(dx, dy) > 5) { drag.moving = true; placeAstro(drag.ax + dx, drag.ay + dy); }
+    return;
+  }
+  const q = polar(e), d = norm(q.th - drag.last);
+  drag.last = q.th; drag.moved += Math.abs(d);
+  if (drag.moved >= 2) rotateBy(drag.z, d, e.shiftKey);
+});
+const endDisc = e => {
+  if (!drag) return;
+  const g = drag; drag = null; disc.style.cursor = '';
+  if (g.z === -1) { if (!g.moving && e.type === 'pointerup') execute(); return; }
+  if (g.moved < 2 && e.type === 'pointerup') clickRing(g.z, g.start); else settle(g.z);
+};
+disc.addEventListener('pointerup', endDisc); disc.addEventListener('pointercancel', endDisc);
+disc.addEventListener('wheel', e => {
+  e.preventDefault();
+  const z = zone(polar(e).r);
+  if (z === null || z < 0) return;
+  focusRing = z; markFocus(); stepRing(z, e.deltaY > 0 ? 1 : -1, e.shiftKey);
+}, {passive: false});
+
+/* the value in the sentence: click it to type an exact number */
+sentence.addEventListener('click', e => {
+  if (e.target.id !== 'valBtn') return;
+  const p = R[2];
+  e.target.outerHTML = `<input id="valIn" type="number" inputmode="decimal" min="${p.min}" max="${p.max}" step="any" value="${p.value}" aria-label="القيمة">`;
+  const inp = $('valIn'); inp.focus(); inp.select();
+  let over = false;
+  const done = ok => { if (over) return; over = true; if (ok) setValue(parseFloat(inp.value), p.fine ? .01 : p.step); updateSentence(); };
+  inp.addEventListener('keydown', k => { if (k.key === 'Enter') { k.preventDefault(); k.stopPropagation(); done(true); } else if (k.key === 'Escape') { k.stopPropagation(); done(false); } });
+  inp.addEventListener('blur', () => done(true));
+});
+
+/* ---------- keys and buttons ---------- */
+function again() { if (history.length) executeSteps(history[history.length - 1].steps); }
+function demo() {
+  // how much of each parcel a wider road takes: three steps, one sentence
+  loadSteps([{t: 'roads', v: 'buffer', val: 15}, {t: 'parcels', v: 'intersect', other: 'prev'}, {t: 'prev', v: 'measure', opt: 'm2'}]);
+  if (W >= 900) placeAstro(20, (H - D) / 2 + 20);
+}
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
+  const k = e.key, onBtn = e.target.tagName === 'BUTTON';
+  if ((e.ctrlKey || e.metaKey) && k.toLowerCase() === 'z') { e.preventDefault(); doUndo(); return; }
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (astro.hidden) {
+    if (k === ' ' && !onBtn) { e.preventDefault(); openAstro(lastPt.x, lastPt.y); }
+    else if (k.toLowerCase() === 'r' || k === 'ق') again();
+    return;
+  }
+  if (k === 'Escape') closeAstro();
+  else if (k === 'Enter' && !onBtn) { if (e.shiftKey) then(); else execute(); }
+  else if (k === 'ArrowUp') { focusRing = Math.min(2, focusRing + 1); markFocus(); }
+  else if (k === 'ArrowDown') { focusRing = Math.max(0, focusRing - 1); markFocus(); }
+  else if (k === 'ArrowLeft' || k === 'ArrowRight') {
+    const left = k === 'ArrowLeft', scale = R[focusRing].type === 'scale';
+    stepRing(focusRing, scale ? (left ? 1 : -1) : (left ? -1 : 1), e.shiftKey);
+  } else return;
+  e.preventDefault();
+});
+$('openBtn').addEventListener('click', () => { if (astro.hidden) openBySelection(); else closeAstro(); });
+$('closeBtn').addEventListener('click', closeAstro);
+$('thenBtn').addEventListener('click', then);
+$('backBtn').addEventListener('click', back);
+$('demoBtn').addEventListener('click', demo);
+$('againBtn').addEventListener('click', again);
+$('undoBtn').addEventListener('click', doUndo);
+$('resetBtn').addEventListener('click', () => { build(); syncRings(); fit(); legend(); hist(); toastEl.hidden = true; astro.hidden = true; openBySelection(); });
+$('zin').addEventListener('click', () => zoomAt(W / 2, H / 2, 1.3));
+$('zout').addEventListener('click', () => zoomAt(W / 2, H / 2, 1 / 1.3));
+
+/* ---------- start ---------- */
+build();
+buildRing(1); syncRings();
+new ResizeObserver(() => {
+  const r = stage.getBoundingClientRect(), first = !W;
+  if (!r.width || !r.height) return;
+  W = r.width; H = r.height; DPR = window.devicePixelRatio || 1;
+  cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+  if (first) { tokens(); fit(); legend(); openBySelection(); if (location.hash === '#road-example') demo(); }
+  else { if (!astro.hidden) { D = discSize(); astro.style.width = D + 'px'; placeAstro(astroPos.x, astroPos.y); } refresh(); }
+}).observe(stage);
+const retheme = () => { tokens(); draw(); };
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', retheme);
+new MutationObserver(retheme).observe(document.documentElement, {attributes: true, attributeFilter: ['data-theme']});
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(draw);
+})();
+</script>
+</body>
+</html>

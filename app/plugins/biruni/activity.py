@@ -59,15 +59,24 @@ def storage_path(prj=None):
     return None
 
 
-class ActivityStore:
-    """Plain-SQLite access (a GeoPackage is an SQLite database)."""
+_READY = set()   # databases whose tables were made in this session
 
-    def __init__(self, path):
+
+class ActivityStore:
+    """Plain-SQLite access (a GeoPackage is an SQLite database).
+
+    ``timeout`` is how long to wait when the database is busy (layers of the same GeoPackage being saved):
+    the clock's writes wait a moment only and try again at the next tick - the window must not freeze."""
+
+    def __init__(self, path, timeout=15):
         self.path = path
+        self.timeout = timeout
 
     def _connect(self):
-        con = sqlite3.connect(self.path, timeout=15)
-        con.executescript(SCHEMA)
+        con = sqlite3.connect(self.path, timeout=self.timeout)
+        if self.path not in _READY:
+            con.executescript(SCHEMA)
+            _READY.add(self.path)
         return con
 
     def write(self, events, session_row, minutes):
@@ -208,7 +217,7 @@ class ActivityLogger(QObject):
         row = (self.session, self.user, self.machine, self.started, now() if ended else None,
                self.active_minutes, f"{APP_NAME} {VERSION}")
         try:
-            ActivityStore(path).write(self.pending, row, self.minutes)
+            ActivityStore(path, timeout=5 if ended else 0.3).write(self.pending, row, self.minutes)
             self.pending = []
         except sqlite3.Error:
             pass  # e.g. database busy - retried at the next tick

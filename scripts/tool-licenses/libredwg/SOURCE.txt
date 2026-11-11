@@ -1,0 +1,11 @@
+LibreDWG 0.14 - GNU General Public License version 3 or later (COPYING.txt).
+
+The programs in this folder (dwg2dxf, dxf2dwg, dwgread and libredwg-0.dll, with GNU libiconv) are the
+unmodified Windows build of the official LibreDWG 0.14 release:
+  https://github.com/LibreDWG/libredwg/releases/tag/0.14
+  binaries: libredwg-0.14-win64.zip (sha256 1ad7e15344d20b3426c3435b078d82fb84b35062815946b2cca9c5fc9810fea8)
+Their complete corresponding source code is the release's source archive:
+  https://github.com/LibreDWG/libredwg/releases/download/0.14/libredwg-0.14.tar.xz
+  (sha256 62ebb73b984f865960f20ed26619ea5f8789d5e3fd088fa40a2598384da81275)
+Biruni GIS also provides this source code on request, for at least three years from the release that ships it.
+GNU libiconv (libiconv-2.dll) is LGPL-2.1-or-later: https://www.gnu.org/software/libiconv/

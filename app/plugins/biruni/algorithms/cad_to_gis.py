@@ -134,14 +134,16 @@ class CadToGis(BiruniAlgorithm):
             "a polygon become its 'label', block inserts become points with the block name and its attributes "
             "as fields, and arcs stay true arcs. Lines drawn separately can also be joined into polygons. "
             "Choose one layer per geometry type, or one per CAD layer. Arabic texts, including Arabic keyboard "
-            "SHX fonts (xarb), are decoded. DWG: save it as DXF first, or use DWG / DXF Import.")
+            "SHX fonts (xarb), are decoded. AutoCAD DWG drawings (R13 to 2018) are read too: they are turned "
+            "into DXF first with LibreDWG, shipped with the program.")
 
     INPUT, CRS, SPLIT, LABELS, BUILD, CURVES, CLOSE_TOL, ENCODING, OUTPUT = (
         "INPUT", "CRS", "SPLIT", "LABELS", "BUILD_POLYGONS", "KEEP_CURVES", "CLOSE_TOLERANCE", "ENCODING", "OUTPUT")
 
     def initAlgorithm(self, config=None):  # noqa: N802
         self.addParameter(QgsProcessingParameterFile(
-            self.INPUT, tr("CAD drawing"), fileFilter="DXF (*.dxf *.DXF);;All files (*.*)"))
+            self.INPUT, tr("CAD drawing"),
+            fileFilter="AutoCAD (*.dxf *.DXF *.dwg *.DWG);;DXF (*.dxf *.DXF);;DWG (*.dwg *.DWG);;All files (*.*)"))
         self.addParameter(QgsProcessingParameterCrs(self.CRS, tr("Coordinate system of the drawing"),
                                                     "ProjectCrs"))
         self.addParameter(QgsProcessingParameterEnum(self.SPLIT, tr("Layers"), [tr(s) for s in SPLIT],
@@ -170,6 +172,28 @@ class CadToGis(BiruniAlgorithm):
         except OSError as e:
             raise QgsProcessingException(tr("Could not read {p}").format(p=f"{path}: {e}"))
         return drawing
+
+    def _from_dwg(self, path, feedback):
+        """The DXF of a DWG drawing, through LibreDWG."""
+        from ..dwg import core as dwg
+
+        ver = dwg.version_of(path)
+        try:
+            out = dwg.to_dxf(path, feedback=feedback)
+        except dwg.DwgError as e:
+            why = str(e)
+            if why == "missing":
+                raise QgsProcessingException(tr("LibreDWG, which reads DWG drawings, is not installed with the "
+                                                "program: save the drawing as DXF, or use DWG / DXF Import."))
+            if why == "not dwg":
+                raise QgsProcessingException(tr("This is not a DWG drawing."))
+            if why == "too old":
+                raise QgsProcessingException(tr("DWG drawings older than R13 cannot be read: save it as DXF."))
+            if why == "cancelled":
+                raise QgsProcessingException(tr("Cancelled."))
+            raise QgsProcessingException(tr("The DWG drawing could not be read: {e}").format(e=why))
+        feedback.pushInfo(tr("DWG drawing (AutoCAD {v}) read with LibreDWG.").format(v=dwg.NAMES.get(ver, ver)))
+        return out
 
     def _gdal_others(self, path, handles, feedback):
         """Geometries of the entity types read by GDAL (splines, ellipses, hatches…)."""
@@ -218,8 +242,7 @@ class CadToGis(BiruniAlgorithm):
         if not path or not os.path.exists(path):
             raise QgsProcessingException(tr("Could not read {p}").format(p=path))
         if path.lower().endswith(".dwg"):
-            raise QgsProcessingException(tr("Binary DXF and DWG files are not supported: save the drawing as an "
-                                            "ASCII DXF, or use DWG / DXF Import."))
+            path = self._from_dwg(path, feedback)
 
         drawing = self._read(path, encoding, feedback)
         feedback.pushInfo(tr("Drawing {v}, text encoding {e}, {n} entities.").format(

@@ -5,7 +5,8 @@ Collected: tr("…") calls, ribbon tab/group titles, command labels, algorithm
 NAME/GROUP/HELP attributes, option tables (ORDERS, FORMATS, *_UNITS) and the
 toolbox catalogue (CATEGORIES titles, COMMANDS label/help, LABELS).
 
-usage: python extract_strings.py <plugin dir> [i18n/ar.json]
+usage: python extract_strings.py <plugin dir> [i18n/ar.json ... | --all]
+       (several files or --all print one coverage line per language)
 """
 import ast
 import json
@@ -35,8 +36,12 @@ def first_strings(node, index=0):
 
 # option tables whose texts are shown through tr(): name -> which strings to take
 FIRST = {"ORDERS", "FORMATS", "AREA_UNITS", "LENGTH_UNITS", "TITLES", "EXAMPLES", "S2_PRODUCTS", "LEVELS", "SPLIT",
-         "MODES", "DIRECTIONS", "OUTPUTS", "METHODS", "COLS", "ACTIONS", "KINDS", "AUTO", "LABELS"}
-SECOND = {"CATEGORIES", "ENCODINGS", "OSM_SETS", "WORLDCOVER_CLASSES", "TABLES"}
+         "MODES", "DIRECTIONS", "OUTPUTS", "METHODS", "COLS", "ACTIONS", "KINDS", "AUTO", "LABELS", "RULES",
+         "KIND_LABELS", "GEOM_LABELS", "DIR_NAMES", "METHOD_NAMES", "KIND_NAMES", "VERDICTS",
+         "BASES", "FIX_LEVELS", "FIX_NAMES", "NOTATION_LABELS",
+         "ENCODING_CHOICES", "FONT_CHOICES", "STYLES", "ZONE_MODES", "COMMODITIES",
+         "THEMES", "PRODUCTS", "PROOFS", "STANDARD_NAMES", "TERRAIN_PRESETS", "GROUPS"}
+SECOND = {"CATEGORIES", "ENCODINGS", "OSM_SETS", "WORLDCOVER_CLASSES", "TABLES", "DRAWN", "POIS"}
 ALL = {"LESSONS"}             # every string inside
 SKIP_FILES = {"theme.py"}     # its MODES are setting keys, not texts
 
@@ -79,16 +84,39 @@ for dirpath, dirs, files in os.walk(plugin):
                 strings.add(const(args[1]))
             elif fname == "_c" and len(args) >= 2 and const(args[1]):
                 strings.add(const(args[1]))
+            elif fname == "Intent" and len(args) >= 4:  # map_studio purposes: label and help text
+                strings.update(s for s in (const(args[1]), const(args[3])) if s)
 
 strings = sorted(strings)
-if len(sys.argv) > 2:
-    have = json.load(open(sys.argv[2], encoding="utf-8"))
+PLACE = re.compile(r"\{[^{}]*\}")
+
+
+def check(path, verbose=True):
+    """Missing / unused / placeholder-mismatched entries of one translation file; True when complete."""
+    have = json.load(open(path, encoding="utf-8"))
     missing = [s for s in strings if s not in have]
     extra = [k for k in have if k not in strings]
-    print(f"{len(strings)} strings, {len(missing)} missing, {len(extra)} unused")
-    for s in missing:
-        print("MISSING", json.dumps(s, ensure_ascii=False))
-    for s in extra:
-        print("UNUSED ", json.dumps(s, ensure_ascii=False))
-    sys.exit(1 if missing else 0)
+    bad = [k for k, v in have.items() if k in strings and sorted(PLACE.findall(k)) != sorted(PLACE.findall(v))]
+    name = os.path.splitext(os.path.basename(path))[0]
+    done = 100.0 * (len(strings) - len(missing)) / max(len(strings), 1)
+    print(f"{name}: {len(strings)} strings, {len(missing)} missing, {len(extra)} unused, "
+          f"{len(bad)} placeholder mismatches ({done:.1f}% translated)")
+    if verbose:
+        for s in missing:
+            print("MISSING", json.dumps(s, ensure_ascii=False))
+        for s in extra:
+            print("UNUSED ", json.dumps(s, ensure_ascii=False))
+        for s in bad:
+            print("PLACEHOLDERS", json.dumps(s, ensure_ascii=False))
+    return not missing and not bad
+
+
+if len(sys.argv) > 2:
+    # one or more language files, or --all for every i18n/*.json
+    paths = sys.argv[2:]
+    if paths == ["--all"]:
+        folder = os.path.join(plugin, "i18n")
+        paths = sorted(os.path.join(folder, f) for f in os.listdir(folder) if f.endswith(".json"))
+    ok = [check(p, verbose=len(paths) == 1) for p in paths]
+    sys.exit(0 if all(ok) else 1)
 print(json.dumps(strings, ensure_ascii=False, indent=0))

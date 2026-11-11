@@ -338,11 +338,12 @@ class ProjectManager(QObject):
         try:
             with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
                 for root, dirs, files in os.walk(folder):
-                    dirs[:] = [d for d in dirs if d != ".history"]  # project versions stay local
+                    # project versions and crash-recovery journals stay local
+                    dirs[:] = [d for d in dirs if d not in (".history", ".biruni")]
                     for f in files:
                         full = os.path.join(root, f)
-                        if os.path.abspath(full) == os.path.abspath(path):
-                            continue
+                        if os.path.abspath(full) == os.path.abspath(path) or ".autosave." in f:
+                            continue  # the ZIP itself and autosave recovery copies
                         z.write(full, os.path.relpath(full, os.path.dirname(folder)))
         finally:
             QApplication.restoreOverrideCursor()

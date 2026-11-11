@@ -1,6 +1,7 @@
 """Quick map sheet: a finished print layout in one step.
 
-Title block, map with a coordinate frame, north arrow, scale bar, legend,
+Title block, map with a coordinate frame, north arrow, scale bar (single,
+metric + imperial, or a fixed segment length such as 100 m), legend,
 details (coordinate system, date, author, scale), an optional logo, and - when
 a polygon is selected - its corner coordinates table with numbered corners on
 the map, side lengths and area. Right-to-left when the language is Arabic, with
@@ -118,9 +119,9 @@ _RTL = [False]
 
 def ltr(text):
     """Keep numbers, degrees and dates in their written order when they use
-    Arabic-Indic digits: a left-to-right mark after every symbol stops the
-    bidirectional algorithm from reordering the groups (30°00' -> 00'30°)."""
-    return "‎" + re.sub(r"([^0-9٠-٩])", lambda m: m.group(1) + "‎", text)
+    Arabic-Indic digits: a left-to-right mark on both sides of every symbol stops the
+    bidirectional algorithm from reordering the groups (30°00' -> 00'30°, 1:1,000 -> 000,1:1)."""
+    return "\u200e" + re.sub(r"([^0-9\u0660-\u0669])", lambda m: "\u200e" + m.group(1) + "\u200e", text)
 
 
 def _label(layout, text, rect, size=10, bold=False, align=None, color="#1E252B", valign=None):
@@ -198,6 +199,30 @@ class SheetOptions:
         self.parcel = kw.get("parcel")           # (QgsGeometry, QgsCoordinateReferenceSystem) or None
         self.arabic_digits = kw.get("arabic_digits", False)
         self.rtl = kw.get("rtl", i18n.is_rtl())
+        self.scalebar = kw.get("scalebar", "single")         # single | dual (metric + imperial) | fixed
+        self.scalebar_segment = kw.get("scalebar_segment", 0)  # metres per segment when fixed; 0 = round value
+        self.legend_fit = kw.get("legend_fit", True)         # shrink / wrap / split the legend to fit its frame
+        self.link = kw.get("link", "")                       # a web address printed and clickable in the PDF
+        self.preset = kw.get("preset")                       # sheet_presets id: paper, margins, title block
+        self.grid_style = kw.get("grid_style", "auto")       # map_grid.STYLES
+        self.zone_mode = kw.get("zone_mode", "extended")     # map_grid.ZONE_MODES (map across two UTM zones)
+        self.grid_lang = kw.get("grid_lang")                 # language of grid labels; None = from the sheet
+        self.fields = kw.get("fields", {})                   # title-block values {field key: text}
+        self.corners = kw.get("corners")                     # corner coordinates outside the map; None = preset
+
+
+def _grid_lang(opt, preset):
+    """Language of the grid labels: Arabic digits win; then the sheet standard; then the interface."""
+    from .map_grid import GRID_LETTERS
+
+    if opt.grid_lang:
+        return opt.grid_lang
+    if opt.arabic_digits:
+        return "ar"
+    if preset is not None and preset.lang != "ar":
+        return preset.lang
+    ui = i18n.lang()
+    return ui if ui in GRID_LETTERS and ui != "ar" else "en"
 
 
 def build_layout(project, opt):
@@ -213,24 +238,40 @@ def build_layout(project, opt):
     while manager.layoutByName(name) is not None:
         name, k = f"{base} ({k})", k + 1
     layout.setName(name)
-    pw, ph = PAPERS.get(opt.paper, PAPERS["A4"])
-    if not opt.landscape:
-        pw, ph = ph, pw
+    from . import sheet_presets
+
+    preset = sheet_presets.get(opt.preset) if opt.preset else None
+    if preset is not None:
+        pw, ph = preset.page_size()
+        landscape = preset.landscape
+        fl, ft, fr, fb = preset.margins
+        frame = QRectF(fl, ft, pw - fl - fr, ph - ft - fb)
+        # content sits 4 mm inside the drawing frame
+        ml, mt, mr, mb = fl + 4, ft + 4, fr + 4, fb + 4
+    else:
+        pw, ph = PAPERS.get(opt.paper, PAPERS["A4"])
+        landscape = opt.landscape
+        if not landscape:
+            pw, ph = ph, pw
+        frame = QRectF(MARGIN / 2, MARGIN / 2, pw - MARGIN, ph - MARGIN)
+        ml = mt = mr = mb = MARGIN
     layout.pageCollection().page(0).setPageSize(QgsLayoutSize(pw, ph))
-    _box(layout, QRectF(MARGIN / 2, MARGIN / 2, pw - MARGIN, ph - MARGIN), fill="#FFFFFF", width=0.6)
+    _box(layout, frame, fill="#FFFFFF", width=0.6)
+    corners = opt.corners if opt.corners is not None else bool(preset is not None and preset.corners)
+    cpad = 22.0 if corners else 0.0  # room for the corner coordinates beside the map frame
 
     # panel: beside the map (landscape) or below it (portrait)
-    if opt.landscape:
+    if landscape:
         panel_w = max(70.0, pw * 0.27)
-        map_rect = QRectF(MARGIN, MARGIN, pw - 2 * MARGIN - panel_w - GAP, ph - 2 * MARGIN)
-        px = MARGIN if rtl else pw - MARGIN - panel_w
+        map_rect = QRectF(ml, mt, pw - ml - mr - panel_w - GAP, ph - mt - mb)
+        px = ml if rtl else pw - mr - panel_w
         if rtl:
-            map_rect.moveLeft(MARGIN + panel_w + GAP)
-        panel = QRectF(px, MARGIN, panel_w, ph - 2 * MARGIN)
+            map_rect.moveLeft(ml + panel_w + GAP)
+        panel = QRectF(px, mt, panel_w, ph - mt - mb)
     else:
-        panel_h = max(70.0, ph * 0.26)
-        map_rect = QRectF(MARGIN, MARGIN, pw - 2 * MARGIN, ph - 2 * MARGIN - panel_h - GAP)
-        panel = QRectF(MARGIN, ph - MARGIN - panel_h, pw - 2 * MARGIN, panel_h)
+        panel_h = max(70.0, ph * 0.26) + (4.6 * len(preset.fields) if preset is not None else 0)
+        map_rect = QRectF(ml, mt, pw - ml - mr, ph - mt - mb - panel_h - GAP)
+        panel = QRectF(ml, ph - mb - panel_h, pw - ml - mr, panel_h)
 
     corner_pts, rows, perimeter, area = None, [], 0, 0
     parcel_layer = None
@@ -244,8 +285,10 @@ def build_layout(project, opt):
     mp.setFrameEnabled(True)
     mp.setFrameStrokeWidth(QgsLayoutMeasurement(0.4))
     layout.addLayoutItem(mp)
-    grid_pad = 7.0 if opt.grid else 0.0
-    inner = map_rect.adjusted(grid_pad, grid_pad, -grid_pad, -grid_pad)
+    grid_style = opt.grid_style if opt.grid_style != "auto" or preset is None else preset.grid
+    grid_pad = (9.0 if grid_style == "both" else 7.0) if opt.grid and grid_style != "none" else 0.0
+    inner = map_rect.adjusted(grid_pad + cpad, grid_pad + (8 if corners else 0), -grid_pad - cpad,
+                              -grid_pad - (8 if corners else 0))
     mp.attemptMove(QgsLayoutPoint(inner.x(), inner.y()))
     mp.attemptResize(QgsLayoutSize(inner.width(), inner.height()))
     mp.setCrs(project.crs())
@@ -272,8 +315,18 @@ def build_layout(project, opt):
         project.addMapLayer(parcel_layer)
         mp.setLayers([parcel_layer] + visible)
         mp.setKeepLayerSet(True)
+    glang = _grid_lang(opt, preset)
     if opt.grid:
-        _add_grid(mp, ad)
+        from . import map_grid
+
+        if grid_style == "auto" and preset is None and not mp.crs().isGeographic():
+            _add_grid(mp, ad)  # the classic frame of the quick sheet
+        else:
+            map_grid.add_grid(mp, grid_style, glang, opt.zone_mode)
+    if corners:
+        from . import map_grid
+
+        map_grid.add_corner_labels(layout, mp, glang, geographic=mp.crs().isGeographic())
 
     # panel contents
     _box(layout, panel, fill="#FFFFFF", width=0.4)
@@ -302,27 +355,36 @@ def build_layout(project, opt):
     layout.addLayoutItem(arrow)
     arrow.attemptMove(QgsLayoutPoint(x + (w - 14 if rtl else 0), y))
     arrow.attemptResize(QgsLayoutSize(14, 18))
-    sb = QgsLayoutItemScaleBar(layout)
-    sb.setStyle("Single Box")
-    sb.setLinkedMap(mp)
-    sb.setUnits(QgsUnitTypes.DistanceUnit.DistanceMeters if mp.scale() < 50000
-                else QgsUnitTypes.DistanceUnit.DistanceKilometers)
-    sb.setNumberOfSegments(2)
-    sb.setNumberOfSegmentsLeft(0)
-    sb.setUnitLabel(tr("m") if mp.scale() < 50000 else tr("km"))
-    sb.setTextFormat(_text_format(7))
-    layout.addLayoutItem(sb)
-    sb.applyDefaultSize(sb.units())
-    sb.setMaximumBarWidth(max(25.0, w - 22))
-    sb.attemptMove(QgsLayoutPoint(x + (0 if rtl else 18), y + 2))
-    sb.update()
+    bar_x = x + (0 if rtl else 18)
+    bar_w = max(25.0, w - 22)
+    small = mp.scale() < 50000
+    metric = (QgsUnitTypes.DistanceUnit.DistanceMeters, tr("m")) if small else \
+        (QgsUnitTypes.DistanceUnit.DistanceKilometers, tr("km"))
+    if preset is not None and preset.unit == "ft":  # sheets in feet: the main bar in feet / miles
+        metric = (QgsUnitTypes.DistanceUnit.DistanceFeet, tr("ft")) if small else \
+            (QgsUnitTypes.DistanceUnit.DistanceMiles, tr("mi"))
+    if opt.scalebar == "dual":
+        imperial = (QgsUnitTypes.DistanceUnit.DistanceFeet, tr("ft")) if small else \
+            (QgsUnitTypes.DistanceUnit.DistanceMiles, tr("mi"))
+        _scale_bar(layout, mp, metric, bar_x, y + 1, bar_w, "biruni-scalebar")
+        _scale_bar(layout, mp, imperial, bar_x, y + 9, bar_w, "biruni-scalebar-imperial", style="Line Ticks Down")
+        text_y, row_h = y + 17, 24
+    else:
+        seg = opt.scalebar_segment if opt.scalebar == "fixed" else 0
+        if opt.scalebar == "fixed" and seg <= 0:
+            seg = fixed_segment_length(mp.scale(), bar_w)
+        _scale_bar(layout, mp, metric, bar_x, y + 2, bar_w, "biruni-scalebar", segment_m=seg)
+        text_y, row_h = y + 13, 21
     scale_num = f"1:{int(round(mp.scale())):,}"
     scale_txt = _label(layout, tr("Scale {s}").format(s=ltr(digits(scale_num, True)) if ad else scale_num),
-                       QRectF(x + (0 if rtl else 18), y + 13, w - 18, 5), 8, False, color="#5B6670")
+                       QRectF(bar_x, text_y, w - 18, 5), 8, False, color="#5B6670")
     scale_txt.setId("biruni-scale")
-    y += 21
+    y += row_h
     _rule(layout, x, y, w)
     y += 3
+    if preset is not None:
+        y = _title_block(layout, preset, opt, x, y, w, scale_num, area if rows else None,
+                         perimeter if rows else None) + 2
 
     bottom = panel.bottom() - 4
     # details at the bottom of the panel
@@ -339,6 +401,12 @@ def build_layout(project, opt):
     det_h = 4.6 * len(details) + 2
     _label(layout, "\n".join(details), QRectF(x, bottom - det_h, w, det_h), 7, False, color="#5B6670")
     bottom -= det_h + 2
+    if opt.link:
+        url = opt.link.strip()
+        link = _label(layout, url, QRectF(x, bottom - 5, w, 5), 7.5, False, color="#1F6FB2")
+        link.setCustomProperty("biruni_link", url if "://" in url or url.startswith("mailto:") else "https://" + url)
+        link.setId("biruni-link")
+        bottom -= 6
     _rule(layout, x, bottom, w)
     bottom -= 2
 
@@ -400,12 +468,90 @@ def build_layout(project, opt):
             for st in (QgsLegendStyle.Style.Title, QgsLegendStyle.Style.Group, QgsLegendStyle.Style.Subgroup,
                        QgsLegendStyle.Style.SymbolLabel):
                 leg.rstyle(st).setAlignment(Qt.AlignmentFlag.AlignRight)
-        leg.adjustBoxSize()
-        if leg.rect().height() > bottom - y:
-            leg.setResizeToContents(False)
-            leg.attemptResize(QgsLayoutSize(w, bottom - y))
+        leg.setId("biruni-legend")
+        if opt.legend_fit:
+            from .cartography import fit_legend
+
+            fit_legend(leg, w, bottom - y)
+        else:
+            leg.adjustBoxSize()
+            if leg.rect().height() > bottom - y:
+                leg.setResizeToContents(False)
+                leg.attemptResize(QgsLayoutSize(w, bottom - y))
     manager.addLayout(layout)
     return layout
+
+
+def _title_block(layout, preset, opt, x, y, w, scale_num, area=None, perimeter=None):
+    """The preset's title block (field / value table in the sheet's language); returns the y below it."""
+    from . import sheet_presets
+
+    values = dict(opt.fields or {})
+    values.setdefault("scale", scale_num)
+    values.setdefault("date", dt.date.today().strftime("%d/%m/%Y"))
+    if area is not None:
+        values.setdefault("area", f"{area:,.2f} m²")
+    if perimeter is not None:
+        values.setdefault("perimeter", f"{perimeter:,.2f} m")
+    rows = sheet_presets.title_rows(preset, values)
+    rtl = preset.lang in ("ar", "fa", "ur", "he")
+    if opt.arabic_digits:
+        # numbers, dates and codes keep their order with direction marks; words (names) must not get them,
+        # or their letters come apart and reverse
+        rows = [(k, (digits(v, True) if re.search(r"[؀-ۿ]", v) and re.search(r"[^\W\d_]{2}", v)
+                     else ltr(digits(v, True))) if v else v) for k, v in rows]
+    if rtl:
+        rows = [(v, k) for k, v in rows]
+    table = QgsLayoutItemManualTable.create(layout)
+    table.setIncludeTableHeader(False)
+    table.setTableContents([[QgsTableCell(a), QgsTableCell(b)] for a, b in rows])
+    table.setContentTextFormat(_text_format(7))
+    table.setCellMargin(0.8)
+    ratios = (0.62, 0.38) if rtl else (0.38, 0.62)
+    table.setColumnWidths([w * r - 1.7 for r in ratios])
+    table.setGridStrokeWidth(0.15)
+    layout.addMultiFrame(table)
+    h = 4.6 * len(rows) + 1
+    frame = QgsLayoutFrame(layout, table)
+    frame.attemptMove(QgsLayoutPoint(x, y))
+    frame.attemptResize(QgsLayoutSize(w, h))
+    table.addFrame(frame)
+    frame.setId("biruni-title-block")
+    return y + h
+
+
+def fixed_segment_length(scale, bar_width_mm, segments=2):
+    """A round segment length in metres (1, 2, 2.5, 5 × 10ⁿ) so that ``segments`` of them fit the bar."""
+    raw = scale * bar_width_mm / 1000.0 / max(segments, 1)
+    return _nice_interval(raw * 0.8)
+
+
+def _scale_bar(layout, mp, units, x, y, max_width, item_id, style="Single Box", segment_m=0):
+    """A scale bar linked to the map. ``segment_m`` > 0 fixes the length of each segment (in metres) and adds as
+    many segments as fit; otherwise the bar picks a round length that fits."""
+    unit, label = units
+    sb = QgsLayoutItemScaleBar(layout)
+    sb.setStyle(style)
+    sb.setLinkedMap(mp)
+    sb.setUnits(unit)
+    sb.setNumberOfSegments(2)
+    sb.setNumberOfSegmentsLeft(0)
+    sb.setUnitLabel(label)
+    sb.setTextFormat(_text_format(7))
+    layout.addLayoutItem(sb)
+    if segment_m > 0 and mp.scale() > 0:
+        per_unit = QgsUnitTypes.fromUnitToUnitFactor(QgsUnitTypes.DistanceUnit.DistanceMeters, unit)
+        sb.setSegmentSizeMode(Qgis.ScaleBarSegmentSizeMode.Fixed)
+        sb.setUnitsPerSegment(segment_m * per_unit)
+        seg_mm = segment_m / mp.scale() * 1000.0
+        sb.setNumberOfSegments(max(1, min(5, int(max_width // max(seg_mm, 0.1)))))
+    else:
+        sb.applyDefaultSize(unit)
+        sb.setMaximumBarWidth(max_width)
+    sb.setId(item_id)
+    sb.attemptMove(QgsLayoutPoint(x, y))
+    sb.update()
+    return sb
 
 
 def _rule(layout, x, y, w):
@@ -483,12 +629,14 @@ def _nice_interval(raw):
     return 10 * mag
 
 
-def export(layout, path):
+def export(layout, path, lean=True, links=True):
+    """PDF (small and sharp when ``lean``; web addresses clickable) or an image, by the file extension."""
     exp = QgsLayoutExporter(layout)
     if path.lower().endswith(".pdf"):
-        s = QgsLayoutExporter.PdfExportSettings()
-        s.dpi = 300
-        return exp.exportToPdf(path, s) == QgsLayoutExporter.ExportResult.Success
+        from .cartography import export_pdf
+
+        ok, _n = export_pdf(layout, path, lean=lean, links=links, dpi=None if lean else 300)
+        return ok
     s = QgsLayoutExporter.ImageExportSettings()
     s.dpi = 150
     return exp.exportToImage(path, s) == QgsLayoutExporter.ExportResult.Success

@@ -1,0 +1,2352 @@
+{
+ "'{c}' is not an EUDR commodity ({all}).": [
+  "'{c}' مش من سلع لائحة EUDR ({all})."
+ ],
+ "(empty = find it)": [
+  "(فاضي = يدوّر عليه لوحده)"
+ ],
+ "(leave as it is)": [
+  "(سيبه زي ما هو)"
+ ],
+ "(no project open)": [
+  "(مفيش مشروع مفتوح)"
+ ],
+ "(none)": [
+  "(ولا حاجة)"
+ ],
+ "0 = through the clicked point": [
+  "0 = يعدّي بالنقطة اللي دوست عليها"
+ ],
+ "3D scene layers are not written": [
+  "طبقات المشاهد ثلاثية الأبعاد مش هتتكتب"
+ ],
+ "A Shapefile (and its .dbf table) cannot be larger than 2 GB, so writing stopped.": [
+  "ملف Shapefile (وجدول ‎.dbf بتاعه) مينفعش يعدّي 2 جيجا، فالكتابة وقفت."
+ ],
+ "A bigger page or a larger scale gives labels more room.": [
+  "ورقة أكبر أو مقياس أكبر بيدّي الكتابات مساحة أكتر."
+ ],
+ "A data file, or a folder / .gdb": [
+  "ملف بيانات، أو فولدر / .gdb"
+ ],
+ "A field name was not found": [
+  "اسم حقل مش موجود"
+ ],
+ "A file with this name already exists: {p}": [
+  "فيه ملف بالاسم ده موجود قبل كده: {p}"
+ ],
+ "A file, a layer or a .gdb folder": [
+  "ملف، أو طبقة، أو فولدر .gdb"
+ ],
+ "A folder with this name already exists: {p}": [
+  "فيه فولدر بالاسم ده موجود قبل كده: {p}"
+ ],
+ "A new code is made. Press Start to show it.": [
+  "اتعمل كود جديد. دوس ابدأ علشان يظهر."
+ ],
+ "A phone is connected directly.": [
+  "فيه تليفون متوصل مباشرة."
+ ],
+ "A phone opened the page.": [
+  "تليفون فتح الصفحة."
+ ],
+ "A plugin uses a Python library that is not installed with Biruni GIS.": [
+  "إضافة بتستخدم مكتبة بايثون مش متثبتة مع Biruni GIS."
+ ],
+ "A project always contains the whole map: the layer choice is ignored.": [
+  "المشروع دايمًا فيه الخريطة كلها: اختيار الطبقات مش هيتاخد بيه."
+ ],
+ "A ring does not end where it starts.": [
+  "فيه حلقة مش بتقفل عند نقطة بدايتها."
+ ],
+ "A sync program is copying the file: wait until it finishes, or pause syncing.": [
+  "برنامج مزامنة بينسخ الملف: استنى لما يخلص، أو وقّف المزامنة مؤقتًا."
+ ],
+ "A tall post (4:5), the size that fills a phone screen in a feed.": [
+  "بوست طولي (4:5)، المقاس اللي بيملا شاشة الموبايل في الفيد."
+ ],
+ "A tool setting is not valid": [
+  "إعداد في الأداة مش صالح"
+ ],
+ "Add\nFeature": [
+  "إضافة معلم"
+ ],
+ "Add a live QR to a print layout": [
+  "حط كود QR حي على الإخراج"
+ ],
+ "Add an empty group to keep related layers together.": [
+  "أضف مجموعة فاضية تلمّ فيها الطبقات اللي تبع بعض."
+ ],
+ "Add folder…": [
+  "إضافة فولدر…"
+ ],
+ "Add the datasets the script creates to the map": [
+  "ضيف البيانات اللي السكربت بيعملها على الخريطة"
+ ],
+ "Add the fields that have no match": [
+  "ضيف الحقول اللي مالهاش مقابل"
+ ],
+ "Address in the code": [
+  "العنوان اللي في الكود"
+ ],
+ "Adds up the values in equal hexagons: no point hides another.": [
+  "بيجمع القيم في خلايا سداسية متساوية: مفيش نقطة بتغطّي على التانية."
+ ],
+ "Affine (3+ points)": [
+  "أفيني (3 نقط أو أكتر)"
+ ],
+ "After a minute the map is at https://<your name>.github.io/<repository>/.": [
+  "بعد دقيقة الخريطة هتكون على https://<your name>.github.io/<repository>/."
+ ],
+ "All data is inside the project folder.": [
+  "كل البيانات جوه فولدر المشروع."
+ ],
+ "Also finds names written differently in Arabic.": [
+  "وكمان بيلاقي الأسماء المكتوبة بأشكال مختلفة بالعربي."
+ ],
+ "Also fix the spellings in the data (one Undo step, not saved)": [
+  "وصحّح الكتابة في البيانات كمان (خطوة تراجع واحدة، من غير حفظ)"
+ ],
+ "Also list unchanged features": [
+  "اعرض كمان العناصر اللي ما اتغيّرتش"
+ ],
+ "Also look in old versions of projects (history)": [
+  "دوّر كمان في النسخ القديمة من المشاريع (التاريخ)"
+ ],
+ "Also show the layers that were on": [
+  "اعرض كمان الطبقات اللي كانت ظاهرة"
+ ],
+ "Also shows the layers that were on": [
+  "وبتعرض كمان الطبقات اللي كانت ظاهرة"
+ ],
+ "Also write the boundaries as bearings and distances in": [
+  "اكتب الحدود كمان بالاتجاهات والأطوال بلغة"
+ ],
+ "Also write the detected code page (.cpg) next to the shapefile": [
+  "اكتب كمان صفحة الترميز المكتشفة (.cpg) جنب ملف الشيب"
+ ],
+ "An antivirus is scanning the file: wait a moment and try again.": [
+  "برنامج حماية بيفحص الملف: استنى شوية وجرّب تاني."
+ ],
+ "Another program is writing to the database right now: wait for it to finish.": [
+  "فيه برنامج تاني بيكتب في قاعدة البيانات دلوقتي: استنى لما يخلص."
+ ],
+ "Another surface": [
+  "سطح تاني"
+ ],
+ "Apply to another layer": [
+  "طبّقه على طبقة تانية"
+ ],
+ "Apply to another layer…": [
+  "طبّقه على طبقة تانية…"
+ ],
+ "ArcGIS Pro cannot open the data of these layers where it is now:": [
+  "ArcGIS Pro مش هيقدر يفتح بيانات الطبقات دي من مكانها الحالي:"
+ ],
+ "ArcGIS Pro started faster on this computer.": [
+  "ArcGIS Pro فتح أسرع على الجهاز ده."
+ ],
+ "ArcGIS Python script": [
+  "سكربت بايثون بتاع ArcGIS"
+ ],
+ "Area also in these units (e.g. kanal,marla - feddan,qirat,sahm - rai,ngan,sqwa)": [
+  "المساحة كمان بالوحدات دي (مثلاً kanal,marla - feddan,qirat,sahm - rai,ngan,sqwa)"
+ ],
+ "As it is": [
+  "زي ما هو"
+ ],
+ "As it is ({crs}), the layer is {d} km from where it should be.": [
+  "زي ما هي ({crs})، الطبقة على بعد {d} كم من مكانها الصح."
+ ],
+ "As it is ({crs}), the layer's coordinates are not valid positions.": [
+  "زي ما هي ({crs})، إحداثيات الطبقة مش أماكن صالحة."
+ ],
+ "As usual for that language": [
+  "زي المعتاد في اللغة دي"
+ ],
+ "At least three points with heights are needed for a surface.": [
+  "السطح محتاج ثلاث نقاط على الأقل ليها ارتفاعات."
+ ],
+ "Atlas saved: {p}": [
+  "الأطلس اتحفظ: {p}"
+ ],
+ "Attachments table {t}: {n} features with files.": [
+  "جدول المرفقات {t}: {n} معلم ليها ملفات."
+ ],
+ "AutoCAD DWG files are read by the DWG/DXF import tool, not by Add data.": [
+  "ملفات أوتوكاد DWG بتتقري بأداة استيراد DWG/DXF، مش من «إضافة بيانات»."
+ ],
+ "Automatic (everything found)": [
+  "تلقائي (كل اللي يتلاقي)"
+ ],
+ "Averaging… {n} readings - keep the phone still": [
+  "بياخد المتوسط… {n} قراءة - ثبّت التليفون"
+ ],
+ "Back to the previous view": [
+  "ارجع للمنظر اللي قبله"
+ ],
+ "Biruni draws the streams with their Strahler order in one step.": [
+  "Biruni بيرسم المجاري بترتيب Strahler في خطوة واحدة."
+ ],
+ "Biruni finds the coordinate columns by itself.": [
+  "Biruni بيلاقي أعمدة الإحداثيات لوحده."
+ ],
+ "Biruni has no country-specific settings here yet.": [
+  "مفيش إعدادات خاصة بالبلد ده في Biruni لسه."
+ ],
+ "Biruni looks for the missing files by name in these folders:": [
+  "Biruni بيدوّر على الملفات الناقصة باسمها في الفولدرات دي:"
+ ],
+ "Biruni writes a new merged layer instead of changing the target.": [
+  "Biruni بيكتب طبقة جديدة مدموجة بدل ما يغيّر الطبقة الهدف."
+ ],
+ "Boundary marker (beacon)": [
+  "علامة حد (بيكون)"
+ ],
+ "Bring back the groups and order from before Smart arrange.": [
+  "بيرجّع المجموعات والترتيب اللي كانوا قبل الترتيب الذكي."
+ ],
+ "Build overviews for faster drawing…": [
+  "اعمل نسخ مصغّرة (Overviews) علشان الرسم يبقى أسرع…"
+ ],
+ "Cannot read the coordinate in row {n}.": [
+  "مش قادر أقرا الإحداثي في الصف {n}."
+ ],
+ "Cannot read “{t}”.": [
+  "مش قادر أقرا «{t}»."
+ ],
+ "Changed fields": [
+  "الحقول اللي اتغيّرت"
+ ],
+ "Check the address in a browser; try again later or use another basemap.": [
+  "جرّب العنوان في المتصفح؛ وجرّب تاني بعدين أو استخدم خريطة أساس تانية."
+ ],
+ "Check the address, or remove and add the basemap or service again.": [
+  "راجع العنوان، أو شيل خريطة الأساس أو الخدمة وضيفها تاني."
+ ],
+ "Choose Esri File Geodatabase as the format.": [
+  "اختار Esri File Geodatabase كصيغة الحفظ."
+ ],
+ "Choose My Country…": [
+  "اختار بلدك…"
+ ],
+ "Choose a binary (blob) field.": [
+  "اختار حقل ثنائي (blob)."
+ ],
+ "Choose a kind field and add kinds.": [
+  "اختار حقل النوع وضيف أنواع."
+ ],
+ "Choose a layer and the field to show.": [
+  "اختار طبقة والحقل اللي عايز توضّحه."
+ ],
+ "Choose a layer of points, lines or polygons in the Layers panel first.": [
+  "اختار طبقة نقط أو خطوط أو مضلعات من لوحة الطبقات الأول."
+ ],
+ "Choose a layer.": [
+  "اختار طبقة."
+ ],
+ "Choose a print layout.": [
+  "اختار إخراج."
+ ],
+ "Choose a scan, a PDF or a photo": [
+  "اختار مسح ضوئي أو PDF أو صورة"
+ ],
+ "Choose a template": [
+  "اختار قالب"
+ ],
+ "Choose a vector layer in the Layers panel first.": [
+  "اختار طبقة متجهة من لوحة الطبقات الأول."
+ ],
+ "Choose an elevation layer.": [
+  "اختار طبقة ارتفاعات."
+ ],
+ "Choose an existing .py script.": [
+  "اختار ملف سكربت ‎.py موجود."
+ ],
+ "Choose another output name, or delete the old file after closing it everywhere.": [
+  "اختار اسم تاني للناتج، أو امسح الملف القديم بعد ما تقفله من كل البرامج."
+ ],
+ "Choose my country…": [
+  "اختار بلدك…"
+ ],
+ "Choose one to four pairs of fields.": [
+  "اختار من زوج واحد لأربعة أزواج من الحقول."
+ ],
+ "Choose the PDF or the image.": [
+  "اختار ملف الـ PDF أو الصورة."
+ ],
+ "Choose the base surface.": [
+  "اختار سطح الأساس."
+ ],
+ "Choose the coordinate system of the control points.": [
+  "اختار نظام إحداثيات نقط الضبط."
+ ],
+ "Choose the data file": [
+  "اختار ملف البيانات"
+ ],
+ "Choose the date field.": [
+  "اختار حقل التاريخ."
+ ],
+ "Choose the exported chat file.": [
+  "اختار ملف الشات المتصدّر."
+ ],
+ "Choose the field that holds the file path.": [
+  "اختار الحقل اللي فيه مسار الملف."
+ ],
+ "Choose the field that sets the transparency.": [
+  "اختار الحقل اللي بيحدد الشفافية."
+ ],
+ "Choose the field to change.": [
+  "اختار الحقل اللي هيتغير."
+ ],
+ "Choose the file": [
+  "اختار الملف"
+ ],
+ "Choose the file by hand…": [
+  "اختار الملف بإيدك…"
+ ],
+ "Choose the file to open.": [
+  "اختار الملف اللي هيتفتح."
+ ],
+ "Choose the folder": [
+  "اختار الفولدر"
+ ],
+ "Choose the input layer again in the tool window.": [
+  "اختار طبقة الإدخال تاني في نافذة الأداة."
+ ],
+ "Choose the layer the pages come from.": [
+  "اختار الطبقة اللي هتطلع منها الصفحات."
+ ],
+ "Choose the layers for the tour in the Layers panel.": [
+  "اختار طبقات الجولة من لوحة الطبقات."
+ ],
+ "Choose the layers to publish in the Layers panel.": [
+  "اختار الطبقات اللي هتتنشر من لوحة الطبقات."
+ ],
+ "Choose the point layer to add the points to.": [
+  "اختار طبقة النقط اللي النقط هتتضاف فيها."
+ ],
+ "Choose the route and the parcels.": [
+  "اختار المسار والقطع."
+ ],
+ "Choose the same number of key fields on both sides (one to four).": [
+  "اختار نفس عدد حقول الربط في الطرفين (من واحد لأربعة)."
+ ],
+ "Choose the scanned plan.": [
+  "اختار المخطط الممسوح."
+ ],
+ "Choose the second field for a bivariate map.": [
+  "اختار الحقل التاني للخريطة الثنائية."
+ ],
+ "Choose what the map is for to see it here.": [
+  "اختار الخريطة هتستخدمها في إيه وهتشوفها هنا على طول."
+ ],
+ "Click a corner between two segments, not an end.": [
+  "دوس على ركن بين ضلعين، مش على طرف."
+ ],
+ "Click a corner of the outer edge.": [
+  "دوس على ركن من الحدود الخارجية."
+ ],
+ "Click a feature of “{l}”.": [
+  "دوس على عنصر من «{l}»."
+ ],
+ "Click a line of the layer being edited.": [
+  "دوس على خط من الطبقة اللي بتعدّلها."
+ ],
+ "Click for a fix.": [
+  "اضغط علشان تصلّحها."
+ ],
+ "Click inside the line, not on its end.": [
+  "دوس على الخط نفسه، مش على طرفه."
+ ],
+ "Click inside the polygon to clip with.": [
+  "دوس جوه المضلع اللي هتقص بيه."
+ ],
+ "Click on a line.": [
+  "دوس على خط."
+ ],
+ "Click on a selected feature.": [
+  "دوس على عنصر محدد."
+ ],
+ "Click on the map where the data really is, or give the area.": [
+  "دوس على الخريطة في المكان الحقيقي للبيانات، أو حدّد المنطقة."
+ ],
+ "Click on the map.": [
+  "دوس على الخريطة."
+ ],
+ "Click on the selected line where it should be split.": [
+  "دوس على الخط المحدد في المكان اللي عايز تقسمه عنده."
+ ],
+ "Click the corner to round.": [
+  "دوس على الركن اللي عايز تقوّسه."
+ ],
+ "Click the map to choose the pivot point.": [
+  "دوس على الخريطة عشان تختار نقطة المحور."
+ ],
+ "Click the polygon to clip the selected features with.": [
+  "دوس على المضلع اللي هتقص بيه العناصر المحددة."
+ ],
+ "Click the source feature, then click the features to fill.": [
+  "دوس على العنصر المصدر، وبعدين دوس على العناصر اللي عايز تملاها."
+ ],
+ "Click the source feature.": [
+  "دوس على العنصر المصدر."
+ ],
+ "Click two different points on the polygon's edge.": [
+  "دوس على نقطتين مختلفين على حدود المضلع."
+ ],
+ "Click two points on the edge of a polygon.": [
+  "دوس على نقطتين على حدود مضلع."
+ ],
+ "Close breaks in the lines up to (pixels)": [
+  "اقفل القطع في الخطوط لحد (بكسل)"
+ ],
+ "Close every group and every legend.": [
+  "اقفل كل المجموعات وكل المفاتيح."
+ ],
+ "Close the database in Microsoft Access.": [
+  "اقفل قاعدة البيانات في Microsoft Access."
+ ],
+ "Close the document in that program.": [
+  "اقفل الملف في البرنامج ده."
+ ],
+ "Close the drawing in the CAD program.": [
+  "اقفل الرسمة في برنامج الكاد."
+ ],
+ "Close the file in Google Earth.": [
+  "اقفل الملف في Google Earth."
+ ],
+ "Close the file in this program, or close the program, then try again.": [
+  "اقفل الملف في البرنامج ده، أو اقفل البرنامج، وبعدين جرّب تاني."
+ ],
+ "Close the layer in Global Mapper.": [
+  "اقفل الطبقة في Global Mapper."
+ ],
+ "Close the table in MapInfo.": [
+  "اقفل الجدول في MapInfo."
+ ],
+ "Close the traverse with the compass rule": [
+  "اقفل المضلع بقاعدة البوصلة"
+ ],
+ "Close the workbook in Excel (check for hidden Excel windows too).": [
+  "اقفل الملف في Excel (وشوف كمان لو فيه نوافذ Excel مخفية)."
+ ],
+ "Codes missing from the library: {c}": [
+  "أكواد مش موجودة في المكتبة: {c}"
+ ],
+ "Collapse all": [
+  "اقفل الكل"
+ ],
+ "Colour the selected layer by this standard": [
+  "لوّن الطبقة المختارة بالمعيار ده"
+ ],
+ "Colour whole rows by this field's value": [
+  "لوّن الصفوف كاملة حسب قيمة الحقل ده"
+ ],
+ "Colours confusing for colour-blind readers": [
+  "ألوان بتتلخبط عند اللي عندهم عمى ألوان"
+ ],
+ "Commodity for all plots (when there is no field)": [
+  "السلعة لكل القطع (لو مفيش حقل)"
+ ],
+ "Connecting to the computer… photos taken now are kept and sent.": [
+  "بيتوصل بالكمبيوتر… الصور اللي تتصور دلوقتي محفوظة وهتتبعت."
+ ],
+ "Coordinate system (when the file does not say)": [
+  "نظام الإحداثيات (لو الملف مش بيقوله)"
+ ],
+ "Coordinate system not written on the sheet": [
+  "نظام الإحداثيات مش مكتوب على اللوحة"
+ ],
+ "Coordinates out of range": [
+  "إحداثيات برّه النطاق"
+ ],
+ "Coordinates outside ±90° / ±180°: not latitude/longitude.": [
+  "إحداثيات برّه ±90° / ±180°: دي مش خطوط طول وعرض."
+ ],
+ "Copy data ArcGIS Pro cannot open into a file geodatabase next to the output": [
+  "انسخ البيانات اللي ArcGIS Pro مش بيفتحها في File Geodatabase جنب الناتج"
+ ],
+ "Copy the GeoPackage to a folder you own (the project folder) and open the copy.": [
+  "انسخ الـ GeoPackage لفولدر بتاعك (فولدر المشروع) وافتح النسخة."
+ ],
+ "Copy the web address it gives you and share it.": [
+  "انسخ عنوان الويب اللي هيديهولك وشاركه."
+ ],
+ "Country code, to help with short texts (e.g. KR, TH, VN, IR)": [
+  "كود الدولة، علشان يساعد مع النصوص القصيرة (مثلًا KR وTH وVN وIR)"
+ ],
+ "Country does not match the plot location": [
+  "الدولة مش مطابقة لمكان القطعة"
+ ],
+ "Country for all plots (ISO code, when there is no field)": [
+  "الدولة لكل القطع (كود ISO، لو مفيش حقل)"
+ ],
+ "Country is not an ISO code": [
+  "الدولة مش مكتوبة بكود ISO"
+ ],
+ "Counts are best shown as sizes: a circle twice as big means twice as many.": [
+  "الأعداد أحسن تتعرض كأحجام: دايرة مساحتها الضعف يعني العدد الضعف."
+ ],
+ "Created datasets": [
+  "البيانات اللي اتعملت"
+ ],
+ "Ctrl+1 … Ctrl+9 already open QGIS panels, so stops use Alt.": [
+  "Ctrl+1 … Ctrl+9 بيفتحوا لوحات QGIS أصلاً، فالمحطات بتستخدم Alt."
+ ],
+ "Ctrl+1 … Ctrl+9 already open panels, so stops use Alt.": [
+  "Ctrl+1 … Ctrl+9 بيفتحوا لوحات أصلًا، علشان كده المحطات بتستخدم Alt."
+ ],
+ "Data credits missing": [
+  "مصدر البيانات مش مكتوب"
+ ],
+ "Dates with the year last are day/month/year": [
+  "التواريخ اللي السنة في آخرها يوم/شهر/سنة"
+ ],
+ "Declared {a} ha: plots over 4 ha need a polygon.": [
+  "المساحة المعلنة {a} هكتار: القطع اللي أكبر من 4 هكتار لازم تبقى مضلع."
+ ],
+ "Deflection": [
+  "زاوية الانحراف عن الضلع اللي قبله"
+ ],
+ "Delete the field {f} and all its values when you press Apply?": [
+  "نمسح الحقل {f} بكل قيمه لما تدوس تطبيق؟"
+ ],
+ "Delete this saved selection": [
+  "امسح التحديد المحفوظ ده"
+ ],
+ "Digits made consistent.": [
+  "الأرقام بقت بشكل واحد."
+ ],
+ "Disable that plugin in Plugins, or ask its author which library it needs.": [
+  "اقفل الإضافة دي من «الإضافات»، أو اسأل صاحبها هي محتاجة أنهي مكتبة."
+ ],
+ "Distance band in metres (0 = the smallest that gives everyone a neighbour)": [
+  "نطاق المسافة بالمتر (0 = أصغر مسافة تعطي كل معلم جارًا)"
+ ],
+ "Distances are in degrees, not metres": [
+  "المسافات بالدرجات مش بالمتر"
+ ],
+ "Downloaded {g} ({kb} KB).": [
+  "اتنزّل {g} ({kb} كيلوبايت)."
+ ],
+ "Downloading the tunnel program (once)…": [
+  "بنزّل برنامج النفق (مرة واحدة بس)…"
+ ],
+ "Downloading the tunnel program (once)… {p}%": [
+  "بنزّل برنامج النفق (مرة واحدة بس)… {p}%"
+ ],
+ "Drag this whole folder onto the page.": [
+  "اسحب الفولدر ده كله وحطه على الصفحة."
+ ],
+ "Draw a line across the selected features; F2 or right click to finish.": [
+  "ارسم خط بيعدّي على العناصر المحددة؛ وF2 أو كليك يمين عشان تخلّص."
+ ],
+ "Draw a line that leaves and comes back to the edge; F2 or right click to finish.": [
+  "ارسم خط بيطلع من الحدود ويرجعلها؛ وF2 أو كليك يمين عشان تخلّص."
+ ],
+ "Draw it only when zoomed in closer than 1:{scale}": [
+  "ارسمها بس لما أقرّب أكتر من 1:{scale}"
+ ],
+ "Draw the line to split with.": [
+  "ارسم الخط اللي هتقسم بيه."
+ ],
+ "Draw the new shape of the selected feature; its attributes are kept.": [
+  "ارسم الشكل الجديد للعنصر المحدد؛ وبياناته هتفضل زي ما هي."
+ ],
+ "Draw the stop's picture again from the map as it is now": [
+  "ارسم صورة المحطة تاني من الخريطة زي ما هي دلوقتي"
+ ],
+ "ECW and MrSID images are not supported": [
+  "صور ECW وMrSID مش مدعومة"
+ ],
+ "Empty layer: it has no features yet.": [
+  "طبقة فاضية: ما فيهاش أي عناصر لسه."
+ ],
+ "Every layer has a coordinate system.": [
+  "كل الطبقات ليها نظام إحداثيات."
+ ],
+ "Everything is shown again ({n} layers).": [
+  "كل حاجة ظاهرة تاني ({n} طبقات)."
+ ],
+ "Feature Counts": [
+  "عدد المعالم"
+ ],
+ "Feature ID": [
+  "رقم المعلم"
+ ],
+ "Feature counts are shown in the layer properties; models have no count step.": [
+  "عدد المعالم يظهر في خصائص الطبقة؛ لا توجد خطوة عدّ في النماذج."
+ ],
+ "Feature deleted": [
+  "عنصر اتمسح"
+ ],
+ "Feature reshaped": [
+  "عنصر شكله اتغيّر"
+ ],
+ "Feature {fid}: file not found: {p}": [
+  "المعلم {fid}: الملف مش موجود: {p}"
+ ],
+ "Features": [
+  "المعالم"
+ ],
+ "Features added": [
+  "معالم مضافة"
+ ],
+ "Features deleted": [
+  "معالم محذوفة"
+ ],
+ "Features from a web server": [
+  "معالم من خادم ويب"
+ ],
+ "Features with a low {f} fade out.": [
+  "العناصر اللي {f} بتاعها قليل بتبهت."
+ ],
+ "Field not found: {f}": [
+  "الحقل مش موجود: {f}"
+ ],
+ "Field photos from any phone": [
+  "صور ميدانية من أي تليفون"
+ ],
+ "Field photos live from a phone": [
+  "صور ميدانية لحظية من التليفون"
+ ],
+ "Field removed": [
+  "حقل اتشال"
+ ],
+ "Field team: no phone yet": [
+  "الفريق الميداني: لسه مفيش تليفون"
+ ],
+ "Field team: {n} phones": [
+  "الفريق الميداني: {n} تليفون"
+ ],
+ "Field with the file path or the file itself": [
+  "الحقل اللي فيه مسار الملف أو الملف نفسه"
+ ],
+ "Fields to copy (empty = all)": [
+  "الحقول اللي تتنقل (فاضي = الكل)"
+ ],
+ "Fields to show": [
+  "الحقول اللي تظهر"
+ ],
+ "Fields to show in the label table:": [
+  "الحقول اللي تظهر في جدول التسمية:"
+ ],
+ "Finding the features inside the area…": [
+  "بدوّر على المعالم اللي جوه المنطقة…"
+ ],
+ "Folder for the field photos": [
+  "فولدر الصور الميدانية"
+ ],
+ "Folder for the tiles": [
+  "فولدر البلاطات"
+ ],
+ "Folder for the website (an empty folder)": [
+  "فولدر الموقع (فولدر فاضي)"
+ ],
+ "Font changed to {f}.": [
+  "الخط اتغيّر لـ {f}."
+ ],
+ "Font has no letters for this text": [
+  "الخط ما فيهوش حروف للكلام ده"
+ ],
+ "For {d:.0f} dpi print, use tiles at a higher zoom or a lower export dpi.": [
+  "عشان طباعة {d:.0f} dpi استخدم بلاطات بتقريب أعلى أو قلّل الـ dpi في التصدير."
+ ],
+ "Forward to the next view": [
+  "قدّم للمنظر اللي بعده"
+ ],
+ "Frame ticks only (no lines across the map)": [
+  "علامات على الإطار بس (من غير خطوط على الخريطة)"
+ ],
+ "Free layout (paper above)": [
+  "لوحة حرة (الورق اللي فوق)"
+ ],
+ "Free some space or write the output to another drive.": [
+  "فضّي شوية مساحة أو اكتب الناتج على بارتشن تاني."
+ ],
+ "From the kept feature": [
+  "من العنصر اللي هيفضل"
+ ],
+ "Gaps up to this size are closed (map units)": [
+  "الفراغات اللي لحد المقاس ده بتتقفل (بوحدات الخريطة)"
+ ],
+ "Give a layer or paste coordinates (X Y on each line).": [
+  "اختار طبقة أو الصق إحداثيات (X Y في كل سطر)."
+ ],
+ "Give map settings, a layout or a layout map.": [
+  "ادّيني إعدادات خريطة، أو إخراج، أو خريطة جوه إخراج."
+ ],
+ "Give points, parcels or a surface to write.": [
+  "اختار نقاط أو قطع أو سطح علشان يتكتبوا."
+ ],
+ "Grid numbers moved outside the map frame.": [
+  "أرقام الشبكة اتنقلت برّه إطار الخريطة."
+ ],
+ "Guide the phones to the selection": [
+  "وجّه التليفونات للمحدد"
+ ],
+ "Header (optional, an expression such as \"parcel_no\"):": [
+  "العنوان (اختياري، تعبير زي \"parcel_no\"):"
+ ],
+ "Height field (empty = the points' Z)": [
+  "حقل الارتفاع (فاضي = Z بتاع النقاط)"
+ ],
+ "If you need the heights, save to GeoPackage; if not, use Drop M/Z values first.": [
+  "لو محتاج الارتفاعات احفظ GeoPackage، ولو مش محتاجها شيلها الأول بأداة «حذف قيم M/Z»."
+ ],
+ "Image will print blurry": [
+  "الصورة هتطلع مغبّشة في الطباعة"
+ ],
+ "Include feature details when tapped": [
+  "اعرض تفاصيل العنصر لما يدوسوا عليه"
+ ],
+ "Include the line's ends": [
+  "حط نقط على أطراف الخط"
+ ],
+ "Inside": [
+  "جوّه"
+ ],
+ "Inside - {d} from the edge": [
+  "جوه - {d} من الحد"
+ ],
+ "Item outside the page": [
+  "عنصر برّه الصفحة"
+ ],
+ "JPEG quality (when photos are made smaller)": [
+  "جودة JPEG (لما الصور تتصغّر)"
+ ],
+ "Keep": [
+  "يفضل"
+ ],
+ "Keep digits as they are": [
+  "سيب الأرقام زي ما هي"
+ ],
+ "Keep only the common ones": [
+  "سيب المشترك بس"
+ ],
+ "Keep the attributes of": [
+  "خلّي بيانات"
+ ],
+ "Keep the current colours": [
+  "سيب الألوان زي ما هي"
+ ],
+ "Keep the part": [
+  "خلّي الجزء"
+ ],
+ "Keep the saved scale (else the whole saved area is shown)": [
+  "حافظ على المقياس المحفوظ (وإلا هتظهر المنطقة المحفوظة كلها)"
+ ],
+ "Kinds to choose on the phone, separated by commas (optional)": [
+  "أنواع يختار منها اللي في الشارع، مفصولة بفواصل (اختياري)"
+ ],
+ "Labels, styles and expressions that use the old names need the new ones.": [
+  "التسميات والرموز والتعبيرات اللي بتستخدم الأسماء القديمة محتاجة الأسماء الجديدة."
+ ],
+ "Layer in the wrong place": [
+  "الطبقة اللي في مكان غلط"
+ ],
+ "Layer or table to join": [
+  "الطبقة أو الجدول اللي هيتربط"
+ ],
+ "Layer with unknown coordinate system": [
+  "طبقة نظام إحداثياتها مش معروف"
+ ],
+ "Layers not found in the project: {names}": [
+  "طبقات مش موجودة في المشروع: {names}"
+ ],
+ "Leave out features without a match": [
+  "استبعد العناصر اللي ملهاش تطابق"
+ ],
+ "Left (outside for polygons)": [
+  "شمال (برّه للمضلعات)"
+ ],
+ "Legend does not fit its frame": [
+  "مفتاح الخريطة مش واسع في إطاره"
+ ],
+ "Legend frame enlarged to fit its entries.": [
+  "إطار المفتاح كبر عشان يساع بنوده."
+ ],
+ "Legend lists layers that are not on the map": [
+  "المفتاح فيه طبقات مش ظاهرة على الخريطة"
+ ],
+ "Legend shows only what is on the map.": [
+  "المفتاح بقى يعرض اللي على الخريطة بس."
+ ],
+ "Legend: only what is on the map": [
+  "المفتاح: اللي على الخريطة بس"
+ ],
+ "Line width shows how much moves along each line.": [
+  "سُمك الخط بيوضّح قد إيه بيتحرك على كل خط."
+ ],
+ "Look for projects in these folders:": [
+  "دوّر على المشاريع في الفولدرات دي:"
+ ],
+ "Look in this folder too": [
+  "دوّر في الفولدر ده كمان"
+ ],
+ "Made with {app} {v} on {d}": [
+  "اتعمل بـ {app} {v} يوم {d}"
+ ],
+ "Made with {app}.": [
+  "اتعمل بـ {app}."
+ ],
+ "Make the layer to fill the current layer.": [
+  "خلّي الطبقة اللي هتتملا هي الطبقة الحالية."
+ ],
+ "Make the polygon layer the current layer.": [
+  "خلّي طبقة المضلعات هي الطبقة الحالية."
+ ],
+ "Map and feature services": [
+  "خدمات الخرائط والمعالم"
+ ],
+ "Map book saved: {n} map pages, {links} page links.": [
+  "اتحفظ دفتر الخرائط: {n} صفحة خرائط، و{links} رابط بين الصفحات."
+ ],
+ "Map labels of «{l}» set to {p:.0f} pt.": [
+  "كتابات «{l}» على الخريطة بقت {p:.0f} نقطة."
+ ],
+ "Map labels too small at this scale": [
+  "كتابات الخريطة صغيرة على المقياس ده"
+ ],
+ "Memory in use right now:": [
+  "الرام المستخدمة دلوقتي:"
+ ],
+ "Model saved: {p}": [
+  "النموذج اتحفظ: {p}"
+ ],
+ "Models in .atbx toolboxes become models in the toolbox.": [
+  "الموديلات اللي في صناديق atbx بتتحوّل لموديلات في صندوق الأدوات."
+ ],
+ "More": [
+  "أكتر"
+ ],
+ "More\nTools": [
+  "أدوات تانية"
+ ],
+ "Move the project to a short folder such as D:\\Projects\\Name and try again.": [
+  "انقل المشروع لفولدر قصير زي D:\\Projects\\Name وجرّب تاني."
+ ],
+ "Moving does not mean losing anything - and you can always go back:": [
+  "النقل مش معناه إنك تخسر حاجة، وتقدر ترجع في أي وقت:"
+ ],
+ "Name new stops after the place under the map centre": [
+  "سمّي المحطات الجديدة باسم المكان اللي في نص الخريطة"
+ ],
+ "Name of this selection ({n} features):": [
+  "اسم التحديد ده ({n} عنصر):"
+ ],
+ "Named features (streets, places, parcels…)": [
+  "العناصر اللي ليها أسماء (شوارع، أماكن، قطع…)"
+ ],
+ "New stop - save this view": [
+  "محطة جديدة - احفظ المنظر ده"
+ ],
+ "Next View": [
+  "المنظر اللي بعده"
+ ],
+ "Next stop": [
+  "المحطة اللي بعدها"
+ ],
+ "No - Arabic sides only": [
+  "لأ - الأضلاع بالعربي بس"
+ ],
+ "No Arabic text needed fixing.": [
+  "مفيش نص عربي محتاج إصلاح."
+ ],
+ "No brand colours saved yet.": [
+  "مفيش ألوان هوية محفوظة لسه."
+ ],
+ "No coordinate system": [
+  "مفيش نظام إحداثيات"
+ ],
+ "No coordinate system turns these numbers into positions on Earth.": [
+  "مفيش نظام إحداثيات بيحوّل الأرقام دي لأماكن على الأرض."
+ ],
+ "No coordinate-system problems found: the layers should line up.": [
+  "مفيش مشاكل في أنظمة الإحداثيات: الطبقات المفروض تركب على بعض."
+ ],
+ "No duplicate vertices or segments this short.": [
+  "مفيش رؤوس مكررة أو أضلاع بالقصر ده."
+ ],
+ "No earlier view.": [
+  "مفيش منظر قبل ده."
+ ],
+ "No enclosed area here.": [
+  "مفيش مساحة مقفولة هنا."
+ ],
+ "No features are selected.": [
+  "مفيش معالم محددة."
+ ],
+ "No features to measure (check the period and the selection).": [
+  "لا توجد معالم للقياس (تحقق من الفترة والتحديد)."
+ ],
+ "No field of the source matches a field of “{l}”.": [
+  "مفيش حقل في المصدر بيطابق حقل في «{l}»."
+ ],
+ "No form - photo, kind and note only": [
+  "مفيش نموذج - صورة ونوع وملاحظة بس"
+ ],
+ "No gaps or overshoots up to this size.": [
+  "مفيش فراغات أو زيادات لحد المقاس ده."
+ ],
+ "No gaps up to this width between the selected polygons.": [
+  "مفيش فراغات لحد العرض ده بين المضلعات المحددة."
+ ],
+ "No later view.": [
+  "مفيش منظر بعد ده."
+ ],
+ "No layer matches «{text}».": [
+  "مافيش طبقة بتطابق «{text}»."
+ ],
+ "No legacy font": [
+  "مفيش خط قديم"
+ ],
+ "No line or edge under the click.": [
+  "مفيش خط أو ضلع تحت الدوسة."
+ ],
+ "No named features were found.": [
+  "مفيش عناصر ليها أسماء."
+ ],
+ "No network found. Connect this computer to the Wi-Fi or the phone's hotspot.": [
+  "مافيش شبكة. وصّل الكمبيوتر بالواي فاي أو بنقطة اتصال التليفون."
+ ],
+ "No numbers to chart": [
+  "مفيش أرقام للرسم"
+ ],
+ "No problems found: every layer has a coordinate system and they line up.": [
+  "مفيش مشاكل: كل طبقة ليها نظام إحداثيات وكلهم راكبين على بعض."
+ ],
+ "No project in these folders uses this data.": [
+  "مفيش مشروع في الفولدرات دي بيستخدم البيانات دي."
+ ],
+ "No relay can be reached. Check this computer's internet connection.": [
+  "مش قادرين نوصل لأي وسيط. اتأكد من إنترنت الكمبيوتر ده."
+ ],
+ "No spikes sharper than this angle.": [
+  "مفيش شوك أحدّ من الزاوية دي."
+ ],
+ "No stop matches «{q}».": [
+  "مفيش محطة فيها «{q}»."
+ ],
+ "No survey points were found in this file.": [
+  "مفيش نقاط رفع في الملف ده."
+ ],
+ "No temporary layers.": [
+  "مفيش طبقات مؤقتة."
+ ],
+ "No text needed fixing.": [
+  "مفيش نص محتاج يتصلّح."
+ ],
+ "No title": [
+  "مفيش عنوان"
+ ],
+ "No tools were run in this period. Tools run from their dialogs are recorded.": [
+  "ما اتشغلتش أدوات في الفترة دي. الأدوات اللي بتتشغّل من نوافذها بس هي اللي بتتسجّل."
+ ],
+ "No unit or coordinate system turns these numbers into positions on Earth.": [
+  "مفيش وحدة ولا نظام إحداثيات بيحوّل الأرقام دي لأماكن على الأرض."
+ ],
+ "No values": [
+  "مفيش قيم"
+ ],
+ "No vertex lies within the tolerance of the target.": [
+  "مفيش رأس في حدود التسامح من الهدف."
+ ],
+ "No very large layers.": [
+  "مفيش طبقات ضخمة."
+ ],
+ "No visible data to make the pages from.": [
+  "مفيش بيانات ظاهرة نعمل منها الصفحات."
+ ],
+ "None": [
+  "ولا حاجة"
+ ],
+ "North arrow does not turn with the map": [
+  "سهم الشمال مش بيلف مع الخريطة"
+ ],
+ "North arrow now turns with the map.": [
+  "سهم الشمال بقى يلف مع الخريطة."
+ ],
+ "Not fields of the layer, left empty in the names: {f}": [
+  "دي مش حقول في الطبقة، واتسابت فاضية في الأسماء: {f}"
+ ],
+ "Not in a group": [
+  "مش في مجموعة"
+ ],
+ "Not reaching the computer - photos are kept on the phone and sent later.": [
+  "مش واصل للكمبيوتر - الصور محفوظة على التليفون وهتتبعت لوحدها بعدين."
+ ],
+ "Not ready": [
+  "مش جاهزة"
+ ],
+ "Not shared": [
+  "مش متشاركة"
+ ],
+ "Not started": [
+  "لسه ما بدأش"
+ ],
+ "Not sure which one? Biruni tries them all and ranks them.": [
+  "مش متأكد أنهي نظام؟ Biruni بيجرّبهم كلهم ويرتّبهم."
+ ],
+ "Not used yet.": [
+  "مش مستخدمة لسه."
+ ],
+ "Note - shown when you hover the stop and as the caption of the tour": [
+  "ملاحظة - بتظهر لما تقف على المحطة وكتعليق في الجولة"
+ ],
+ "Nothing could be written: {why}": [
+  "ماقدرناش نكتب أي حاجة: {why}"
+ ],
+ "Nothing is selected": [
+  "مفيش حاجة مختارة"
+ ],
+ "Nothing to merge.": [
+  "مفيش حاجة تتدمج."
+ ],
+ "Nothing to propose: the data has no clear pattern yet.": [
+  "مفيش اقتراحات: البيانات لسه مافيهاش نمط واضح."
+ ],
+ "Nothing to show yet: add layers to the map.": [
+  "مفيش حاجة تتعرض لسه: ضيف طبقات للخريطة."
+ ],
+ "Nothing would be left of the selected features (or nothing overlaps).": [
+  "مش هيفضل حاجة من العناصر المحددة (أو مفيش تداخل)."
+ ],
+ "Number\nFeatures": [
+  "ترقيم المعالم"
+ ],
+ "Number features in reading order": [
+  "ترقيم المعالم بترتيب القراءة"
+ ],
+ "Numbers read on the plan": [
+  "الأرقام اللي اتقرت من المخطط"
+ ],
+ "One map, every size it is needed in:": [
+  "خريطة واحدة، بكل المقاسات اللي محتاجها:"
+ ],
+ "Only after dividing by area or population.": [
+  "بس بعد القسمة على المساحة أو عدد السكان."
+ ],
+ "Only from senders whose name contains": [
+  "بس من اللي اسمهم فيه"
+ ],
+ "Only here": [
+  "موجود هنا بس"
+ ],
+ "Only in the attribute table (the data is not touched)": [
+  "في جدول البيانات بس (البيانات نفسها مش بتتغيّر)"
+ ],
+ "Only the first {n} values got a colour.": [
+  "أول {n} قيمة بس اللي اتلوّنت."
+ ],
+ "Only when a required field is empty": [
+  "بس لما يكون فيه حقل مطلوب فاضي"
+ ],
+ "Open the attribute table to see the colours.": [
+  "افتح جدول البيانات علشان تشوف الألوان."
+ ],
+ "Open the attribute table to see the exact field names and pick the field again.": [
+  "افتح جدول البيانات تشوف أسماء الحقول بالظبط، واختار الحقل تاني."
+ ],
+ "Open the expression builder: the preview under it shows where the mistake is.": [
+  "افتح منشئ المعادلات: المعاينة اللي تحته بتوريك مكان الغلطة."
+ ],
+ "Open the file's folder": [
+  "افتح فولدر الملف"
+ ],
+ "Open this page by scanning the code in Biruni GIS (Field photos).": [
+  "افتح الصفحة دي بمسح الكود اللي في Biruni GIS (صور ميدانية)."
+ ],
+ "Opened «What coordinate system is this?».": [
+  "اتفتحت أداة «إيه نظام الإحداثيات ده؟»."
+ ],
+ "Opens the link in this computer's browser, to see what the others see.": [
+  "بيفتح اللينك في متصفح الكمبيوتر ده، علشان تشوف اللي الناس التانية شايفاه."
+ ],
+ "Opens the link in this computer's browser.": [
+  "بيفتح اللينك في متصفح الكمبيوتر ده."
+ ],
+ "Or a point inside the parcel": [
+  "أو نقطة جوه القطعة"
+ ],
+ "Or choose the room": [
+  "أو اختار الغرفة"
+ ],
+ "Or the area where the data is": [
+  "أو المنطقة اللي فيها البيانات"
+ ],
+ "Other (training, maintenance, servers ...)": [
+  "حاجات تانية (تدريب، صيانة، سيرفرات...)"
+ ],
+ "Overlaps another plot of the same producer": [
+  "متداخلة مع قطعة تانية لنفس المنتج"
+ ],
+ "PDAL, the point cloud engine, was not found.": [
+  "PDAL، محرّك سحابة النقاط، مش موجود."
+ ],
+ "PDF will be one big picture": [
+  "الـ PDF هيطلع صورة واحدة كبيرة"
+ ],
+ "Parcel reference (leave empty to use the point)": [
+  "رقم القطعة (سيبه فاضي علشان تستخدم النقطة)"
+ ],
+ "Phone anywhere (over the internet)": [
+  "التليفون في أي مكان (عن طريق الإنترنت)"
+ ],
+ "Phone anywhere - Biruni bridge (direct, nothing to set up)": [
+  "التليفون في أي مكان - جسر البيروني (مباشر، من غير أي إعداد)"
+ ],
+ "Phone anywhere - my own Cloudflare tunnel (fixed address)": [
+  "التليفون في أي مكان - نفق Cloudflare الخاص بيّ (عنوان ثابت)"
+ ],
+ "Phone browser from anywhere - no warning (Biruni bridge)": [
+  "متصفح التليفون من أي مكان - من غير تحذير (جسر البيروني)"
+ ],
+ "Phone nearby (same Wi-Fi or the phone's hotspot)": [
+  "التليفون قريب (نفس الواي فاي أو نقطة اتصال التليفون)"
+ ],
+ "Photo saved, but not added to the map ({e}). It is added next time.": [
+  "الصورة اتحفظت بس ما اتضافتش للخريطة ({e}). هتتضاف المرة الجاية."
+ ],
+ "Photos received: {n}": [
+  "الصور اللي وصلت: {n}"
+ ],
+ "Pick a band number the image has (see Layer properties → Information).": [
+  "اختار رقم باند موجود في الصورة (شوف خصائص الطبقة ← المعلومات)."
+ ],
+ "Pick your country to see what Biruni offers there.": [
+  "اختار بلدك علشان تشوف Biruni بيقدّم إيه هناك."
+ ],
+ "Place Image\non Map": [
+  "حط صورة على الخريطة"
+ ],
+ "Place an image on the map by hand": [
+  "حط صورة على الخريطة بإيدك"
+ ],
+ "Place the image on the map": [
+  "حط الصورة على الخريطة"
+ ],
+ "Place this photo on the map (a sketch or a plan)": [
+  "حط الصورة دي على الخريطة (كروكي أو مخطط)"
+ ],
+ "Point at a segment first, then press P or R.": [
+  "قف على ضلع الأول، وبعدين دوس P أو R."
+ ],
+ "Polygon not closed": [
+  "المضلع مش مقفول"
+ ],
+ "Press Start first.": [
+  "دوس ابدأ الأول."
+ ],
+ "Press {key} to go here": [
+  "دوس {key} عشان تروح هنا"
+ ],
+ "Previous View": [
+  "المنظر اللي قبله"
+ ],
+ "Previous stop": [
+  "المحطة اللي قبلها"
+ ],
+ "Projective, for photos (4+ points)": [
+  "إسقاطي، للصور (4 نقط أو أكتر)"
+ ],
+ "Put the layer back as it was on:": [
+  "رجّع الطبقة زي ما كانت يوم:"
+ ],
+ "Put them outside the frame so they don't hide data.": [
+  "حطّها برّه الإطار عشان ما تغطيش على البيانات."
+ ],
+ "Questions the phone asks with each photo: choices, numbers, yes / no, dates.": [
+  "أسئلة التليفون بيسألها مع كل صورة: اختيارات، أرقام، أيوه / لأ، تواريخ."
+ ],
+ "RTK fixed only": [
+  "RTK ثابت (Fixed) بس"
+ ],
+ "Ready. Scan the code with the phone's camera - it works on mobile data too.": [
+  "جاهز. امسح الكود بكاميرا التليفون - بيشتغل على باقة الموبايل كمان."
+ ],
+ "Ready. Send the link, or let someone scan the code.": [
+  "جاهز. ابعت اللينك، أو خلّي حد يصوّر الكود."
+ ],
+ "Release {r}: {n} file(s) cover this area.": [
+  "الإصدار {r}: {n} ملف بيغطّوا المنطقة دي."
+ ],
+ "Remove from the selection": [
+  "شيل من التحديد"
+ ],
+ "Remove kind": [
+  "شيل النوع"
+ ],
+ "Remove layer or group": [
+  "شيل الطبقة أو المجموعة"
+ ],
+ "Remove noise (isolated points above or below the ground)": [
+  "شيل النقاط الشاردة (المعزولة فوق الأرض أو تحتها)"
+ ],
+ "Remove row": [
+  "شيل السطر"
+ ],
+ "Remove rule": [
+  "شيل القاعدة"
+ ],
+ "Remove tatweel (ـ)": [
+  "شيل التطويل (ـ)"
+ ],
+ "Remove the layer from the ArcGIS map, stop editing, or close the ArcGIS project.": [
+  "شيل الطبقة من خريطة ArcGIS، أو اقفل التعديل، أو اقفل مشروع ArcGIS."
+ ],
+ "Remove value": [
+  "شيل القيمة"
+ ],
+ "Removes the area filter from all layers and restores their previous filters.": [
+  "بيشيل فلتر المنطقة من كل الطبقات ويرجّع الفلاتر اللي كانت عليها."
+ ],
+ "Rename the file to .zip, extract it, and open the doc.kml inside.": [
+  "غيّر امتداد الملف لـ ‎.zip وفكّه، وافتح ملف doc.kml اللي جوّاه."
+ ],
+ "Renaming changes the data: choose \"In the data itself\" to rename fields.": [
+  "تغيير الاسم بيغيّر البيانات: اختار «في البيانات نفسها» علشان تغيّر أسماء الحقول."
+ ],
+ "Repair text read with the wrong code page": [
+  "صلّح النص اللي اتقرا بصفحة ترميز غلط"
+ ],
+ "Repair what can be repaired safely (invalid polygons, swapped coordinates)": [
+  "صلّح اللي ينفع يتصلّح بأمان (المضلعات الغلط، والإحداثيات المقلوبة)"
+ ],
+ "Repaired (made valid).": [
+  "اتصلّح (بقى سليم)."
+ ],
+ "Restore unsaved edits": [
+  "استرجاع التعديلات اللي ما اتحفظتش"
+ ],
+ "Rewrite the fields of {l} in this order? A copy of the file is kept first.": [
+  "تعيد كتابة حقول {l} بالترتيب ده؟ هتتعمل نسخة من الملف الأول."
+ ],
+ "Right (inside for polygons)": [
+  "يمين (جوه للمضلعات)"
+ ],
+ "Rotated rasters are not supported: warp the surface first.": [
+  "الصور المايلة مش مدعومة: اعمل Warp للسطح الأول."
+ ],
+ "Route inside the parcel": [
+  "المسار جوه القطعة"
+ ],
+ "Route inside the parcel (m)": [
+  "المسار جوه القطعة (م)"
+ ],
+ "Rule (expression that must be true)": [
+  "القاعدة (تعبير لازم يبقى صح)"
+ ],
+ "Run ArcGIS Python (arcpy) script": [
+  "تشغيل سكربت بايثون بتاع ArcGIS ‏(arcpy)"
+ ],
+ "Run Fix geometries, or Check my data to remove the broken shapes.": [
+  "شغّل «إصلاح الأشكال»، أو «افحص بياناتي» علشان يشيل الأشكال المكسورة."
+ ],
+ "Runs well on an old laptop: less memory, faster start.": [
+  "بيشتغل كويس على لابتوب قديم: رام أقل وفتح أسرع."
+ ],
+ "SXF classifier (.rsc), if it is not next to the file": [
+  "مصنّف SXF ‏(.rsc) لو مش جنب الملف"
+ ],
+ "Safe to reach?": [
+  "الوصول ليه آمن؟"
+ ],
+ "Save large data as GeoPackage, which has no such limit.": [
+  "احفظ البيانات الكبيرة GeoPackage، مفيهاش الحد ده."
+ ],
+ "Save or discard the edits of this layer first.": [
+  "احفظ تعديلات الطبقة دي أو الغيها الأول."
+ ],
+ "Save the edits now": [
+  "احفظ التعديلات دلوقتي"
+ ],
+ "Save the layers you are showing now as a theme, and switch between themes.": [
+  "احفظ الطبقات الظاهرة دلوقتي كسمة، وبدّل بين السمات."
+ ],
+ "Save the result to the project folder or a temporary layer, with a simple name.": [
+  "احفظ الناتج في فولدر المشروع أو كطبقة مؤقتة، باسم بسيط."
+ ],
+ "Save what the map shows now (Ctrl+Shift+B)": [
+  "احفظ اللي الخريطة بتعرضه دلوقتي (Ctrl+Shift+B)"
+ ],
+ "Saved on the phone - sending…": [
+  "اتحفظت على التليفون - بتتبعت…"
+ ],
+ "Saved {file}: {n} layers.": [
+  "اتحفظ {file}: {n} طبقة."
+ ],
+ "Saved. Choose the 'Brand colours' theme in Map Studio to use them.": [
+  "اتحفظت. اختار ثيم «ألوان الهوية» في استوديو الخرائط عشان تستخدمها."
+ ],
+ "Saved: {p}": [
+  "اتحفظ: {p}"
+ ],
+ "Scale and rotation (2+ points)": [
+  "مقياس ودوران (نقطتين أو أكتر)"
+ ],
+ "Scale bar not linked to the map": [
+  "مسطرة المقياس مش مربوطة بالخريطة"
+ ],
+ "Scale bar set to {v:g} {u} a segment.": [
+  "مسطرة المقياس بقت {v:g} {u} لكل قسم."
+ ],
+ "Scale bar with awkward numbers": [
+  "مسطرة المقياس أرقامها مش مريحة"
+ ],
+ "Scan the code with the phone's camera.": [
+  "امسح الكود بكاميرا التليفون."
+ ],
+ "Scan: this map on your phone": [
+  "امسح الكود: الخريطة دي على موبايلك"
+ ],
+ "Scan: this page on your phone": [
+  "امسح الكود: الصفحة دي على موبايلك"
+ ],
+ "Script saved: {p}": [
+  "السكربت اتحفظ: {p}"
+ ],
+ "Second field (optional)": [
+  "حقل تاني (اختياري)"
+ ],
+ "See My\nMap": [
+  "شوف خريطتي"
+ ],
+ "See My Map": [
+  "شوف خريطتي"
+ ],
+ "Select a layer or a group first.": [
+  "اختار طبقة أو مجموعة الأول."
+ ],
+ "Select a vector layer.": [
+  "اختار طبقة متجهية."
+ ],
+ "Select at least two features to merge": [
+  "اختار عنصرين على الأقل علشان تدمجهم"
+ ],
+ "Select features in that layer first, or untick 'Selected features only'.": [
+  "اختار عناصر في الطبقة الأول، أو شيل علامة «العناصر المحددة فقط»."
+ ],
+ "Select one feature to edit its vertices.": [
+  "حدّد عنصر واحد عشان تعدّل رؤوسه."
+ ],
+ "Select the features (hold Ctrl to add) in the edited layer, then merge.": [
+  "اختار العناصر (دوس Ctrl علشان تزوّد) في الطبقة اللي بتعدّلها، وبعدين ادمج."
+ ],
+ "Select the features to send (at most {n}).": [
+  "حدّد العناصر اللي هتتبعت ({n} بالكتير)."
+ ],
+ "Select the layer (or layers) to peek at first.": [
+  "اختار الطبقة (أو الطبقات) اللي عايز تبص عليها الأول."
+ ],
+ "Select the one feature whose shape is replaced.": [
+  "حدّد العنصر الواحد اللي شكله هيتغير."
+ ],
+ "Select the target line, then click the end to extend or the piece to cut away.": [
+  "حدّد الخط الهدف، وبعدين دوس على الطرف اللي هيتمدّ أو الحتة اللي هتتقص."
+ ],
+ "Select these": [
+  "حدّد دول"
+ ],
+ "Select two or more features of one layer to merge.": [
+  "حدّد عنصرين أو أكتر من نفس الطبقة عشان تدمجهم."
+ ],
+ "Selected features only": [
+  "المعالم المحددة فقط"
+ ],
+ "Selection saved: {s}": [
+  "اتحفظ التحديد: {s}"
+ ],
+ "Send the indoor map": [
+  "ابعت الخريطة الداخلية"
+ ],
+ "Send this view to a phone…": [
+  "ابعت المنظر ده لتليفون…"
+ ],
+ "Send «{name}» to a phone": [
+  "ابعت «{name}» لتليفون"
+ ],
+ "Sharing stopped unexpectedly ({e}). Press Share map live again.": [
+  "المشاركة وقفت فجأة ({e}). دوس «شارك الخريطة مباشر» تاني."
+ ],
+ "Sheets of stickers with each room's code, to stick on the doors.": [
+  "ورق ملصقات فيه كود كل غرفة، علشان يتلزق على الأبواب."
+ ],
+ "Show Everything": [
+  "اعرض كل حاجة"
+ ],
+ "Show Only\nInside Area": [
+  "اعرض اللي جوه المنطقة"
+ ],
+ "Show everything": [
+  "اعرض كل حاجة"
+ ],
+ "Show everything again": [
+  "اعرض كل حاجة تاني"
+ ],
+ "Show in the legend only the symbols of the features that match an expression.": [
+  "اعرض في المفتاح رموز العناصر اللي بتطابق تعبير معيّن بس."
+ ],
+ "Show in the legend only the symbols that appear in the current map view.": [
+  "اعرض في المفتاح الرموز اللي ظاهرة في العرض الحالي للخريطة بس."
+ ],
+ "Show only inside the area": [
+  "اعرض اللي جوه المنطقة بس"
+ ],
+ "Show only what is inside an area": [
+  "اعرض بس اللي جوه منطقة"
+ ],
+ "Shows two variables on one map with a 3 × 3 colour grid.": [
+  "بيعرض متغيّرين على خريطة واحدة بشبكة ألوان 3 × 3."
+ ],
+ "Shows where the points crowd together, whatever their type.": [
+  "بيوضّح النقط متزاحمة فين، أيًا كان نوعها."
+ ],
+ "Shows where the values pile up.": [
+  "بيوضّح القيم متكوّمة فين."
+ ],
+ "Sign In to Services Again": [
+  "سجّل دخول الخدمات تاني"
+ ],
+ "Simple dots when zoomed out, full symbols when zoomed in.": [
+  "نقط بسيطة لما تبعد، ورموز كاملة لما تقرّب."
+ ],
+ "Simplify its drawing (faster, looks nearly the same)": [
+  "بسّط رسمها (أسرع، وشكلها تقريبًا زي ما هو)"
+ ],
+ "Sizes show the values on points and lines.": [
+  "الأحجام بتعرض القيم على النقط والخطوط."
+ ],
+ "Small PDF (text stays text, lighter images and lines)": [
+  "PDF صغير (النص يفضل نص، وصور وخطوط أخف)"
+ ],
+ "Snake (every other row back)": [
+  "متعرّج (كل صف عكس اللي قبله)"
+ ],
+ "Some labels were shortened.": [
+  "شوية أسماء اتقصّرت."
+ ],
+ "Someone opens a link on their phone and sees your map as you work.": [
+  "حد يفتح لينك على تليفونه ويشوف خريطتك وإنت شغّال."
+ ],
+ "Sort without “ال” and words like “شارع”, “حي”": [
+  "الترتيب من غير «ال» وكلمات زي «شارع» و«حي»"
+ ],
+ "Start-up on this computer (from launch to ready):": [
+  "وقت الفتح على الجهاز ده (من التشغيل لحد ما يجهز):"
+ ],
+ "Stopped at {n} features - raise the limit or choose a smaller area.": [
+  "وقفت عند {n} عنصر - زوّد الحد أو اختار منطقة أصغر."
+ ],
+ "Stopped. The link no longer works.": [
+  "وقفت. اللينك مبقاش شغال."
+ ],
+ "Stopped. {n} photos received - they are in the folder and on the map.": [
+  "اتوقف. وصل {n} صورة - موجودين في الفولدر وعلى الخريطة."
+ ],
+ "Subfolder for each value of": [
+  "فولدر فرعي لكل قيمة في"
+ ],
+ "Tables have no geometry to match: choose a key field.": [
+  "الجداول ملهاش أشكال نطابق بيها: اختار حقل مفتاح."
+ ],
+ "Tap where you are in the room": [
+  "دوس على مكانك في الغرفة"
+ ],
+ "Temporary layer (in memory only)": [
+  "طبقة مؤقتة (في الذاكرة بس)"
+ ],
+ "The .qgz file is damaged, open elsewhere, or in a folder you cannot write to.": [
+  "ملف ‎.qgz بايظ، أو مفتوح في حتة تانية، أو في فولدر مش من حقك تكتب فيه."
+ ],
+ "The Arabic labels of this project already draw correctly.": [
+  "التسميات العربي في المشروع ده بتترسم صح أصلًا."
+ ],
+ "The Catastro has no parcel at this point.": [
+  "الـ Catastro مفيهوش قطعة عند النقطة دي."
+ ],
+ "The Field Photos form now has {n} questions from this charter.": [
+  "نموذج الصور الميدانية بقى فيه {n} سؤال من الدستور ده."
+ ],
+ "The GRASS GIS tools are not available.": [
+  "أدوات GRASS GIS مش موجودة."
+ ],
+ "The GRASS tools are not available": [
+  "أدوات GRASS مش متاحة"
+ ],
+ "The GeoJSON is {s} MB: split it into files under {m} MB for upload.": [
+  "ملف GeoJSON حجمه {s} ميجا: قسّمه لملفات أقل من {m} ميجا علشان الرفع."
+ ],
+ "The SAGA engine that runs some terrain and hydrology tools did not start.": [
+  "محرك SAGA اللي بيشغّل بعض أدوات التضاريس والهيدرولوجي ما اشتغلش."
+ ],
+ "The SAGA tools are not available": [
+  "أدوات SAGA مش متاحة"
+ ],
+ "The attribute table of {l} is sorted naturally. Reopen it if it is already open.": [
+  "جدول بيانات {l} اترتّب ترتيب طبيعي. اقفله وافتحه تاني لو كان مفتوح."
+ ],
+ "The attribute table shows the fields in the new order.": [
+  "جدول البيانات بقى بيعرض الحقول بالترتيب الجديد."
+ ],
+ "The bridge stopped ({e}). Press Stop, then Start.": [
+  "الجسر وقف ({e}). دوس إيقاف وبعدين ابدأ."
+ ],
+ "The camera cannot read codes here - choose the room.": [
+  "الكاميرا مش قادرة تقرا الأكواد هنا - اختار الغرفة."
+ ],
+ "The computer is offline, or a firewall blocks Biruni from the internet.": [
+  "الجهاز مش متوصّل، أو جدار ناري مانع Biruni من النت."
+ ],
+ "The control points are not enough or do not agree": [
+  "نقط الضبط مش كفاية أو مش متفقة"
+ ],
+ "The database is read-only": [
+  "قاعدة البيانات للقراءة بس"
+ ],
+ "The datum transformation moves this layer by up to {m:.0f} m": [
+  "تحويل المرجع (الداتم) بيحرّك الطبقة دي لحد {m:.0f} م"
+ ],
+ "The feature has only one part.": [
+  "العنصر ده جزء واحد بس."
+ ],
+ "The field {f} is not in the layer.": [
+  "الحقل {f} مش موجود في الطبقة."
+ ],
+ "The file has no ground class (2): the ground points are found instead.": [
+  "الملف مفيهوش تصنيف أرض (2): هدوّر على نقاط الأرض بدل كده."
+ ],
+ "The file is open in another program": [
+  "الملف مفتوح في برنامج تاني"
+ ],
+ "The file of this layer was not found.": [
+  "ملف الطبقة دي مش موجود."
+ ],
+ "The file was not found": [
+  "الملف مش موجود"
+ ],
+ "The file was not found.": [
+  "الملف مش موجود."
+ ],
+ "The folder is not empty; files with the same names will be replaced. Continue?": [
+  "الفولدر مش فاضي؛ الملفات اللي بنفس الأسماء هتتستبدل. أكمّل؟"
+ ],
+ "The form is saved. Press Stop, then Start, to send it to the phone.": [
+  "النموذج اتحفظ. دوس إيقاف وبعدين ابدأ علشان يوصل للتليفون."
+ ],
+ "The geodatabase is locked by another program": [
+  "قاعدة البيانات الجغرافية مقفولة من برنامج تاني"
+ ],
+ "The georeference inside the file was used.": [
+  "اتستخدمت الإحداثيات اللي جوه الملف."
+ ],
+ "The image does not have that band": [
+  "الصورة مافيهاش الباند ده"
+ ],
+ "The image has too few coloured pixels.": [
+  "الصورة فيها بكسلات ملوّنة قليلة أوي."
+ ],
+ "The image is too small for this reduction.": [
+  "الصورة صغيرة جدًا على التقليل ده."
+ ],
+ "The internet address closed. Press Stop, then Start, for a new one.": [
+  "عنوان الإنترنت اتقفل. دوس إيقاف وبعدين ابدأ علشان تاخد عنوان جديد."
+ ],
+ "The layer has no text field to colour by.": [
+  "الطبقة مفيهاش حقل نصي نلوّن بيه."
+ ],
+ "The layer is back as it was.": [
+  "الطبقة رجعت زي ما كانت."
+ ],
+ "The layer is in degrees: the distances are in degrees too.": [
+  "الطبقة بالدرجات: المسافات كمان بالدرجات."
+ ],
+ "The layer now reads from {p}.": [
+  "الطبقة بقت بتقرا من {p}."
+ ],
+ "The layer {layer} is not in the delivery.": [
+  "الطبقة {layer} مش موجودة في التسليم."
+ ],
+ "The line does not close an area with the polygons around it.": [
+  "الخط مش بيقفل مساحة مع المضلعات اللي حواليه."
+ ],
+ "The line does not cross the selected features.": [
+  "الخط مش بيقطع العناصر المحددة."
+ ],
+ "The line does not cross the target.": [
+  "الخط مش بيقطع الهدف."
+ ],
+ "The line does not reach the target when extended.": [
+  "الخط مش بيوصل للهدف لما يتمدّ."
+ ],
+ "The map doctor could not check this map: {e}": [
+  "دكتور الخرائط ماقدرش يكشف على الخريطة دي: {e}"
+ ],
+ "The map doctor is not installed.": [
+  "دكتور الخرائط مش متركّب."
+ ],
+ "The map is rotated: readers need to know where north is.": [
+  "الخريطة ملفوفة: اللي بيقرا لازم يعرف الشمال فين."
+ ],
+ "The map now uses {c}.": [
+  "الخريطة بقت على {c}."
+ ],
+ "The new edge leaves the two polygons; draw it between them.": [
+  "الضلع الجديد بيطلع برّه المضلعين؛ ارسمه بينهم."
+ ],
+ "The outline crosses itself or is otherwise invalid.": [
+  "الحدود بتقاطع نفسها أو فيها غلط تاني."
+ ],
+ "The output format or layer does not keep Z or M values, so they were left out.": [
+  "صيغة الناتج أو الطبقة مش بتحفظ قيم Z أو M، فاتسابت."
+ ],
+ "The part inside (clip)": [
+  "الجزء اللي جوه (قصّ)"
+ ],
+ "The part outside (erase)": [
+  "الجزء اللي برّه (مسح)"
+ ],
+ "The phones' guide is cleared.": [
+  "توجيه التليفونات اتمسح."
+ ],
+ "The plot is not in {c}.": [
+  "القطعة مش في {c}."
+ ],
+ "The point clicked on the map": [
+  "النقطة اللي دوست عليها في الخريطة"
+ ],
+ "The point cloud file was not found: {p}": [
+  "ملف سحابة النقاط مش موجود: {p}"
+ ],
+ "The project file was not found: {p}": [
+  "ملف المشروع مش موجود: {p}"
+ ],
+ "The project is now {p}": [
+  "المشروع بقى {p}"
+ ],
+ "The project is still open in: {n}. Close it there first.": [
+  "المشروع لسه مفتوح في: {n}. اقفله هناك الأول."
+ ],
+ "The project was saved, but the edits of these layers are not saved yet: {names}": [
+  "المشروع اتحفظ، بس تعديلات الطبقات دي لسه ما اتحفظتش: {names}"
+ ],
+ "The radius is too big for the segments at this corner.": [
+  "نصف القطر أكبر من الأضلاع اللي عند الركن ده."
+ ],
+ "The raster would be too large: use a bigger cell size.": [
+  "الراستر هيبقى كبير جدًا: استخدم حجم خلية أكبر."
+ ],
+ "The result has several parts but “{l}” stores single parts; nothing was changed.": [
+  "النتيجة فيها كذا جزء بس «{l}» بتحفظ جزء واحد بس؛ ومفيش حاجة اتغيرت."
+ ],
+ "The result would not be a valid line; nothing was changed.": [
+  "النتيجة مش هتبقى خط سليم؛ ومفيش حاجة اتغيرت."
+ ],
+ "The result would not be a valid point; nothing was changed.": [
+  "النتيجة مش هتبقى نقطة سليمة؛ ومفيش حاجة اتغيرت."
+ ],
+ "The result would not be a valid polygon.": [
+  "النتيجة مش هتبقى مضلع سليم."
+ ],
+ "The result would not be a valid polygon; nothing was changed.": [
+  "النتيجة مش هتبقى مضلع سليم؛ ومفيش حاجة اتغيرت."
+ ],
+ "The second field fades features that matter less (e.g. few people).": [
+  "الحقل التاني بيبهّت العناصر الأقل أهمية (زي اللي فيها ناس قليلة)."
+ ],
+ "The selected features have only one part each.": [
+  "كل عنصر من المحددين جزء واحد بس."
+ ],
+ "The selected lines do not cross each other.": [
+  "الخطوط المحددة مش بتقطع بعض."
+ ],
+ "The service or file moved or no longer exists at that address.": [
+  "الخدمة أو الملف اتنقل أو مابقاش موجود على العنوان ده."
+ ],
+ "The shapefile has no .prj file": [
+  "الشيب فايل ده ملوش ملف ‎.prj"
+ ],
+ "The straight line between the two points leaves the polygon.": [
+  "الخط المستقيم بين النقطتين بيطلع برّه المضلع."
+ ],
+ "The tool {a} is not available.": [
+  "الأداة {a} مش موجودة."
+ ],
+ "The two points are on the same side: nothing to cut.": [
+  "النقطتين على نفس الضلع: مفيش حاجة تتقص."
+ ],
+ "The values gather in groups, so natural breaks follow the gaps in the data.": [
+  "القيم متجمّعة في مجموعات، فالفواصل الطبيعية بتمشي مع الفراغات اللي في البيانات."
+ ],
+ "The web address was not found": [
+  "العنوان على النت مش موجود"
+ ],
+ "There are no layers to arrange yet.": [
+  "لسه مافيش طبقات نرتّبها."
+ ],
+ "There are no stops to export yet.": [
+  "لسه مفيش محطات تتصدّر."
+ ],
+ "There is no corner here to round.": [
+  "مفيش ركن هنا يتقوّس."
+ ],
+ "There is no earlier selection on this layer.": [
+  "مفيش تحديد قبل كده على الطبقة دي."
+ ],
+ "There is no internet connection": [
+  "مفيش اتصال بالنت"
+ ],
+ "There is no later selection on this layer.": [
+  "مفيش تحديد بعد كده على الطبقة دي."
+ ],
+ "There is no other vector layer in the project.": [
+  "مفيش طبقة متجهية تانية في المشروع."
+ ],
+ "There is no stop {n} yet.": [
+  "لسه مفيش محطة رقم {n}."
+ ],
+ "These edits could not be saved: {f}": [
+  "التعديلات دي ما اتحفظتش: {f}"
+ ],
+ "These still do not load: {l}": [
+  "دول لسه مش بيفتحوا: {l}"
+ ],
+ "Things you will not find in Pro:": [
+  "حاجات مش هتلاقيها في البرو:"
+ ],
+ "This File Geodatabase could not be read completely": [
+  "الـ File Geodatabase دي ما اتقريتش كلها"
+ ],
+ "This KMZ could not be read": [
+  "ملف KMZ ده ما اتقراش"
+ ],
+ "This area cannot be sent to a phone: {e}": [
+  "المنطقة دي ماينفعش تتبعت لتليفون: {e}"
+ ],
+ "This code is not in the indoor map the computer sent.": [
+  "الكود ده مش موجود في الخريطة الداخلية اللي الكمبيوتر بعتها."
+ ],
+ "This file does not look like an exported WhatsApp chat.": [
+  "الملف ده مش شكله شات واتساب متصدّر."
+ ],
+ "This file format could not be read": [
+  "صيغة الملف دي ما اتقريتش"
+ ],
+ "This file has no georeference inside: give control points.": [
+  "الملف ده مفيهوش إحداثيات جواه: اكتب نقط ضبط."
+ ],
+ "This file has no questions.": [
+  "الملف ده مفيهوش أسئلة."
+ ],
+ "This file is not a charter: {e}": [
+  "الملف ده مش دستور: {e}"
+ ],
+ "This file is not a form ({e}).": [
+  "الملف ده مش نموذج ({e})."
+ ],
+ "This is not a valid vector layer.": [
+  "دي مش طبقة متجهات سليمة."
+ ],
+ "This kind of data cannot change its fields (read-only or a service).": [
+  "النوع ده من البيانات مش بيسمح بتغيير الحقول (للقراءة بس أو خدمة)."
+ ],
+ "This layer cannot be edited": [
+  "الطبقة دي مش بتتعدّل"
+ ],
+ "This layer has no attachments table (<layer>__ATTACH).": [
+  "الطبقة دي مالهاش جدول مرفقات (‎<layer>__ATTACH)."
+ ],
+ "This layer is far from the others": [
+  "الطبقة دي بعيدة عن الباقي"
+ ],
+ "This layer only": [
+  "الطبقة دي بس"
+ ],
+ "This map is not saved as a project yet.": [
+  "الخريطة دي لسه ما اتحفظتش كمشروع."
+ ],
+ "This method needs at least {n} control points; {m} found.": [
+  "الطريقة دي محتاجة {n} نقاط ضبط على الأقل؛ لقيت {m}."
+ ],
+ "This name cannot be used for a folder: {n}": [
+  "الاسم ده ما ينفعش يبقى اسم فولدر: {n}"
+ ],
+ "This project": [
+  "المشروع ده"
+ ],
+ "This service cannot search by point; type the parcel reference instead.": [
+  "الخدمة دي ما بتدوّرش بالنقطة؛ اكتب رقم القطعة بدل كده."
+ ],
+ "This service cannot search by reference; click a point instead.": [
+  "الخدمة دي ما بتدوّرش بالرقم؛ دوس على نقطة بدل كده."
+ ],
+ "This session": [
+  "الجلسة دي"
+ ],
+ "This tool is not available.": [
+  "الأداة دي مش متاحة."
+ ],
+ "This tool works on lines and polygons.": [
+  "الأداة دي بتشتغل على الخطوط والمضلعات."
+ ],
+ "This tool works on lines.": [
+  "الأداة دي بتشتغل على الخطوط."
+ ],
+ "This tool works on polygons.": [
+  "الأداة دي بتشتغل على المضلعات."
+ ],
+ "This value is not right.": [
+  "القيمة دي مش مظبوطة."
+ ],
+ "Tie point of the description (BLLM, control point)": [
+  "نقطة الربط اللي الوصف بيبدأ منها (BLLM، نقطة تحكم)"
+ ],
+ "Tie point the description starts from (BLLM, control point)": [
+  "نقطة الربط اللي الوصف بيبدأ منها (BLLM، نقطة تحكم)"
+ ],
+ "Tip: you can also drag files from a folder and drop them here.": [
+  "معلومة: تقدر كمان تسحب الملفات من أي فولدر وتفلتها هنا."
+ ],
+ "Tools for this country (double-click to open):": [
+  "أدوات البلد ده (دبل كليك للفتح):"
+ ],
+ "Tour of these": [
+  "جولة على دول"
+ ],
+ "Tunnel token - paste the whole command Cloudflare shows, that is fine": [
+  "مفتاح النفق - الزق الأمر كله اللي Cloudflare بتعرضه، عادي"
+ ],
+ "Turn the labels of this layer on first.": [
+  "شغّل تسميات الطبقة دي الأول."
+ ],
+ "Two fields would have the same name.": [
+  "كده هيبقى فيه حقلين بنفس الاسم."
+ ],
+ "Type a parcel reference or pick a point on the map.": [
+  "اكتب رقم القطعة أو اختار نقطة على الخريطة."
+ ],
+ "Type part of a layer or group name. Esc clears the search.": [
+  "اكتب جزء من اسم طبقة أو مجموعة. Esc بيمسح البحث."
+ ],
+ "Type the values; click the map to choose a pivot point.": [
+  "اكتب القيم؛ ودوس على الخريطة عشان تختار نقطة المحور."
+ ],
+ "Type-ahead is on for {n} fields.": [
+  "الإكمال التلقائي شغّال في {n} حقل."
+ ],
+ "Unchanged": [
+  "زي ما هو"
+ ],
+ "Uneven scan (shadows, yellowed paper)": [
+  "سكان مش متساوي (ضل، ورق مصفّر)"
+ ],
+ "Unknown area units left out: {u}": [
+  "وحدات مساحة مش معروفة اتشالت: {u}"
+ ],
+ "Unknown commodity": [
+  "سلعة مش معروفة"
+ ],
+ "Unsaved edits on this layer.": [
+  "في تعديلات على الطبقة دي لسه ما اتحفظتش."
+ ],
+ "Unsaved edits restored - check them, then save the layers.": [
+  "التعديلات اللي ما اتحفظتش رجعت - راجعها وبعدين احفظ الطبقات."
+ ],
+ "Use 'Join attributes by nearest' (distance to the nearest feature).": [
+  "استخدم «ربط السمات بالأقرب» (المسافة إلى أقرب معلم)."
+ ],
+ "Use the georeference inside the PDF (GeoPDF)": [
+  "استخدم الإحداثيات اللي جوه الـ PDF ‏(GeoPDF)"
+ ],
+ "Use the ground class in the file (class 2)": [
+  "استخدم تصنيف الأرض اللي في الملف (الفئة 2)"
+ ],
+ "Use the two-letter ISO code (BR, CI, VN…), not '{c}'.": [
+  "استخدم كود ISO من حرفين (BR، CI، VN…)، مش '{c}'."
+ ],
+ "Use this layer's system for the map": [
+  "استخدم نظام الطبقة دي للخريطة"
+ ],
+ "Used by {l} layers in {p} projects.": [
+  "مستخدمة في {l} طبقة جوه {p} مشروع."
+ ],
+ "Values outside a range": [
+  "قيم برّه نطاق"
+ ],
+ "Vertex {n} cannot be moved.": [
+  "الرأس {n} مش بيتحرك."
+ ],
+ "Wait a few minutes and try again, use a smaller area, or choose another basemap.": [
+  "استنى كام دقيقة وجرّب تاني، أو صغّر المنطقة، أو اختار خريطة أساس تانية."
+ ],
+ "Watching now: {n}": [
+  "بيتفرجوا دلوقتي: {n}"
+ ],
+ "Watershed above an outlet point (GRASS)": [
+  "الحوض اللي فوق نقطة مخرج (GRASS)"
+ ],
+ "Website written to {f}. Read README.md for the three steps to put it online.": [
+  "الموقع اتكتب في {f}. اقرا README.md علشان الـ 3 خطوات اللي ترفعه بيهم أونلاين."
+ ],
+ "What": [
+  "إيه اللي اتغير"
+ ],
+ "What Explains\nThis Value?": [
+  "إيه اللي بيفسّر القيمة دي؟"
+ ],
+ "What coordinate system is this?": [
+  "نظام الإحداثيات ده إيه؟"
+ ],
+ "What do you want the map to show?": [
+  "عايز الخريطة توضّح إيه؟"
+ ],
+ "What do you want to do?": [
+  "عايز تعمل إيه؟"
+ ],
+ "What does this error mean?": [
+  "الخطأ ده معناه إيه؟"
+ ],
+ "What does this mean?": [
+  "يعني إيه ده؟"
+ ],
+ "What happened": [
+  "إيه اللي حصل"
+ ],
+ "What the code carries": [
+  "الكود شايل إيه"
+ ],
+ "What to do": [
+  "تعمل إيه"
+ ],
+ "When": [
+  "إمتى"
+ ],
+ "When it is": [
+  "لما يكون"
+ ],
+ "When the map crosses two UTM zones.": [
+  "لما الخريطة تعدّي على زونين UTM."
+ ],
+ "When there are several matches": [
+  "لما يكون فيه أكتر من تطابق"
+ ],
+ "When this field…": [
+  "لما الحقل ده…"
+ ],
+ "Where Is This Data Used?": [
+  "البيانات دي مستخدمة فين؟"
+ ],
+ "Where is this data used?": [
+  "البيانات دي مستخدمة فين؟"
+ ],
+ "Where is {n} now?": [
+  "{n} بقى فين دلوقتي؟"
+ ],
+ "Where the data really is (click on the map)": [
+  "مكان البيانات الحقيقي (دوس على الخريطة)"
+ ],
+ "Where the files are": [
+  "الملفات فين"
+ ],
+ "Who": [
+  "مين"
+ ],
+ "Who Is Using\nThis File?": [
+  "مين بيستخدم الملف ده؟"
+ ],
+ "Who changed the charter, when, and what - kept in the project.": [
+  "مين غيّر الدستور، وإمتى، وغيّر إيه - محفوظ في المشروع."
+ ],
+ "Who did what, and for how long": [
+  "مين عمل إيه، وفي قد إيه"
+ ],
+ "Who is using this file?": [
+  "مين فاتح الملف ده؟"
+ ],
+ "Why Don't My\nLayers Line Up?": [
+  "ليه الطبقات مش راكبة؟"
+ ],
+ "Why don't my layers line up?": [
+  "ليه الطبقات مش راكبة على بعض؟"
+ ],
+ "Why in the\nWrong Place?": [
+  "ليه في مكان غلط؟"
+ ],
+ "Why is it in the wrong place?": [
+  "ليه الملف في مكان غلط؟"
+ ],
+ "Without a key: look for a moved feature within (m)": [
+  "من غير مفتاح: دوّر على العنصر المتحرك جوّه (م)"
+ ],
+ "Words to find it by, separated by commas": [
+  "كلمات تلاقيه بيها، بينها فاصلة"
+ ],
+ "Working…": [
+  "شغّال…"
+ ],
+ "Write the French parcel as: INSEE code, section, number - e.g. {e}": [
+  "اكتب القطعة الفرنسية كده: كود INSEE، القسم، الرقم - مثلًا {e}"
+ ],
+ "Write the feature's position into the photos (EXIF GPS)": [
+  "اكتب مكان المعلم جوه الصور (EXIF GPS)"
+ ],
+ "Writes the deed boundaries text from the parcel.": [
+  "بيكتب نص حدود الصك من القطعة."
+ ],
+ "Written scale does not match the map": [
+  "المقياس المكتوب مش مطابق للخريطة"
+ ],
+ "Your company's ArcGIS services": [
+  "خدمات ArcGIS بتاعة شركتك"
+ ],
+ "Your photos will appear here.": [
+  "صورك هتظهر هنا."
+ ],
+ "Zoomed in": [
+  "لما تقرّب"
+ ],
+ "Zoomed out": [
+  "لما تبعّد"
+ ],
+ "a label expression could not be written exactly: it shows one field": [
+  "في تعبير تسمية ماتكتبش بالظبط: هيعرض حقل واحد"
+ ],
+ "a phone": [
+  "تليفون"
+ ],
+ "annotation layers are not written": [
+  "طبقات التعليقات (annotation) مش هتتكتب"
+ ],
+ "arrow heads on lines are not written": [
+  "رؤوس الأسهم على الخطوط مش هتتكتب"
+ ],
+ "being edited": [
+  "بيتعدّل دلوقتي"
+ ],
+ "chosen by you": [
+  "انت اخترته"
+ ],
+ "clearing the selection: the next steps use all features": [
+  "مسح التحديد: الخطوات التالية تستخدم كل المعالم"
+ ],
+ "curved labels: right-to-left text in the right order": [
+  "التسميات المنحنية: الكلام اللي من اليمين للشمال بقى بالترتيب الصح"
+ ],
+ "dynamic text '{kind}' was removed": [
+  "النص المتغيّر '{kind}' اتشال"
+ ],
+ "feature service without an address": [
+  "خدمة معالم بدون عنوان"
+ ],
+ "field {a} renamed to {b}": [
+  "الحقل {a} اسمه بقى {b}"
+ ],
+ "field {f} deleted": [
+  "الحقل {f} اتمسح"
+ ],
+ "font changed to {f} (the old one has no Arabic letters)": [
+  "الخط اتغيّر لـ {f} (القديم مفيهوش حروف عربية)"
+ ],
+ "font changed to {f} (the old one has no {script} letters)": [
+  "الخط اتغيّر لـ {f} (القديم ما فيهوش حروف {script})"
+ ],
+ "geometry generator symbols are not written": [
+  "رموز مولّد الأشكال مش هتتكتب"
+ ],
+ "group layers are not written": [
+  "طبقات المجموعات مش هتتكتب"
+ ],
+ "hidden classes are shown in ArcGIS Pro": [
+  "الفئات المخفية هتظهر في ArcGIS Pro"
+ ],
+ "in the sea or outside any country": [
+  "في البحر أو برّه أي دولة"
+ ],
+ "label backgrounds and shadows are not written": [
+  "خلفيات وظلال التسميات مش هتتكتب"
+ ],
+ "label rule scale ranges are not written": [
+  "نطاقات المقياس في قواعد التسميات مش هتتكتب"
+ ],
+ "label text put back as it is (the labels are no longer curved)": [
+  "نص التسمية رجع زي ما كان (التسميات مبقتش منحنية)"
+ ],
+ "layer without symbols is written with a default symbol": [
+  "الطبقة اللي من غير رموز بتتكتب برمز افتراضي"
+ ],
+ "map frame {name}: ArcGIS Pro shows all the layers of the map in it": [
+  "إطار الخريطة {name}: ArcGIS Pro هيعرض فيه كل طبقات الخريطة"
+ ],
+ "mesh layers are not written": [
+  "طبقات الشبكات (mesh) مش هتتكتب"
+ ],
+ "no Windows text recognition for {l}": [
+  "مفيش تعرّف على الكلام في ويندوز لـ {l}"
+ ],
+ "no account needed to try": [
+  "مش محتاج حساب علشان تجرّب"
+ ],
+ "not a date": [
+  "مش تاريخ"
+ ],
+ "not a grid file name": [
+  "ده مش اسم ملف شبكة"
+ ],
+ "not available": [
+  "مش متاح"
+ ],
+ "not measured yet": [
+  "لسه ما اتقاسش"
+ ],
+ "now click the same place on the map": [
+  "دلوقتي دوس على نفس المكان في الخريطة"
+ ],
+ "numbers with leading zeros - codes, kept as text": [
+  "أرقام تبدأ بأصفار - رموز، تبقى نصًا"
+ ],
+ "only the first page is written": [
+  "الصفحة الأولى بس هي اللي بتتكتب"
+ ],
+ "outside the area this system is made for": [
+  "برّه المنطقة اللي النظام ده معمول لها"
+ ],
+ "outside the range": [
+  "برّه النطاق"
+ ],
+ "picture {name}: the image is not in the file": [
+  "الصورة {name}: الصورة مش موجودة في الملف"
+ ],
+ "plugin layers are not written": [
+  "طبقات الإضافات مش هتتكتب"
+ ],
+ "point cloud layers are not written": [
+  "طبقات السحب النقطية مش هتتكتب"
+ ],
+ "the layer's data is not available": [
+  "بيانات الطبقة مش متاحة"
+ ],
+ "the selection becomes a new layer with the selected features": [
+  "التحديد يصبح طبقة جديدة فيها المعالم المحددة"
+ ],
+ "this kind of layer cannot be filtered": [
+  "النوع ده من الطبقات ما ينفعش يتصفّى"
+ ],
+ "this labelling is not written": [
+  "طريقة التسميات دي مش هتتكتب"
+ ],
+ "this project": [
+  "المشروع ده"
+ ],
+ "this raster is not a file ArcGIS Pro can open: save it as GeoTIFF first": [
+  "الراستر ده مش ملف يقدر ArcGIS Pro يفتحه: احفظه GeoTIFF الأول"
+ ],
+ "this window": [
+  "النافذة دي"
+ ],
+ "unevenly spaced colour stops are spread evenly": [
+  "نقط الألوان اللي مسافاتها مش متساوية بتتوزّع بالتساوي"
+ ],
+ "unknown page units: the page size was guessed": [
+  "وحدات الصفحة مش معروفة: مقاس الصفحة اتخمّن"
+ ],
+ "unsupported layer type": [
+  "نوع طبقة مش مدعوم"
+ ],
+ "vector tile layers are not written": [
+  "طبقات البلاطات الاتجاهية (vector tiles) مش هتتكتب"
+ ],
+ "{app} starts {x:.0f}× faster here.": [
+  "{app} بيفتح هنا أسرع {x:.0f} مرة."
+ ],
+ "{e} of {n} features break a rule, {w} more only a warning.": [
+  "{e} من {n} عنصر كاسرين قاعدة، و{w} كمان عليهم تنبيه بس."
+ ],
+ "{f} is not allowed for this kind": [
+  "{f} مش مسموح للنوع ده"
+ ],
+ "{f} is not in the list {l}": [
+  "{f} مش من القائمة {l}"
+ ],
+ "{f} is not one of the kinds": [
+  "{f} مش نوع من الأنواع"
+ ],
+ "{f} is outside {a} - {b}": [
+  "{f} برّه المدى {a} - {b}"
+ ],
+ "{f} is required for this kind": [
+  "{f} مطلوب للنوع ده"
+ ],
+ "{kind} drawing is written as its inner symbology": [
+  "رسم {kind} بيتكتب بالترميز اللي جوّاه"
+ ],
+ "{kind} layers are not written": [
+  "طبقات {kind} مش هتتكتب"
+ ],
+ "{kind} map grids are not converted": [
+  "شبكات الخريطة من نوع {kind} مش بتتحوّل"
+ ],
+ "{kind} raster drawing is left to ArcGIS Pro's default": [
+  "رسم الراستر {kind} متساب على الافتراضي بتاع ArcGIS Pro"
+ ],
+ "{kind} rasters are not written": [
+  "راسترات {kind} مش هتتكتب"
+ ],
+ "{layer} is not in the spec - not checked.": [
+  "{layer} مش موجودة في كراسة الشروط - ما اتفحصتش."
+ ],
+ "{layer}: {h} hidden (e.g. {ex})": [
+  "{layer}: {h} مستخبية (زي {ex})"
+ ],
+ "{l} now uses {c}.": [
+  "{l} بقت على {c}."
+ ],
+ "{m} features matched ({x} of them more than once), {u} without a match.": [
+  "{m} عنصر اتطابق ({x} منهم أكتر من مرة)، و{u} من غير تطابق."
+ ],
+ "{n:,} points made": [
+  "اتعمل {n:,} نقطة"
+ ],
+ "{name}: items on other pages are not written": [
+  "{name}: العناصر اللي في صفحات تانية مش هتتكتب"
+ ],
+ "{name}: the layer cannot be edited": [
+  "{name}: الطبقة دي ما ينفعش تتعدّل"
+ ],
+ "{name}: {n} edit(s) were skipped because their features no longer exist": [
+  "{name}: اتخطّى {n} تعديل لأن العناصر بتاعتها مش موجودة دلوقتي"
+ ],
+ "{n} feature classes and tables": [
+  "{n} طبقات معالم وجداول"
+ ],
+ "{n} feature(s) selected.": [
+  "اتحدد {n} عنصر."
+ ],
+ "{n} features outside the period (or without a date) were left out.": [
+  "استُبعد {n} معلمًا خارج الفترة (أو بلا تاريخ)."
+ ],
+ "{n} features selected.": [
+  "اتحدد {n} عنصر."
+ ],
+ "{n} features sent to the phones' guide.": [
+  "اتبعت {n} عنصر لتوجيه التليفونات."
+ ],
+ "{n} features share a location with another feature.": [
+  "{n} معلم يشترك في الموقع مع معلم آخر."
+ ],
+ "{n} features were left out because a value or the geometry is missing.": [
+  "{n} معلم استُبعد لأن قيمة أو الهندسة مفقودة."
+ ],
+ "{n} features without a geometry or quantity were left out.": [
+  "استُبعد {n} معلمًا بلا شكل هندسي أو كمية."
+ ],
+ "{n} features: the bandwidth search may take a few minutes.": [
+  "{n} معلم: قد يستغرق البحث عن عرض النطاق بضع دقائق."
+ ],
+ "{n} fields use this list. Delete it anyway?": [
+  "{n} حقل بيستخدموا القائمة دي. تمسحها برضه؟"
+ ],
+ "{n} files saved in {f}.": [
+  "اتحفظ {n} ملف في {f}."
+ ],
+ "{n} items, {f} features measured. Total {t} + VAT {v} = {g}": [
+  "{n} بندًا، وقيس {f} معلمًا. الإجمالي {t} + الضريبة {v} = {g}"
+ ],
+ "{n} key values appear more than once: those features are matched in order.": [
+  "{n} قيمة مفتاح متكررة: العناصر دي اتطابقت بالترتيب."
+ ],
+ "{n} layers are stored outside the project folder": [
+  "{n} طبقة متخزنة برّه فولدر المشروع"
+ ],
+ "{n} layers cannot find their data": [
+  "{n} طبقة مش لاقية بياناتها"
+ ],
+ "{n} layers of this project show only the features inside an area.": [
+  "{n} طبقات في المشروع ده ظاهر فيها بس المعالم اللي جوه منطقة."
+ ],
+ "{n} layers show only the {k} features inside the area.": [
+  "{n} طبقات ظاهر فيها بس الـ {k} معلم اللي جوه المنطقة."
+ ],
+ "{n} left as they were.": [
+  "و{n} فضلوا زي ما هما."
+ ],
+ "{n} live locations are not saved in the exported chat:": [
+  "{n} لوكيشن مباشر مش محفوظين في الشات المتصدّر:"
+ ],
+ "{n} renamed": [
+  "{n} اتغيّر اسمهم"
+ ],
+ "{n} room codes written. Print them and stick each on its room's door.": [
+  "اتعمل {n} كود غرفة. اطبعهم والزق كل واحد على باب غرفته."
+ ],
+ "{n} templates made from the symbology of {l}.": [
+  "اتعمل {n} قالب من ترميز {l}."
+ ],
+ "{n} temporary layers will be lost when Biruni closes": [
+  "{n} طبقة مؤقتة هتضيع لما Biruni يتقفل"
+ ],
+ "{p:.0%} of the labels are hidden for lack of room.": [
+  "{p:.0%} من الكتابات مستخبية عشان مافيش مكان."
+ ],
+ "{s} can only search by a point.": [
+  "{s} بيدوّر بالنقطة بس."
+ ],
+ "{value} is not one of the allowed values of {field}.": [
+  "{value} مش من القيم المسموحة في {field}."
+ ],
+ "{value} is outside the allowed range of {field}.": [
+  "{value} برّه المدى المسموح في {field}."
+ ],
+ "«Print as raster» makes heavy files with text you cannot search.": [
+  "«الطباعة كصورة» بتعمل ملفات تقيلة والكتابة فيها ما تتدورش."
+ ],
+ "«{l}» has {r:.0f}× too few pixels for {d:.0f} dpi at this size.": [
+  "«{l}» بكسلاتها أقل {r:.0f} مرة من المطلوب لـ {d:.0f} dpi بالحجم ده."
+ ],
+ "«{l}»: add a halo around the letters.": [
+  "«{l}»: حط هالة حوالين الحروف."
+ ],
+ "«{name}» is now drawn simplified on screen; the data itself is unchanged.": [
+  "«{name}» بتترسم دلوقتي مبسّطة على الشاشة بس؛ البيانات نفسها ما اتغيّرتش."
+ ],
+ "«{n}» moved inside the page.": [
+  "«{n}» اتنقل جوّه الصفحة."
+ ],
+ "«{n}» moved to a free place.": [
+  "«{n}» اتنقل لمكان فاضي."
+ ],
+ "«{n}» runs over the edge of the page and will be cut.": [
+  "«{n}» طالع برّه طرف الصفحة وهيتقص."
+ ],
+ "«{t}» is {s:.1f} pt; at this reading distance use at least {m:.0f} pt.": [
+  "«{t}» حجمه {s:.1f} نقطة؛ على مسافة القراية دي خليه {m:.0f} نقطة على الأقل."
+ ],
+ "“{l}” refused the change; nothing was changed.": [
+  "«{l}» رفضت التعديل؛ ومفيش حاجة اتغيرت."
+ ],
+ "“{t}” works on {k}.": [
+  "«{t}» بتشتغل على {k}."
+ ],
+ "… and {n} more": [
+  "… و{n} كمان"
+ ],
+ "…and this one (optional)": [
+  "…والحقل ده (اختياري)"
+ ],
+ "…limits this field": [
+  "…يحدد الحقل ده"
+ ],
+ "Astrolabe": [
+  "الاسطرلاب",
+  "القرص",
+  "العجلة",
+  "الحلقات",
+  "الدايرة",
+  "اسطرلاب"
+ ],
+ "Repeat Last Command": [
+  "كرر آخر أمر",
+  "عيد الأمر",
+  "تكرار"
+ ]
+}

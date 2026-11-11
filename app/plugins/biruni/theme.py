@@ -121,17 +121,21 @@ def migrate_widget_palettes(old, new):
     palette when created, so they would not follow a theme switch. Move every
     colour that still equals the previous theme's colour to the new one, and
     leave intentionally customised colours alone."""
+    # only the colours the switch changes are looked at (comparing all of them for every widget
+    # was most of the start-up time of the theme; re-applying the same theme changes none)
+    moves = [(g, role, old.color(g, role), new.color(g, role)) for g in _GROUPS for role in _ROLES
+             if old.color(g, role) != new.color(g, role)]
+    if not moves:
+        return
     for w in QApplication.allWidgets():
         if not w.testAttribute(Qt.WidgetAttribute.WA_SetPalette):
             continue
         pal = w.palette()
         changed = False
-        for g in _GROUPS:
-            for role in _ROLES:
-                c = pal.color(g, role)
-                if c == old.color(g, role) and c != new.color(g, role):
-                    pal.setColor(g, role, new.color(g, role))
-                    changed = True
+        for g, role, was, now in moves:
+            if pal.color(g, role) == was:
+                pal.setColor(g, role, now)
+                changed = True
         if changed:
             w.setPalette(pal)
 
@@ -166,11 +170,18 @@ class ThemeManager:
             hints.setColorScheme(Qt.ColorScheme.Dark if dark else Qt.ColorScheme.Light)
         old = app.palette()
         new = build_palette(t)
+        qss = app_qss(t)
+        # nothing to do when the same theme is applied again and QGIS did not reset the stylesheet
+        # (re-polishing every widget is the costly part of a theme switch)
+        if old == new and app.styleSheet() == qss:
+            for fn in list(self._listeners):
+                fn()
+            return
         app.setPalette(new)
         migrate_widget_palettes(old, new)
         # Setting the application stylesheet re-polishes every widget, which is
         # what makes stylesheet-styled QGIS panels pick up the new palette.
-        app.setStyleSheet(app_qss(t))
+        app.setStyleSheet(qss)
         ss = self.mw.styleSheet()
         marker = "/* biruni-theme */"
         self.mw.setStyleSheet(ss.replace(marker, "") if marker in ss else ss + marker)

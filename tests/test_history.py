@@ -99,5 +99,52 @@ left = history.list_versions(r2)
 check(len(left) == 3 + 1 + 1 + 1 + 2, f"retention keeps 8 versions ({len(left)} left, {removed} removed)")
 check(any(v.get("note") == "hand" for v in left), "versions saved by hand are kept")
 
+# a real save: "saved" comes before the .qgz is written - the version is kept after, with the new file
+import zipfile  # noqa: E402
+
+from qgis.core import QgsProject  # noqa: E402
+
+
+class _Bar:
+    said = []
+
+    def pushWarning(self, *a):
+        _Bar.said.append(a)
+
+
+class _Iface:
+    def messageBar(self):
+        return _Bar()
+
+
+class _Plugin:
+    iface = _Iface()
+
+
+saved = tempfile.mkdtemp()
+r3, q3, g3 = create_folder_structure(saved, "First save")
+prj = QgsProject.instance()
+prj.addMapLayer(QgsVectorLayer("Point?crs=EPSG:4326", "pts", "memory"))
+hist = history.ProjectHistory(_Plugin())
+hist.install()
+check(prj.write(q3), "the project is written")
+from biruni import background  # noqa: E402
+
+app.processEvents()
+check(background.busy(), "the version is copied in the background (the save does not wait for it)")
+for _ in range(300):
+    app.processEvents()
+    if not background.busy():
+        break
+    __import__("time").sleep(0.02)
+first = history.list_versions(r3)
+check(not _Bar.said, f"no warning on the first save ({_Bar.said})")
+check(len(first) == 1 and zipfile.is_zipfile(os.path.join(first[0]["path"], "First save.qgz")),
+      "the first save keeps a version holding the written project")
+check(all(os.path.exists(os.path.join(history.history_dir(r3), n, "version.json"))
+          for n in os.listdir(history.history_dir(r3))), "no empty version folders")
+hist.unload()
+prj.clear()
+
 print("\nALL PASSED" if not failures else f"\n{len(failures)} FAILED")
 sys.exit(1 if failures else 0)

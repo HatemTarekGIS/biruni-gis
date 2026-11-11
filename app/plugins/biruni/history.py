@@ -17,7 +17,7 @@ import shutil
 import sqlite3
 
 from qgis.core import QgsProject, QgsSettings
-from qgis.PyQt.QtCore import QObject, Qt
+from qgis.PyQt.QtCore import QObject, Qt, QTimer
 from qgis.PyQt.QtWidgets import (QApplication, QDialog, QDialogButtonBox, QHBoxLayout, QHeaderView, QInputDialog,
                                  QLabel, QMessageBox, QPushButton, QTreeWidget, QTreeWidgetItem, QVBoxLayout)
 
@@ -75,13 +75,19 @@ def make_version(folder, qgz, gpkg, note="", manual=False, now=None):
         target = os.path.join(root, now.strftime(STAMP) + f"-{k}")
         k += 1
     os.makedirs(target)
-    shutil.copy2(qgz, os.path.join(target, os.path.basename(qgz)))
-    if gpkg and os.path.exists(gpkg):
-        sqlite_copy(gpkg, os.path.join(target, os.path.basename(gpkg)))
-    info = {"time": now.isoformat(timespec="seconds"), "note": note, "manual": manual,
-            "user": os.environ.get("USERNAME") or "", "tables": _tables(gpkg) if gpkg else []}
-    with open(os.path.join(target, "version.json"), "w", encoding="utf-8") as f:
-        json.dump(info, f, ensure_ascii=False, indent=1)
+    try:
+        if not os.path.exists(qgz):  # Windows' fast copy names no file in its error: say which one
+            raise FileNotFoundError(2, "The project file was not found", qgz)
+        shutil.copy2(qgz, os.path.join(target, os.path.basename(qgz)))
+        if gpkg and os.path.exists(gpkg):
+            sqlite_copy(gpkg, os.path.join(target, os.path.basename(gpkg)))
+        info = {"time": now.isoformat(timespec="seconds"), "note": note, "manual": manual,
+                "user": os.environ.get("USERNAME") or "", "tables": _tables(gpkg) if gpkg else []}
+        with open(os.path.join(target, "version.json"), "w", encoding="utf-8") as f:
+            json.dump(info, f, ensure_ascii=False, indent=1)
+    except (OSError, sqlite3.Error):
+        shutil.rmtree(target, ignore_errors=True)  # no half version left behind
+        raise
     return target
 
 
@@ -185,23 +191,40 @@ class ProjectHistory(QObject):
         return folder, QgsProject.instance().fileName(), project_gpkg()
 
     def _on_saved(self):
+        # "saved" comes while the .qgz is still being written (before it exists on a first save, the old one
+        # after): keep the version once the save has finished
+        QTimer.singleShot(0, self._keep_version)
+
+    def _keep_version(self):
         if self._restoring or not self.enabled():
             return
         folder, qgz, gpkg = self._paths()
-        if not folder:
+        if not folder or not os.path.exists(qgz):
             return
         now = dt.datetime.now()
         if self._last and self._last[0] == folder and now - self._last[1] < MIN_GAP:
             return
         if gpkg and os.path.exists(gpkg) and os.path.getsize(gpkg) > MAX_AUTO_BYTES:
             return
-        try:
+        from . import background
+
+        self._last = (folder, now)  # no second version while this one is copied
+
+        def work():
             make_version(folder, qgz, gpkg, now=now)
             prune(folder, now)
-            self._last = (folder, now)
-        except (OSError, sqlite3.Error) as e:
-            self.iface.messageBar().pushWarning(APP_NAME, tr("Could not keep a version of the project: {e}").format(
-                e=e))
+
+        def done(_result, e):
+            if e is None:
+                return
+            self._last = None
+            if isinstance(e, (OSError, sqlite3.Error)) and self.iface is not None:
+                self.iface.messageBar().pushWarning(APP_NAME, tr("Could not keep a version of the project: {e}")
+                                                    .format(e=e))
+
+        # the copy of the data can be big: it is made in the background (SQLite's backup reads a consistent
+        # state even while the layers are saved again)
+        background.run(work, done)
 
     def save_version(self, note=""):
         folder, qgz, gpkg = self._paths()

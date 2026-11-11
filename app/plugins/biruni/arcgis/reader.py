@@ -3,6 +3,7 @@
     .aprx  project  - a ZIP of CIM JSON documents (one per map and per layer)
     .mapx  map file - one JSON document: mapDefinition + layerDefinitions
     .lyrx  layer file - one JSON document: layers + layerDefinitions
+    .pagx  layout file - one layout (+ the maps it shows) -> a print layout
     .lpkx / .mpkx / .ppkx packages - unpacked next to the package when they are ZIPs
     .mxd / .mxt  ArcMap document - data frames, layers, groups, visibility, data
                  sources and definition queries (mxd.py); symbology is not read
@@ -24,7 +25,7 @@ from ..i18n import tr
 from .cim import Converter, crs_from_spatial_reference
 from .mxd import MXD_EXTENSIONS, MxdError, package_candidates, read_mxd
 
-ARCGIS_EXTENSIONS = (".aprx", ".mapx", ".lyrx", ".lpkx", ".mpkx", ".ppkx") + MXD_EXTENSIONS
+ARCGIS_EXTENSIONS = (".aprx", ".mapx", ".lyrx", ".pagx", ".lpkx", ".mpkx", ".ppkx") + MXD_EXTENSIONS
 PACKAGE_EXTENSIONS = (".lpkx", ".mpkx", ".ppkx")
 
 # Esri-hosted basemaps need an ArcGIS licence/account: never re-create them.
@@ -78,6 +79,7 @@ class Report:
     skipped: list = field(default_factory=list)    # (layer name, reason)
     warnings: list = field(default_factory=list)   # "layer: message"
     layers: list = field(default_factory=list)     # QgsMapLayer objects added
+    layouts: list = field(default_factory=list)    # print layout names added
     crs: QgsCoordinateReferenceSystem = None
     extent: QgsReferencedRectangle = None
 
@@ -106,11 +108,13 @@ class _Document:
         self.active = None      # name of the map open in the first view
         self.top = []           # lyrx: top-level layer uris
         self.notes = []         # said once for the whole file
+        self.layouts = []       # CIMLayout dicts
+        self.binaries = {}      # pagx: normalised uri -> base64 data
         ext = os.path.splitext(path)[1].lower()
         try:
             if ext == ".aprx":
                 self._aprx()
-            elif ext in (".mapx", ".lyrx"):
+            elif ext in (".mapx", ".lyrx", ".pagx"):
                 with open(path, "rb") as f:
                     self._json_doc(_load_json(f.read()))
             elif ext in MXD_EXTENSIONS:
@@ -142,6 +146,8 @@ class _Document:
                 self.defs[_norm(n)] = d
                 if d.get("type") == "CIMMap":
                     self.maps.append(d)
+                elif d.get("type") == "CIMLayout":
+                    self.layouts.append(d)
             if not self.maps and any(n.lower().startswith("map") and n.lower().endswith(".xml") for n in names):
                 raise ArcGISError(tr("This project was saved by an old ArcGIS Pro version (1.x). Open and save it "
                                      "in ArcGIS Pro 2 or later first."))
@@ -160,12 +166,40 @@ class _Document:
             self.maps.append(md)
             self._add_def(md)
         elif t == "CIMLayerDocument":
-            self.top = list(d.get("layers") or [])
+            self.top = list(d.get("layers") or []) + list(d.get("tables") or [])
+        elif t == "CIMLayoutDocument":
+            for md in d.get("mapDefinitions") or []:
+                self.maps.append(md)
+                self._add_def(md)
+            if d.get("layoutDefinition"):
+                self.layouts.append(d["layoutDefinition"])
+            for b in d.get("binaryReferences") or []:
+                if b.get("uRI") and b.get("data"):
+                    self.binaries[_norm(b["uRI"])] = b["data"]
         else:
             raise ArcGISError(tr("Unsupported ArcGIS document type: {t}").format(t=t))
         for key in ("layerDefinitions", "tableDefinitions"):
             for item in d.get(key) or []:
                 self._add_def(item)
+
+    def binary(self, uri):
+        """Bytes of a picture stored in the document (None when absent)."""
+        key = _norm(uri)
+        if not key:
+            return None
+        if key in self.binaries:
+            import base64
+
+            try:
+                return base64.b64decode(self.binaries[key])
+            except ValueError:
+                return None
+        if self.path.lower().endswith(".aprx"):
+            with zipfile.ZipFile(self.path) as z:
+                for n in z.namelist():
+                    if _norm(n) == key:
+                        return z.read(n)
+        return None
 
     # -- ArcMap documents: the layers read by mxd.py, as CIM definitions --
     def _mxd(self):
@@ -174,13 +208,15 @@ class _Document:
         except MxdError as e:
             raise ArcGISError(tr("This ArcMap document could not be read ({e}). Open it in ArcMap or ArcGIS Pro "
                                  "and save it as an ArcGIS Pro project (.aprx) or map file (.mapx).").format(e=e)) from e
-        self.notes.append(tr("ArcMap documents keep their symbology in a closed format: the layers were added "
-                             "with default styles."))
+        self._mxd_unstyled = 0
         for n, frame in enumerate(frames):
             m = {"type": "CIMMap", "name": frame.name, "uRI": f"mxd/map{n}", "layers": [],
                  "spatialReference": {"wkt": frame.wkt} if frame.wkt else None}
             m["layers"] = [self._mxd_layer(lyr, f"mxd/map{n}") for lyr in frame.layers]
             self.maps.append(m)
+        if self._mxd_unstyled:   # symbols read by mxd_symbols.py; the rest keep default styles
+            self.notes.append(tr("The symbology of {n} ArcMap layers could not be read: they were added with "
+                                 "default styles.").format(n=self._mxd_unstyled))
 
     def _mxd_layer(self, lyr, parent):
         uri = f"{parent}/{len(self.defs)}"
@@ -206,6 +242,12 @@ class _Document:
             else:
                 d.update(type="CIMFeatureLayer", featureTable={"dataConnection": dc,
                                                                "definitionExpression": lyr.definition_query})
+                if lyr.renderer:
+                    d["renderer"] = lyr.renderer
+                else:
+                    self._mxd_unstyled += 1
+                if lyr.label_classes:
+                    d.update(labelClasses=lyr.label_classes, labelVisibility=lyr.labels_visible)
         self.defs[uri] = d
         return uri
 
@@ -290,6 +332,7 @@ class _Builder:
         self.project = project
         self.services = services
         self.report = None
+        self.by_uri = {}        # normalised layer uri -> QgsMapLayer added
 
     # -- paths --
     def _path(self, p, must_exist=True):
@@ -478,6 +521,7 @@ class _Builder:
             node.setExpanded(bool(cim.get("expanded", False)))
             self.report.added.append((name, kind))
             self.report.layers.append(layer)
+            self.by_uri[_norm(uri)] = layer
 
     _current = None
 
@@ -494,12 +538,15 @@ def _map_extent(m):
     return QgsReferencedRectangle(rect, crs)
 
 
-def open_arcgis_file(path, project=None, map_name=None, services=True):
+def open_arcgis_file(path, project=None, map_name=None, services=True, layouts=True):
     """Add the content of an ArcGIS Pro file to a QGIS project; returns a Report.
 
     map_name: a map name, a list of names, "*" for every map, or None for the
     map that was open in ArcGIS Pro (the first one). Layer files (.lyrx) are
-    added at the top of the layer list. Raises ArcGISError for unreadable files."""
+    added at the top of the layer list. Layouts of a project (.aprx) or layout
+    file (.pagx) become print layouts when `layouts` is true; a .pagx adds the
+    maps it shows only into an empty project (otherwise its map frames show
+    the current map). Raises ArcGISError for unreadable files."""
     project = project or QgsProject.instance()
     report = Report(source=path)
     if os.path.splitext(path)[1].lower() in PACKAGE_EXTENSIONS:
@@ -521,10 +568,13 @@ def open_arcgis_file(path, project=None, map_name=None, services=True):
         builder.add_tree(doc.top, root, index=0)
         return report
 
-    if not doc.maps:
+    is_pagx = path.lower().endswith(".pagx")
+    if not doc.maps and not (is_pagx and doc.layouts):
         raise ArcGISError(tr("The file contains no maps."))
     by_name = {m.get("name"): m for m in doc.maps}
-    if map_name == "*":
+    if is_pagx and map_name is None:
+        chosen = doc.maps if was_empty else []
+    elif map_name == "*":
         chosen = doc.maps
     elif isinstance(map_name, (list, tuple)):
         chosen = [by_name[n] for n in map_name if n in by_name]
@@ -535,6 +585,7 @@ def open_arcgis_file(path, project=None, map_name=None, services=True):
     else:
         chosen = [by_name.get(doc.active) or doc.maps[0]]
 
+    map_info = {}
     for m in chosen:
         name = m.get("name") or tr("Map")
         report.maps.append(name)
@@ -543,8 +594,13 @@ def open_arcgis_file(path, project=None, map_name=None, services=True):
         else:
             group = root.insertGroup(0, name)
             group.setExpanded(True)
+        start = len(report.layers)
         builder.add_tree(m.get("layers") or [], group)
         builder.add_tree(m.get("standaloneTables") or [], group)
+        map_info[_norm(m.get("uRI"))] = {
+            "name": name, "layers": [lyr for lyr in report.layers[start:] if lyr.isSpatial()]
+            if len(chosen) > 1 else None,
+            "crs": crs_from_spatial_reference(m.get("spatialReference")), "extent": _map_extent(m)}
         if report.crs is None:
             crs = crs_from_spatial_reference(m.get("spatialReference"))
             if crs.isValid():
@@ -554,4 +610,22 @@ def open_arcgis_file(path, project=None, map_name=None, services=True):
         project.setCrs(report.crs)
     if was_empty and report.extent is not None:
         project.viewSettings().setDefaultViewExtent(report.extent)
+    if layouts and doc.layouts:
+        _add_layouts(doc, project, builder, map_info, report)
     return report
+
+
+def _add_layouts(doc, project, builder, map_info, report):
+    """CIM layouts of the document -> print layouts in the project's layout manager."""
+    from .layouts import LayoutReader
+
+    reader = LayoutReader(project, map_info, builder.by_uri, doc.binary, report.warnings.append)
+    for cim in doc.layouts:
+        name = cim.get("name") or tr("Layout")
+        try:
+            layout = reader.build(cim, name)
+        except Exception as e:  # noqa: BLE001 - one layout must not stop the others
+            report.skipped.append((name, tr("layout not converted: {e}").format(e=e)))
+            continue
+        project.layoutManager().addLayout(layout)
+        report.layouts.append(layout.name())

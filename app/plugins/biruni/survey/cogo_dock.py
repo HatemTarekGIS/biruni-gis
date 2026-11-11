@@ -406,7 +406,11 @@ class CogoDock(QDockWidget):
         if layer.isEditable():
             ok = layer.addFeature(f)
         else:
-            ok, _ = layer.dataProvider().addFeatures([f])
+            ok, out = layer.dataProvider().addFeatures([f])
+            if ok:
+                from .. import team
+
+                team.notify_added(layer, out)   # a layer shared in a team room: the others get it too
         layer.triggerRepaint()
         if ok:
             QgsProject.instance().setDirty(True)

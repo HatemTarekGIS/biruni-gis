@@ -76,6 +76,7 @@ class TrackingDock(QDockWidget):
         self.mode.addItem(tr("Connect to the phone (Wi-Fi)"), "connect")
         self.mode.addItem(tr("Bluetooth / USB (COM port)"), "serial")
         self.mode.addItem(tr("Phone browser - scan a QR code (no app)"), "browser")
+        self.mode.addItem(tr("Phone browser from anywhere - no warning (Biruni bridge)"), "bridge")
         self.mode.setCurrentIndex(max(0, self.mode.findData(s.value(KEY + "mode", "listen"))))
         cv.addWidget(self.mode)
         self.pages = QStackedWidget()
@@ -153,6 +154,7 @@ class TrackingDock(QDockWidget):
                           "the browser warns that the connection is not private: choose Advanced, then Continue - "
                           "the connection stays inside your network. Allow the location and keep the page open. "
                           "Experimental."))
+        self.hint4 = hint4
         hint4.setObjectName("GpsHint")
         hint4.setWordWrap(True)
         f4.addWidget(self.qr)
@@ -231,7 +233,18 @@ class TrackingDock(QDockWidget):
             self.com.addItem(f"{name} - {desc}" if desc else name, name)
 
     def _mode_changed(self):
-        self.pages.setCurrentIndex(self.mode.currentIndex())
+        bridge = self.mode.currentData() == "bridge"
+        self.pages.setCurrentIndex(3 if bridge else self.mode.currentIndex())  # the bridge shows the QR page too
+        if bridge:
+            self.hint4.setText(tr("Press Connect, then scan the code with the phone's camera. The page opens from "
+                                  "Biruni's site with a real certificate - no warning - and the position goes "
+                                  "straight to this computer, encrypted, on Wi-Fi or mobile data. Press Start on "
+                                  "the phone, allow the location and keep the page open."))
+        else:
+            self.hint4.setText(tr("Press Connect, then scan the code with the phone's camera (same Wi-Fi). The first "
+                                  "time the browser warns that the connection is not private: choose Advanced, then "
+                                  "Continue - the connection stays inside your network. Allow the location and keep "
+                                  "the page open. Experimental."))
         ips = local_addresses()
         port = self.listen_port.value()
         self.address.setText(f"{ips[0]} : {port}" if ips else tr("No network found"))
@@ -259,6 +272,8 @@ class TrackingDock(QDockWidget):
             ok = self.source.connect_to(host, self.phone_port.value())
         elif mode == "browser":
             ok = self._serve_browser()
+        elif mode == "bridge":
+            ok = self._serve_bridge()
         else:
             if self.com.currentData() is None:
                 self.state.setText(tr("No COM port found. Pair the phone or plug in the receiver."))
@@ -270,6 +285,27 @@ class TrackingDock(QDockWidget):
             self.connect_btn.setText(tr("Disconnect"))
             self._clock.start()
             self.plugin.activity.log("gps", "connected", self.mode.currentText(), mode, 1)
+
+    def _serve_bridge(self):
+        from qgis.core import QgsApplication
+        from qgis.PyQt.QtGui import QPixmap
+
+        from .i18n import lang
+        from .vendor import ensure_vendor
+
+        ensure_vendor()  # certificate and QR code libraries
+        from .gps.browser import qr_png
+
+        folder = os.path.join(QgsApplication.qgisSettingsDirPath(), "biruni")
+        url = self.source.serve_bridge(folder, os.path.join(folder, "gps-bridge"), lang())
+        if not url:
+            return False
+        pm = QPixmap()
+        pm.loadFromData(qr_png(url, 5))
+        self.qr.setPixmap(pm)
+        self.qr_url.setText(url.split("://", 1)[1].split("#", 1)[0])
+        self.qr_url.setToolTip(url)
+        return True
 
     def _serve_browser(self):
         from qgis.core import QgsApplication

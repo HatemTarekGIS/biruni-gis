@@ -18,8 +18,9 @@ import queue
 import secrets
 import ssl
 import threading
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
 
+from ..local_server import ExclusiveServer
 from .nmea import UERE_M, Fix
 
 BROWSER_PORT = 10111
@@ -152,7 +153,7 @@ class BrowserServer:
                     self.send_response(400)
                 self.end_headers()
 
-        self.httpd = ThreadingHTTPServer(("0.0.0.0", port), Handler)
+        self.httpd = ExclusiveServer(("0.0.0.0", port), Handler)
         ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         ctx.load_cert_chain(self.cert, self.key)
         self.httpd.socket = ctx.wrap_socket(self.httpd.socket, server_side=True)

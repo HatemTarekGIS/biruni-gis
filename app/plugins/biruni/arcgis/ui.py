@@ -17,9 +17,10 @@ _LAST_DIR = "biruni/arcgis-last-dir"
 
 
 def _file_filter():
-    return (tr("ArcGIS files") + " (*.aprx *.mapx *.lyrx *.lpkx *.mpkx *.ppkx *.mxd *.mxt);;"
+    return (tr("ArcGIS files") + " (*.aprx *.mapx *.lyrx *.pagx *.lpkx *.mpkx *.ppkx *.mxd *.mxt *.lyr);;"
             + tr("ArcGIS Pro project") + " (*.aprx);;" + tr("Map file") + " (*.mapx);;"
-            + tr("Layer file") + " (*.lyrx);;" + tr("ArcMap document") + " (*.mxd *.mxt)")
+            + tr("Layer file") + " (*.lyrx);;" + tr("Layout file") + " (*.pagx);;"
+            + tr("ArcMap document") + " (*.mxd *.mxt);;" + tr("ArcMap layer file") + " (*.lyr)")
 
 
 def open_arcgis_dialog(plugin):
@@ -68,7 +69,7 @@ class ResultDialog(QDialog):
         self.resize(640, 420)
         lay = QVBoxLayout(self)
         head = QLabel(tr("{n} layers were added from {file}.").format(
-            n=len(report.added), file=os.path.basename(report.source)))
+            n=len(report.added), file=os.path.basename(report.source)) + _layouts_note(report))
         head.setWordWrap(True)
         lay.addWidget(head)
         tree = QTreeWidget()
@@ -101,7 +102,7 @@ def open_path(plugin, path, maps=None):
     project = QgsProject.instance()
     was_empty = not project.mapLayers()
     try:
-        if maps is None and os.path.splitext(path)[1].lower() != ".lyrx":
+        if maps is None and os.path.splitext(path)[1].lower() not in (".lyrx", ".pagx"):
             names = list_maps(path)
             if len(names) > 1:
                 dlg = MapPicker(mw, names)
@@ -137,8 +138,13 @@ def open_path(plugin, path, maps=None):
         ResultDialog(mw, report).exec()
     else:
         plugin.iface.messageBar().pushSuccess(APP_NAME, tr("{n} layers were added from {file}.").format(
-            n=len(report.added), file=os.path.basename(path)))
+            n=len(report.added), file=os.path.basename(path)) + _layouts_note(report))
     return report
+
+
+def _layouts_note(report):
+    names = getattr(report, "layouts", None)
+    return (" " + tr("Layouts added: {names}").format(names=", ".join(names))) if names else ""
 
 
 def _is_arcgis(path):

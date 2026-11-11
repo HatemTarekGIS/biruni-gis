@@ -34,7 +34,23 @@ Third-party components included with the engine (main ones)
   GRASS GIS ........ GPL-2.0 or later       https://grass.osgeo.org
   SAGA GIS ......... GPL-2.0 / LGPL-2.1     https://saga-gis.sourceforge.io
   Ghostscript ...... AGPL-3.0               https://www.ghostscript.com
+  Shapely 2.2.0 ..... BSD-3-Clause, with its own GEOS 3.14 (LGPL-2.1) - replaces the
+                     engine's Shapely 2.1 (scripts/patch_engine.py, wheel from PyPI kept
+                     in _vendor/wheels) for the parcel coverage doctor
   ... and the other OSGeo4W packages listed in engine\etc\setup.
+
+Command-line tools shipped beside the engine, in engine\tools (scripts/engine-tools.txt,
+unmodified official builds, each with its licence text in its folder):
+  WhiteboxTools 2.4.0 open core .... MIT, Copyright (c) 2017-2021 John Lindsay
+                     https://www.whiteboxgeo.com  source: https://github.com/jblindsay/whitebox-tools
+                     (only the core program: not Whitebox Workflows, not the paid Whitebox
+                     Toolset Extension or its installer)
+  LibreDWG 0.14 .... GPL-3.0 or later, Copyright (C) Free Software Foundation, Inc.
+                     https://www.gnu.org/software/libredwg/  (dwg2dxf, dxf2dwg, dwgread, libredwg-0.dll)
+                     corresponding source: https://github.com/LibreDWG/libredwg/releases/download/0.14/libredwg-0.14.tar.xz
+                     (sha256 62ebb73b984f865960f20ed26619ea5f8789d5e3fd088fa40a2598384da81275),
+                     also provided by Biruni GIS on request; see engine\tools\libredwg\SOURCE.txt
+  GNU libiconv ..... LGPL-2.1 or later (libiconv-2.dll, with LibreDWG)  https://www.gnu.org/software/libiconv/
 
 Not included: the ERDAS ECW/JP2 SDK, the MrSID DSDK and the Oracle Instant
 Client that the QGIS installer ships are NOT redistributed with Biruni GIS,
@@ -45,6 +61,9 @@ application. Users who are licensed for them can add them separately.
 Biruni GIS assets
 -------------------------------------------------------------------------------
   Tabler Icons ..... MIT, Copyright (c) 2020-2026 Pawel Kuna  https://tabler.io/icons
+                     (also the point-of-interest map symbols in
+                     app/plugins/biruni/resources/symbols/poi; the survey,
+                     utility and road symbols there are original to Biruni GIS)
   Basemaps ......... OpenStreetMap data (c) OpenStreetMap contributors (ODbL);
                      OpenTopoMap style (c) OpenTopoMap (CC-BY-SA)
   World sample data  Natural Earth (public domain)  https://www.naturalearthdata.com
@@ -52,6 +71,20 @@ Biruni GIS assets
   Leaflet 1.9.4 .... BSD 2-Clause, Copyright (c) 2010-2023 Volodymyr Agafonkin,
                      (c) 2010-2011 CloudMade - app/plugins/biruni/resources/web
                      (embedded in exported web maps); see LEAFLET-LICENSE.txt
+  MapLibre GL JS 6.16.0  BSD 3-Clause, Copyright (c) 2023 MapLibre contributors,
+                     (c) 2020 Mapbox - app/plugins/biruni/resources/web/maplibre
+                     (copied into published websites); see its LICENSE.txt
+  pmtiles.js 4.5.0 . BSD 3-Clause, Copyright (c) 2021 Protomaps LLC -
+                     app/plugins/biruni/resources/web/pmtiles; see LICENSE.txt
+  flatgeobuf.js 4.4.0  BSD 2-Clause, Copyright (c) 2018 Björn Harrtell -
+                     app/plugins/biruni/mapservice/web (copied into published map
+                     services); see LICENSE-flatgeobuf.txt
+  Protomaps basemap style 5.7.2 (generated, Arabic labels)  BSD 3-Clause,
+                     Copyright 2019-2023 Protomaps LLC, Kelso Cartography -
+                     app/plugins/biruni/resources/web/basemap; see LICENSE.txt
+                     (the map data drawn with it: (c) OpenStreetMap contributors, ODbL)
+  Noto Sans Arabic . SIL Open Font License 1.1, Copyright 2022 The Noto Project
+                     Authors - app/plugins/biruni/resources/web/fonts; see OFL.txt
 
 -------------------------------------------------------------------------------
 QGIS plugins bundled in app\plugins
@@ -64,12 +97,23 @@ QGIS plugins bundled in app\plugins
                      (commit 33754d0d1027de6d105f14b89faf89f269ab5a06)
                      It connects the SAGA GIS tools of the engine to Processing.
 
+  NCZ Engine v2 from NCZ2Geo 0.13.1 (app/plugins/biruni/formats/_ncz)
+                     GPL-2.0-or-later; Copyright (C) 2026 Yusuf Eminoglu.
+                     https://github.com/YusufEminoglu/NCZ2Geo
+                     Reads Netcad NCZ drawings. Changed: Windows-1254 text
+                     decoding; its cache and exporters are not bundled.
+
 -------------------------------------------------------------------------------
 Python libraries bundled in app\python
 -------------------------------------------------------------------------------
   cryptography .............. Apache-2.0 or BSD-3-Clause
   cffi, pycparser ........... MIT, BSD-3-Clause
   segno (QR codes) .......... BSD-3-Clause
+  hijridate 2.6.0 ........... MIT, Copyright (c) Mohammed Alshehri - Umm al-Qura
+                              dates, 1343-1500 AH (https://github.com/dralshehri/hijridate)
+  zxing-cpp 3.1.1 ............ Apache-2.0 (reading QR codes from the camera, light sync)
+  onnxruntime 1.31.1 ........ MIT, Copyright (c) Microsoft Corporation
+                              (runs the Smart Digitise model on the CPU)
 The licence texts are in each package's *.dist-info folder.
 
 -------------------------------------------------------------------------------
@@ -83,3 +127,21 @@ Online data services used on request (not bundled)
                                            provided under COPERNICUS by the EU and ESA
   ESA WorldCover 2021 .................... (c) ESA WorldCover project, CC BY 4.0
   geoBoundaries .......................... CC BY 4.0 (per-country licences apply)
+  Smart Digitise model (MobileSAM) ........ downloaded on first use with consent, not
+                                           bundled: MobileSAM weights Apache-2.0
+                                           (github.com/ChaoningZhang/MobileSAM), Segment
+                                           Anything decoder Apache-2.0 (Meta), ONNX export
+                                           MIT (huggingface.co/Acly/MobileSAM, revision
+                                           0d3b403339b4674a82493d5e97964dd78089ddc8)
+  Cloudflare quick tunnels (Field photos, "Phone anywhere") - the cloudflared
+                                           program (Apache-2.0, (c) Cloudflare, Inc.,
+                                           https://github.com/cloudflare/cloudflared)
+                                           is downloaded on first use, not bundled;
+                                           photos pass through and are not stored
+  Biruni bridge (Field photos) ........... the phone page is served by GitHub Pages
+                                           (hatemtarekgis.github.io/biruni-gis/p/);
+                                           phone and PC meet through public Nostr
+                                           relays and ntfy.sh with small encrypted
+                                           messages that are not kept, and Google and
+                                           Cloudflare STUN servers; the photos go
+                                           directly from the phone to the PC (WebRTC)

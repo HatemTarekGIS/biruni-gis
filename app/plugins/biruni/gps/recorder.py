@@ -12,6 +12,7 @@ from qgis.PyQt.QtCore import QMetaType
 
 from ..i18n import tr
 from .analysis import analyse, distance_area
+from .. import team
 
 ROLE_KEY = "biruni/gps-role"
 WGS84 = QgsCoordinateReferenceSystem("EPSG:4326")
@@ -157,7 +158,9 @@ class TrackRecorder:
             "track_id": self.track_id, "time": _iso(fix.time), "lat": fix.lat, "lon": fix.lon, "alt": fix.alt,
             "speed_kmh": fix.speed_kmh, "course": fix.course, "satellites": fix.satellites, "hdop": fix.hdop,
             "accuracy_m": fix.accuracy_m})
-        lyr.dataProvider().addFeatures([f])
+        ok, out = lyr.dataProvider().addFeatures([f])
+        if ok:
+            team.notify_added(lyr, out)
         if len(self.points) < 50 or len(self.points) % 5 == 0:  # statistics are O(n): refresh less often
             self._update_line()
         lyr.triggerRepaint()
@@ -180,10 +183,13 @@ class TrackRecorder:
             f = _feature(lyr, self._line_geometry(), attrs)
             ok, out = lyr.dataProvider().addFeatures([f])
             self.line_fid = out[0].id() if ok and out else None
+            if self.line_fid is not None:
+                self.line_fid = team.notify_added(lyr, out).get(self.line_fid, self.line_fid)
         else:
             pr = lyr.dataProvider()
             pr.changeGeometryValues({self.line_fid: self._line_geometry()})
             pr.changeAttributeValues({self.line_fid: _named(lyr, attrs)})
+            team.notify_changed(lyr, [self.line_fid])
         lyr.triggerRepaint()
 
     def stop(self):
@@ -200,7 +206,9 @@ class TrackRecorder:
                     "track_id": self.track_id, "start": _iso(s.start), "end": _iso(s.end), "minutes": s.minutes,
                     "lat": s.lat, "lon": s.lon}))
             if feats:
-                lyr.dataProvider().addFeatures(feats)
+                ok, out = lyr.dataProvider().addFeatures(feats)
+                if ok:
+                    team.notify_added(lyr, out)
                 lyr.triggerRepaint()
         self.track_id = None
         return st

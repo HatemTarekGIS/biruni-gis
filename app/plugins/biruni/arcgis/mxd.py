@@ -12,16 +12,18 @@ recognised reliably is read:
     kinds        - feature layers (geodatabase, shapefile, CAD, services),
                    raster layers and group layers
 
-Symbology, labels and the page layout are not read. Everything here is pure
-Python (no QGIS) so it can be tested on its own; reader.py turns the result
-into CIM-like dictionaries and builds the layers with the shared code."""
+Renderers, symbols and labels are read by mxd_symbols.py; the page layout is
+not read. ArcMap layer files (.lyr) keep one layer (or group) the same way in
+a "Layer" stream. Everything here is pure Python (no QGIS) so it can be tested
+on its own; reader.py turns the result into CIM-like dictionaries and builds
+the layers with the shared code."""
 import os
 import re
 import struct
 import uuid
 from dataclasses import dataclass, field
 
-MXD_EXTENSIONS = (".mxd", ".mxt")
+MXD_EXTENSIONS = (".mxd", ".mxt", ".lyr")
 
 
 class MxdError(Exception):
@@ -220,6 +222,11 @@ class MxdLayer:
     dataset_type: str = ""         # ArcMap's description, e.g. "File Geodatabase Feature Class"
     definition_query: str = ""
     children: list = field(default_factory=list)
+    renderer: dict = None          # CIM renderer read from the document (mxd_symbols.py), None when not found
+    renderer_kind: str = ""        # ArcMap renderer class, e.g. UniqueValueRenderer
+    symbols_exact: bool = False    # every symbol was read in full (not approximated)
+    label_classes: list = field(default_factory=list)   # CIM label classes
+    labels_visible: bool = False   # the layer's "Label features" check box
 
 
 @dataclass
@@ -330,17 +337,23 @@ def package_candidates(workspace, factory, doc_dir):
     return out
 
 
-def read_mxd(path):
-    """ArcMap document -> [MxdMap] (data frames in document order). Raises MxdError."""
+def read_mxd(path, symbols=True):
+    """ArcMap document or layer file -> [MxdMap] (data frames in document order; a layer file gives one
+    frame named after the file). symbols: read renderers and labels too. Raises MxdError."""
     try:
         with open(path, "rb") as f:
             data = f.read()
     except OSError as e:
         raise MxdError(str(e)) from e
     streams = _streams(data)
-    b = streams.get("Maps") or streams.get("Mx Document")
+    b = streams.get("Maps") or streams.get("Mx Document") or streams.get("Layer")
     if not b:
         raise MxdError("no map stream")
+    layer_file = "Maps" not in streams and "Mx Document" not in streams
+    sym = None
+    if symbols:
+        from .mxd_symbols import SymbolReader
+        sym = SymbolReader(b)
 
     # every recognised object, in stream order: (offset, kind, object id, name, end of name)
     marks = []
@@ -353,6 +366,9 @@ def read_mxd(path):
 
     maps, seen = [], {}
     current, stack = None, []   # stack: [[group layer, children still to come]]
+    if layer_file:
+        current = MxdMap(name=os.path.splitext(os.path.basename(path))[0])
+        maps.append(current)
     basemap = False             # the last layer was an Esri basemap (its services follow it)
 
     def attach(layer):
@@ -402,10 +418,20 @@ def read_mxd(path):
             t, after = _bstr(b, end)
             layer.visible = _visible(b, after if t is not None else end)
             _source(layer, b, end, nxt)
+            if sym is not None and kind == "feature":
+                try:
+                    got = sym.layer(end, nxt)
+                except Exception:  # noqa: BLE001 - symbology must never lose the layer
+                    got = {}
+                layer.renderer = got.get("renderer")
+                layer.renderer_kind = got.get("kind", "")
+                layer.symbols_exact = bool(got.get("exact"))
+                layer.label_classes = got.get("labelClasses") or []
+                layer.labels_visible = bool(got.get("labelVisibility"))
         basemap = kind == "basemap"
         attach(layer)
         if kind == "group" and 0 < count < 10000:
             stack.append([layer, count])
-    if not maps:
+    if not maps or (layer_file and not maps[0].layers):
         raise MxdError("no data frames found")
     return maps

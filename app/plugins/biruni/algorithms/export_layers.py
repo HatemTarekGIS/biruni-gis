@@ -76,6 +76,8 @@ class ExportLayers(BiruniAlgorithm):
                 "USE_LAYER_TITLE": True, "FORCE_2D": False, "MTEXT": True,
                 "EXPORT_LINES_WITH_ZERO_WIDTH": False, "OUTPUT": path,
             }, context=context, feedback=feedback, is_child_algorithm=True)
+            from ..scrub import after_export
+            after_export([path], feedback)   # files that leave the office carry no user names or local folders
             return {self.FOLDER: folder, "COUNT": len(layers)}
 
         used, written = set(), []
@@ -96,6 +98,9 @@ class ExportLayers(BiruniAlgorithm):
             opts.layerName = name
             opts.layerOptions = layer_opts
             opts.onlySelectedFeatures = selected
+            from .. import scrub
+            if scrub.enabled() and scrub.hidden_fields(layer):
+                opts.attributes = scrub.visible_indexes(layer)   # fields hidden in the form never leave the office
             if crs.isValid() and crs != layer.crs():
                 opts.ct = QgsCoordinateTransform(layer.crs(), crs, context.transformContext())
             if single:
@@ -114,4 +119,6 @@ class ExportLayers(BiruniAlgorithm):
             feedback.setProgress(100 * (i + 1) / max(len(layers), 1))
         if not written:
             raise QgsProcessingException(tr("Nothing was exported."))
+        from ..scrub import after_export
+        after_export(sorted(set(written)), feedback)
         return {self.FOLDER: folder, "COUNT": len(written)}

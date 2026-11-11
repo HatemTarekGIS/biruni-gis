@@ -12,6 +12,9 @@ MODE_LISTEN = "listen"    # phone sends to this PC
 MODE_CONNECT = "connect"  # this PC connects to the phone
 MODE_SERIAL = "serial"    # Bluetooth / USB COM port
 MODE_BROWSER = "browser"  # the phone's web browser (QR code, no app)
+MODE_BRIDGE = "bridge"    # the phone's web browser from anywhere, over the Biruni bridge (no certificate warning)
+BRIDGE_PORT = 10114       # the bridge's local photo server for GPS (10112 is Field Photos)
+GPS_BRIDGE_KEY = "biruni/gps/bridge-key"  # its own key: Field Photos' phones never reach it
 
 
 def local_addresses():
@@ -54,6 +57,7 @@ class NmeaSource(QObject):
         self._retry.timeout.connect(self._reconnect)
         self.bytes = 0
         self.browser = None
+        self.bridge = self.bridge_server = None
         self._poll = QTimer(self)
         self._poll.setInterval(250)
         self._poll.timeout.connect(self._read_browser)
@@ -124,7 +128,44 @@ class NmeaSource(QObject):
         self.status.emit("listening", True)
         return [self.browser.url(ip) for ip in local_addresses()] or [self.browser.url("127.0.0.1")]
 
+    def serve_bridge(self, cert_folder, work_folder, lang="en"):
+        """The phone opens Biruni's page on GitHub (a real certificate: no warning) and sends its position
+        directly to this PC over the bridge (field_photos/bridge.py). Returns the phone's address or None."""
+        from ..field_photos import bridge
+        from ..field_photos.server import PhotoServer, all_phone_texts
+        from qgis.core import QgsSettings
+
+        self.stop()
+        try:
+            self.bridge_server = PhotoServer(work_folder, cert_folder, all_phone_texts(), lang, (), BRIDGE_PORT,
+                                             ["127.0.0.1"], bind="127.0.0.1")
+            key = bridge.load_key(QgsSettings(), name=GPS_BRIDGE_KEY)
+            self.bridge = bridge.BridgeHost(self.bridge_server.url("127.0.0.1") + "bridge#" + bridge.host_frag(key))
+        except OSError as e:
+            self.status.emit(str(e), False)
+            self.stop()
+            return None
+        self.mode = MODE_BRIDGE
+        self._poll.start()
+        self.status.emit("listening", True)
+        return bridge.phone_url(key, lang) + "&m=gps"
+
     def _read_browser(self):
+        if self.bridge_server is not None:
+            from .browser import fix_from_json
+
+            got = False
+            while not self.bridge_server.events.empty():
+                kind, value = self.bridge_server.events.get_nowait()
+                if kind == "pos":
+                    try:
+                        self.fixReceived.emit(fix_from_json(value))
+                        got = True
+                    except (ValueError, KeyError, TypeError):
+                        pass
+            if got:
+                self.rawReceived.emit()
+            return
         if self.browser is None:
             return
         got = False
@@ -143,6 +184,15 @@ class NmeaSource(QObject):
             except OSError:
                 pass
             self.browser = None
+        if self.bridge is not None:
+            self.bridge.stop()
+            self.bridge = None
+        if self.bridge_server is not None:
+            try:
+                self.bridge_server.stop()
+            except OSError:
+                pass
+            self.bridge_server = None
         for obj in [self._udp, self._server, self._client, self._serial] + self._clients:
             if obj is None:
                 continue

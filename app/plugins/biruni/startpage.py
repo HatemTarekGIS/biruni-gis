@@ -4,7 +4,7 @@ import os
 
 from qgis.core import Qgis, QgsProject
 from qgis.PyQt.QtCore import QEvent, QObject, QSize, Qt, QTimer
-from qgis.PyQt.QtWidgets import (QFrame, QGridLayout, QHBoxLayout, QLabel, QMenu, QPushButton,
+from qgis.PyQt.QtWidgets import (QComboBox, QFrame, QGridLayout, QHBoxLayout, QLabel, QMenu, QPushButton,
                                  QScrollArea, QSizePolicy, QToolButton, QVBoxLayout, QWidget)
 
 from . import i18n, icons
@@ -23,7 +23,7 @@ def start_qss(t):
 QFrame#StartCard {{
     background: {t['card']}; border: 1px solid {t['border']}; border-radius: 10px;
 }}
-QFrame#StartCard:hover {{ border: 1px solid {t['accent']}; background: {t['card_hover']}; }}
+QFrame#StartCard:hover, QFrame#StartCard:focus {{ border: 1px solid {t['accent']}; background: {t['card_hover']}; }}
 #StartCardTitle {{ font-size: 10.5pt; font-weight: 600; }}
 #StartCardText {{ color: {t['text_dim']}; }}
 QFrame#StartRecent {{ background: {t['card']}; border: 1px solid {t['border']}; border-radius: 10px; }}
@@ -52,6 +52,9 @@ class Card(QFrame):
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self._on_click = on_click
         self.icon_name = icon_name
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)  # Tab reaches the card, Enter / Space opens it
+        self.setAccessibleName(title)
+        self.setAccessibleDescription(text)
         v = QVBoxLayout(self)
         v.setContentsMargins(16, 14, 16, 14)
         v.setSpacing(4)
@@ -75,6 +78,12 @@ class Card(QFrame):
         if ev.button() == Qt.MouseButton.LeftButton and self.rect().contains(ev.position().toPoint()):
             self._on_click()
         super().mouseReleaseEvent(ev)
+
+    def keyPressEvent(self, ev):  # noqa: N802
+        if ev.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Space):
+            self._on_click()
+            return
+        super().keyPressEvent(ev)
 
 
 class StartPage(QWidget):
@@ -129,6 +138,11 @@ class StartPage(QWidget):
         tv.addWidget(title)
         tv.addWidget(sub)
         head.addLayout(tv, 1)
+        from_pro = QPushButton(tr("Coming from ArcGIS Pro?"))
+        from_pro.setObjectName("StartLink")
+        from_pro.setCursor(Qt.CursorShape.PointingHandCursor)
+        from_pro.clicked.connect(lambda: self.plugin.runner.execute(CATALOG["from_pro"]))
+        head.addWidget(from_pro, 0, Qt.AlignmentFlag.AlignVCenter)
         v.addLayout(head)
         v.addSpacing(18)
 
@@ -191,16 +205,13 @@ class StartPage(QWidget):
         about.clicked.connect(self.plugin.branding.show_about)
         foot.addWidget(about)
         foot.addStretch(1)
-        self.lang_buttons = []
+        self.lang_combo = QComboBox()  # one drop-down: the list of languages keeps growing
+        self.lang_combo.setObjectName("StartLang")
         for code, name in i18n.LANGUAGES:
-            b = QPushButton(name)
-            b.setObjectName("StartLink")
-            b.setCheckable(True)
-            b.setChecked(code == i18n.current_code())
-            b.setCursor(Qt.CursorShape.PointingHandCursor)
-            b.clicked.connect(lambda _=False, c=code: self.plugin.change_language(c))
-            foot.addWidget(b)
-            self.lang_buttons.append(b)
+            self.lang_combo.addItem(name, code)
+        self.lang_combo.setCurrentIndex(max(0, self.lang_combo.findData(i18n.current_code())))
+        self.lang_combo.activated.connect(lambda i: self.plugin.change_language(self.lang_combo.itemData(i)))
+        foot.addWidget(self.lang_combo)
         self.theme_buttons = []
         for mode, ic, tip in (("light", "sun", tr("Light")), ("dark", "moon", tr("Dark")), ("system", "device-desktop", tr("Follow Windows"))):
             b = QToolButton()
