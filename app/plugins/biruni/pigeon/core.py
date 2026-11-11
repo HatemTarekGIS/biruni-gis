@@ -193,12 +193,14 @@ def _down_packs(node):
         at = rows[-1]["seq"]
     results = st.get("pigeon_results") or {}
     refused = dict(hub.refused_for) if hub is not None else {}
+    from ..team.hub import room_settings
+    settings = hub.settings() if hub is not None else room_settings(st)
     out, after = [], low
     for part in _parts(entries):
         b = _base(node, "down")
         hi = part[-1]["seq"] if part else head
         b.update(ops=part, after=after, hi=hi, head=head, seen=seen, results=results, refused=refused,
-                 roster=roster)
+                 roster=roster, settings=settings)
         out.append(b)
         after = hi
     return out
@@ -387,6 +389,8 @@ def _member_take(node, body, rep):
         if int(body.get("epoch", 0)) > node.epoch:
             node.epoch = int(body["epoch"])
             st.put("epoch", node.epoch)
+    if body.get("settings"):
+        node._keep_settings(body["settings"])
     _answers(node, body, rep)
     since = int(node.since or 0)
     after, hi = int(body.get("after") or 0), int(body.get("hi") or 0)

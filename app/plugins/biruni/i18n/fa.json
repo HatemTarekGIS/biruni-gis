@@ -7846,5 +7846,8 @@
  "The larger number": "عدد بزرگ‌تر",
  "The smaller number": "عدد کوچک‌تر",
  "Add both changes": "جمع هر دو تغییر",
- "Never join by itself: ask": "هرگز خودکار ادغام نشود: بپرس"
+ "Never join by itself: ask": "هرگز خودکار ادغام نشود: بپرس",
+ "Room errors": "خطاهای اتاق",
+ "the shape: common corner moved two ways ({n} node)": "شکل: گوشهٔ مشترک به دو سو جابه‌جا شد ({n} رأس)",
+ "the shape: {n} common corners moved two ways": "شکل: {n} گوشهٔ مشترک به دو سو جابه‌جا شدند"
 }

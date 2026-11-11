@@ -267,6 +267,190 @@ check(not rd.edit and rd.table.rowCount() >= 4 and rd.rules.get("L1", {}).get("a
       "the merge rules show to a member, read-only, with the signed rules")
 check(not nd.edit and nd.table.rowCount() == 3, "the number ranges show to a member, read-only (three grants)")
 
+# ---- [I06 second piece] shared-node geometry merge & shrinking conflicts ------------------------------
+# 1. Shrinking conflict: two members move the same corner to different positions; independent corners merge
+p_base = "POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))"
+p_mine = "POLYGON((0 0, 10 0, 11 11, 0 12, 0 0))"     # moved (10, 10) -> (11, 11) AND (0, 10) -> (0, 12)
+p_theirs = "POLYGON((0 0, 10 0, 12 12, 0 10, 0 0))"   # moved (10, 10) -> (12, 12)
+b_hex = bytes(QgsGeometry.fromWkt(p_base).asWkb()).hex()
+m_hex = bytes(QgsGeometry.fromWkt(p_mine).asWkb()).hex()
+t_hex = bytes(QgsGeometry.fromWkt(p_theirs).asWkb()).hex()
+
+merged_hex, ok, node_c = merge.merge_geometry_nodes(b_hex, m_hex, t_hex)
+check(not ok and len(node_c) == 1, "disagreement shrinks to exactly one node conflict")
+check(node_c[0]["base"][:2] == (10.0, 10.0) and node_c[0]["mine"][:2] == (11.0, 11.0) and node_c[0]["theirs"][:2] == (12.0, 12.0),
+      "the node conflict records the contested corner coordinates")
+mg = QgsGeometry()
+mg.fromWkb(bytes.fromhex(merged_hex))
+pts_merged = [(round(p.x(), 2), round(p.y(), 2)) for p in mg.vertices()]
+check((0.0, 12.0) in pts_merged and (12.0, 12.0) in pts_merged,
+      "uncontested corner (0, 12) was merged while contested corner kept theirs (12, 12)")
+
+# 2. Moving a common corner reaches all neighbours on the host
+h_sh, l_sh = make_hub("host_shared", admin, constitution=c1, grants=grants_)
+wkt_grid = [
+    "POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))",
+    "POLYGON((10 0, 20 0, 20 10, 10 10, 10 0))",
+    "POLYGON((0 10, 10 10, 10 20, 0 20, 0 10))",
+    "POLYGON((10 10, 20 10, 20 20, 10 20, 10 10))"
+]
+l_sh.startEditing()
+for i, w in enumerate(wkt_grid):
+    f = QgsFeature(l_sh.fields())
+    f.setAttribute("owner", f"orig_{i+1}")
+    f.setAttribute("parcel_no", 100 + i)
+    f.setGeometry(QgsGeometry.fromWkt(w))
+    l_sh.addFeature(f)
+l_sh.commitChanges(False)
+fids_grid = sorted(f.id() for f in l_sh.getFeatures())
+b_st1 = features.stored_state(l_sh, fids_grid[0])
+
+# Mona moves the common corner (10, 10) -> (11, 11) in parcel 1:
+p1_new_wkt = "POLYGON((0 0, 10 0, 11 11, 0 10, 0 0))"
+p1_new_st = {"g": bytes(QgsGeometry.fromWkt(p1_new_wkt).asWkb()).hex(), "a": dict(b_st1["a"], owner="Mona")}
+op1 = op_of(mona, fids_grid[0], b_st1, p1_new_st)
+r_p1 = h_sh.apply_remote(op1, h_sh._member(mona["id"]))
+check(r_p1.get("status") in ("ok", "merged"), "Mona's corner edit applied")
+
+def corners_of(fid):
+    g = features.stored_state(l_sh, fid)["g"]
+    qg = QgsGeometry()
+    qg.fromWkb(bytes.fromhex(g))
+    return [(round(v.x(), 2), round(v.y(), 2)) for v in qg.vertices()]
+
+check(all((11.0, 11.0) in corners_of(fid) for fid in fids_grid),
+      "moving common corner in parcel 1 reached all 3 untouched neighbours")
+notes_sh = [e.get("note") or "" for e in h_sh.store.last(10)]
+check(any("shared-node" in n for n in notes_sh), "shared-node entries recorded in stream")
+
+# 3. Pinning: member with restricted area moving corner touching neighbour outside area gets pinned
+from biruni.team import area  # noqa: E402
+area_p1 = area.make([QgsGeometry.fromWkt("POLYGON((-1 -1, 11 -1, 11 11, -1 11, -1 -1))")], l_sh.crs())
+h_sh.store.save_member(dict(mona, rights={"L1": "edit", area.KEY: area_p1}))
+h_sh._areas._cache.clear()
+
+cur_p1 = features.stored_state(l_sh, fids_grid[0])
+p1_ext_wkt = "POLYGON((0 0, 10 0, 10.5 10.5, 0 10, 0 0))"
+p1_ext_st = {"g": bytes(QgsGeometry.fromWkt(p1_ext_wkt).asWkb()).hex(), "a": dict(cur_p1["a"])}
+op_ext = op_of(mona, fids_grid[0], cur_p1, p1_ext_st)
+r_ext = h_sh.apply_remote(op_ext, h_sh._member(mona["id"]))
+check(any("pinned shared corner" in f for f in r_ext.get("flags", [])),
+      "shared corner touching neighbour outside member's area was pinned (red-team fix)")
+
+# 4. Carrying constitution & grants inside pigeon & folder packs
+from biruni.pigeon import core as p_core  # noqa: E402
+from biruni.team import folder as f_core  # noqa: E402
+import types  # noqa: E402
+
+host_node = types.SimpleNamespace(store=h_sh.store, hub=h_sh, roster=h_sh.roster(), me_id=admin["id"], ident={"name": "Admin"}, since=0, epoch=1, keys=types.SimpleNamespace(tag="room_test"))
+down_packs = p_core._down_packs(host_node)
+check(bool(down_packs) and "settings" in down_packs[0] and "constitution" in down_packs[0]["settings"],
+      "pigeon down pack carries signed merge constitution and grants")
+
+dummy_node = types.SimpleNamespace(store=Store(os.path.join(root, "dummy.sqlite")),
+                                   since=0, roster=[], me_id="x"*32, epoch=1,
+                                   _keep_settings=lambda s: None, changed=types.SimpleNamespace(emit=lambda: None),
+                                   apply_entries=lambda es: None)
+dummy_node.store.put("roster", h_sh.roster())
+saved_s = {}
+dummy_node._keep_settings = lambda s: saved_s.update(s)
+rep_p = {"applied": 0, "conflicts": 0, "waiting": 0}
+p_core._member_take(dummy_node, down_packs[0], rep_p)
+check(rules.CKEY in saved_s, "member taking pigeon pack inherits room constitution")
+
+# 5. Randomised convergence test on shared-node merge
+h_rnd1, l_rnd1 = make_hub("host_rnd1", admin)
+h_rnd2, l_rnd2 = make_hub("host_rnd2", admin)
+for h, l in ((h_rnd1, l_rnd1), (h_rnd2, l_rnd2)):
+    l.startEditing()
+    f1 = QgsFeature(l.fields())
+    f1.setGeometry(QgsGeometry.fromWkt("POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))"))
+    f1["owner"] = "base"
+    f2 = QgsFeature(l.fields())
+    f2.setGeometry(QgsGeometry.fromWkt("POLYGON((10 0, 20 0, 20 10, 10 10, 10 0))"))
+    f2["owner"] = "base"
+    l.addFeatures([f1, f2])
+    l.commitChanges(False)
+
+f1_id1 = next(f.id() for f in l_rnd1.getFeatures() if f["owner"] == "base" and f.geometry().boundingBox().xMinimum() < 5)
+f1_id2 = next(f.id() for f in l_rnd2.getFeatures() if f["owner"] == "base" and f.geometry().boundingBox().xMinimum() < 5)
+f2_id1 = next(f.id() for f in l_rnd1.getFeatures() if f.id() != f1_id1)
+f2_id2 = next(f.id() for f in l_rnd2.getFeatures() if f.id() != f1_id2)
+
+base_f1_1 = features.stored_state(l_rnd1, f1_id1)
+base_f1_2 = features.stored_state(l_rnd2, f1_id2)
+
+# Mona edits north edge of parcel 1; Sami edits south edge; Tarek moves common corner (10, 10) -> (10.5, 10.5)
+u1_1 = op_of(mona, f1_id1, base_f1_1, {"g": bytes(QgsGeometry.fromWkt("POLYGON((0 -1, 10 0, 10 10, 0 10, 0 -1))").asWkb()).hex(), "a": {"owner": "M"}})
+u2_1 = op_of(sami, f1_id1, base_f1_1, {"g": bytes(QgsGeometry.fromWkt("POLYGON((0 0, 10 0, 10 10, 0 11, 0 0))").asWkb()).hex(), "a": {"owner": "S"}})
+u3_1 = op_of(tarek, f1_id1, base_f1_1, {"g": bytes(QgsGeometry.fromWkt("POLYGON((0 0, 10 0, 10.5 10.5, 0 10, 0 0))").asWkb()).hex(), "a": {"owner": "T"}})
+
+u1_2 = op_of(mona, f1_id2, base_f1_2, {"g": bytes(QgsGeometry.fromWkt("POLYGON((0 -1, 10 0, 10 10, 0 10, 0 -1))").asWkb()).hex(), "a": {"owner": "M"}})
+u2_2 = op_of(sami, f1_id2, base_f1_2, {"g": bytes(QgsGeometry.fromWkt("POLYGON((0 0, 10 0, 10 10, 0 11, 0 0))").asWkb()).hex(), "a": {"owner": "S"}})
+u3_2 = op_of(tarek, f1_id2, base_f1_2, {"g": bytes(QgsGeometry.fromWkt("POLYGON((0 0, 10 0, 10.5 10.5, 0 10, 0 0))").asWkb()).hex(), "a": {"owner": "T"}})
+
+for op in [u1_1, u2_1, u3_1]:
+    h_rnd1.apply_remote(dict(op), h_rnd1._member(op["author"]))
+for op in [u3_2, u2_2, u1_2]:
+    h_rnd2.apply_remote(dict(op), h_rnd2._member(op["author"]))
+
+geom_1_h1 = features.stored_state(l_rnd1, f1_id1)["g"]
+geom_1_h2 = features.stored_state(l_rnd2, f1_id2)["g"]
+geom_2_h1 = features.stored_state(l_rnd1, f2_id1)["g"]
+geom_2_h2 = features.stored_state(l_rnd2, f2_id2)["g"]
+
+check(geom_1_h1 == geom_1_h2 and geom_2_h1 == geom_2_h2,
+      "randomised order convergence: both hosts reached identical geometries for both parcels")
+
+
+# 6. Geographic CRS tolerance test (EPSG:4326): 1 mm is ~8.98e-9 degrees, NOT 0.001 deg (~100 m)
+from qgis.core import QgsCoordinateReferenceSystem  # noqa: E402
+crs_deg = QgsCoordinateReferenceSystem("EPSG:4326")
+tol_deg = merge.layer_tolerance(crs_deg)
+check(tol_deg < 1e-7 and tol_deg > 1e-9, f"geographic CRS tolerance is ~1 mm ({tol_deg:.2e} deg), not 100 metres")
+
+# In EPSG:4326, neighbour vertex at 0.0001 deg (~11 m away) MUST NOT be moved by a corner moving 0.0000001 deg
+g_b4326 = bytes(QgsGeometry.fromWkt("POLYGON((31.0 30.0, 31.0001 30.0, 31.0001 30.0001, 31.0 30.0001, 31.0 30.0))").asWkb()).hex()
+g_n4326 = bytes(QgsGeometry.fromWkt("POLYGON((31.0 30.0, 31.0001 30.0, 31.00010001 30.00010001, 31.0 30.0001, 31.0 30.0))").asWkb()).hex()
+mv4326 = merge.node_moves(g_b4326, g_n4326, tol=tol_deg)
+check(len(mv4326) == 1, "corner move in geographic layer detected at sub-millimetre precision")
+
+# 7. Matching when vertex count changes (added/removed vertex)
+g_orig = bytes(QgsGeometry.fromWkt("POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))").asWkb()).hex()
+# A vertex is added at (5, 0) AND corner (10, 10) is moved to (11, 11) -> 5 corners instead of 4
+g_added = bytes(QgsGeometry.fromWkt("POLYGON((0 0, 5 0, 10 0, 11 11, 0 10, 0 0))").asWkb()).hex()
+mv_diff = merge.node_moves(g_orig, g_added, tol=0.001)
+check(any(m[0] == (10.0, 10.0) and m[1] == (11.0, 11.0) for m in mv_diff),
+      "moved corner was matched and extracted even when vertex count changed")
+
+# 8. T-junction corner on neighbour edge
+g_neighbour = bytes(QgsGeometry.fromWkt("POLYGON((10 0, 20 0, 20 20, 10 20, 10 0))").asWkb()).hex()
+# Point (10, 10) lies on edge (10, 0) -> (10, 20) of neighbour, not as a vertex
+split_hex, split_ok = merge.insert_and_move_node_on_edge(g_neighbour, (10.0, 10.0), (11.0, 10.0), tol=0.001)
+check(split_ok, "T-junction on neighbour edge detected and split")
+split_g = QgsGeometry()
+split_g.fromWkb(bytes.fromhex(split_hex))
+check(any((round(v.x(), 1), round(v.y(), 1)) == (11.0, 10.0) for v in split_g.vertices()),
+      "neighbour edge was split and moved to follow the T-junction corner")
+
+# 9. Respecting locks (hook for future feature): a locked neighbour is never modified
+h_sh.store.put("locks", {f"L1:{fids_grid[1]}": tarek["id"]})  # parcel 2 locked by Tarek
+op_lock_test = op_of(mona, fids_grid[0], features.stored_state(l_sh, fids_grid[0]),
+                     {"g": bytes(QgsGeometry.fromWkt("POLYGON((0 0, 10.2 0, 11 11, 0 10, 0 0))").asWkb()).hex(),
+                      "a": dict(features.stored_state(l_sh, fids_grid[0])["a"])})
+r_lock = h_sh.apply_remote(op_lock_test, h_sh._member(mona["id"]))
+check(any("neighbour #2 is locked" in f or "is locked" in f for f in r_lock.get("flags", [])),
+      "shared corner touching a locked neighbour was pinned and skipped")
+
+# 10. Error logging: last 50 errors are kept with their timestamps
+h_sh.store.put("room_errors", [])
+for i in range(55):
+    h_sh._log_error(f"test error {i}")
+errs = h_sh.store.get("room_errors")
+check(len(errs) == 50 and errs[-1]["text"] == "test error 54" and "ts" in errs[-1],
+      "the room keeps exactly the last 50 errors with their timestamps")
+
+ALL_PASSED_MSG = "\nALL PASSED"
 print()
 print("ALL PASSED" if not failures else f"FAILED: {len(failures)}")
 sys.exit(1 if failures else 0)

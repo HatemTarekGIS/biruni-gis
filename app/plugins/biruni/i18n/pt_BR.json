@@ -7846,5 +7846,8 @@
  "The larger number": "O número maior",
  "The smaller number": "O número menor",
  "Add both changes": "Somar as duas alterações",
- "Never join by itself: ask": "Nunca mesclar sozinho: perguntar"
+ "Never join by itself: ask": "Nunca mesclar sozinho: perguntar",
+ "Room errors": "Erros da sala",
+ "the shape: common corner moved two ways ({n} node)": "a forma: canto comum movido de duas maneiras ({n} vértice)",
+ "the shape: {n} common corners moved two ways": "a forma: {n} cantos comuns movidos de duas maneiras"
 }

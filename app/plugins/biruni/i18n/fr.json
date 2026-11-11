@@ -7846,5 +7846,8 @@
  "The larger number": "Le plus grand nombre",
  "The smaller number": "Le plus petit nombre",
  "Add both changes": "Additionner les deux modifications",
- "Never join by itself: ask": "Jamais fusionné automatiquement : demander"
+ "Never join by itself: ask": "Jamais fusionné automatiquement : demander",
+ "Room errors": "Erreurs de la salle",
+ "the shape: common corner moved two ways ({n} node)": "la forme : coin commun déplacé de deux façons ({n} sommet)",
+ "the shape: {n} common corners moved two ways": "la forme : {n} coins communs déplacés de deux façons"
 }

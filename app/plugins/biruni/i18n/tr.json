@@ -7846,5 +7846,8 @@
  "The larger number": "Büyük sayı",
  "The smaller number": "Küçük sayı",
  "Add both changes": "İki değişikliği topla",
- "Never join by itself: ask": "Asla kendiliğinden birleştirme: sor"
+ "Never join by itself: ask": "Asla kendiliğinden birleştirme: sor",
+ "Room errors": "Oda hataları",
+ "the shape: common corner moved two ways ({n} node)": "şekil: ortak köşe iki farklı yöne taşındı ({n} köşe)",
+ "the shape: {n} common corners moved two ways": "şekil: {n} ortak köşe iki farklı yöne taşındı"
 }

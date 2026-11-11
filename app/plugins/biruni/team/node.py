@@ -1218,7 +1218,7 @@ class Node(QObject):
                                "base_ver": max(0, (e["ver"] or 1) - 1), "base": e["prev"], "state": e["state"],
                                "author": e["author"], "name": e["name"], "ts": e["ts"], "sig": e["sig"],
                                "src": e.get("src"), "replay": True}
-                              for e in page if e["uid"] in missing and e["kind"] != "field"]
+                              for e in page if e["uid"] in missing and e["kind"] != "field" and ":n:" not in e["uid"]]
                     for part in by_size(replay):
                         client.call("push", {"token": token, "ops": part}, timeout=120)
                 own = self.store.outbox(10000)
@@ -1373,7 +1373,14 @@ class Node(QObject):
                     if item["what"] == "field":
                         new["a"][item["field"]] = item["mine"]
                     elif item["what"] in ("geometry", "deleted"):
-                        new["g"] = item["mine"]
+                        if item.get("nodes") and cur.get("g"):
+                            from . import merge
+                            moves = [((n["theirs"][0], n["theirs"][1]), (n["mine"][0], n["mine"][1]))
+                                     for n in item["nodes"] if n.get("theirs") and n.get("mine")]
+                            new_g, cnt = merge.move_nodes(cur["g"], moves)
+                            new["g"] = new_g if cnt > 0 else item["mine"]
+                        else:
+                            new["g"] = item["mine"]
                         if item["what"] == "deleted":
                             new["a"].update((conflict.get("mine") or {}).get("a") or {})
                     elif item["what"] == "delete":

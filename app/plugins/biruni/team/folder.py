@@ -155,8 +155,10 @@ class FolderCarrier:
     def _wants_write(self, host):
         st = self.node.store
         if host:
+            from .hub import room_settings
             head = st.head()
-            return head > int(st.get("folder_written_head") or -1)
+            settings_key = _sha(json.dumps(room_settings(st), sort_keys=True).encode())
+            return head > int(st.get("folder_written_head") or -1) or settings_key != st.get("folder_written_settings")
         uids = sorted(o.get("uid") for o in st.outbox(1 << 30))
         key = _sha(json.dumps([uids, int(self.node.since or 0)]).encode())
         last = st.get("folder_written_key")
@@ -182,7 +184,9 @@ class FolderCarrier:
         n += 1
         st = node.store
         if host:
+            from .hub import room_settings
             head = st.head()
+            settings_key = _sha(json.dumps(room_settings(st), sort_keys=True).encode())
             if head - int(st.get("folder_snap_head") or 0) >= SNAP_EVERY or SNAP not in files:
                 snap = self._envelope(self._own_packs(snapshot=True))
                 _write_once(os.path.join(self.my_dir(), SNAP), snap)
@@ -190,6 +194,7 @@ class FolderCarrier:
                 st.put("folder_snap_head", head)
                 n += 1
             st.put("folder_written_head", head)
+            st.put("folder_written_settings", settings_key)
         else:
             st.put("folder_written_key", want)
             st.put("folder_written_at", time.time())

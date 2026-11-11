@@ -7846,5 +7846,8 @@
  "The larger number": "الرقم الأكبر",
  "The smaller number": "الرقم الأصغر",
  "Add both changes": "جمع التعديلين",
- "Never join by itself: ask": "لا يُدمج تلقائيًا أبدًا: اسأل"
+ "Never join by itself: ask": "لا يُدمج تلقائيًا أبدًا: اسأل",
+ "Room errors": "أخطاء الغرفة",
+ "the shape: common corner moved two ways ({n} node)": "الشكل: رُكن مشترك حُرِّك في اتجاهين ({n} رأس)",
+ "the shape: {n} common corners moved two ways": "الشكل: {n} أركان مشتركة حُرِّكت في اتجاهين"
 }

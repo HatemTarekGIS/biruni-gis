@@ -469,7 +469,14 @@ class Hub(QObject):
     def local(self, op, prev, state):
         """A change the host made in its own map (already in the file): into the stream."""
         ver = self.store.version(op["layer"], op["fid"]) + 1
-        return self.record(op, prev, state, ver)
+        key, fid = op["layer"], int(op["fid"])
+        lyr = self.layers.get(key)
+        flags = []
+        if lyr is not None and prev and state and prev.get("g") != state.get("g"):
+            batch = _Batch(self)
+            _new_st, flags = self._propagate_shared_nodes(key, lyr, fid, self.me, prev, state, state, batch, op)
+            batch.flush()
+        return self.record(op, prev, state, ver, note=("; ".join(flags) if flags else None))
 
     # ---- the main thread ------------------------------------------------------------------------------
     def drain(self):
@@ -719,6 +726,12 @@ class Hub(QObject):
                                                     mine_rank=int(who.get("rank", 99)), theirs_rank=theirs_rank)
             merged = True
         flags = self._number_flags(key, lyr, fid, who, cur, result)
+        # [I06 second piece] shared-node geometry propagation to incident neighbours
+        node_flags = []
+        if lyr is not None and result and state and (op.get("base") or cur):
+            base_st = op.get("base") if op.get("base") and op.get("base").get("g") else cur
+            result, node_flags = self._propagate_shared_nodes(key, lyr, fid, who, base_st, state, result, batch, op)
+        flags.extend(node_flags)
         note = "merged" if merged else ("; ".join(flags) if flags else None)
         e = batch.write(op, cur, result, cur_ver + 1, note=note)
         out = {"uid": uid, "status": "merged" if merged else "ok", "_entry": e}
@@ -727,6 +740,169 @@ class Hub(QObject):
         if conflicts:
             out.update(self._conflict(op, cur, conflicts, applied=True))
         return out
+
+    # ---- [I06 second piece] shared-node geometry propagation ------------------------------------------
+    def _neighbours_at_node(self, key, lyr, fid, pt, batch, tol=None):
+        """[(neighbour_fid, neighbour_state)] for features in key touching (pt[0], pt[1])."""
+        from qgis.core import QgsRectangle, QgsFeatureRequest, QgsGeometry
+
+        if tol is None:
+            tol = merge.layer_tolerance(lyr.crs() if lyr else None)
+        rect = QgsRectangle(pt[0] - tol, pt[1] - tol, pt[0] + tol, pt[1] + tol)
+        out = []
+        seen = set()
+        try:
+            req = QgsFeatureRequest().setFilterRect(rect)
+            for f in lyr.getFeatures(req):
+                nfid = f.id()
+                if nfid == fid:
+                    continue
+                st = batch.state(key, nfid)
+                if st and st.get("g") and nfid not in seen:
+                    g = QgsGeometry()
+                    g.fromWkb(bytes.fromhex(st["g"]))
+                    if any(merge._pt_dist((v.x(), v.y()), pt) <= tol for v in g.vertices()):
+                        seen.add(nfid)
+                        out.append((nfid, st))
+        except Exception as e:
+            self._log_error(f"shared-node spatial query: {e}")
+        for (k_layer, nfid), (_old_s, cur_s) in batch.cur.items():
+            if k_layer == key and nfid != fid and nfid not in seen and cur_s and cur_s.get("g"):
+                try:
+                    g = QgsGeometry()
+                    g.fromWkb(bytes.fromhex(cur_s["g"]))
+                    if any(merge._pt_dist((v.x(), v.y()), pt) <= tol for v in g.vertices()):
+                        seen.add(nfid)
+                        out.append((nfid, cur_s))
+                except Exception as e:
+                    self._log_error(f"shared-node batch check: {e}")
+        return sorted(out, key=lambda x: x[0])
+
+    def _topo_check(self, lyr, fid, hex_g, batch, key):
+        """Check if moving a node produced an overlap with existing neighbour polygons."""
+        from qgis.core import QgsGeometry, QgsFeatureRequest, QgsWkbTypes
+
+        if not hex_g:
+            return ""
+        g = QgsGeometry()
+        g.fromWkb(bytes.fromhex(hex_g))
+        if g.isNull() or g.type() != QgsWkbTypes.PolygonGeometry:
+            return ""
+        try:
+            req = QgsFeatureRequest().setFilterRect(g.boundingBox())
+            for f in lyr.getFeatures(req):
+                if f.id() == fid:
+                    continue
+                other_st = batch.state(key, f.id())
+                if not other_st or not other_st.get("g"):
+                    continue
+                og = QgsGeometry()
+                og.fromWkb(bytes.fromhex(other_st["g"]))
+                if not og.isNull() and og.isGeosValid() and g.overlaps(og):
+                    inter = g.intersection(og)
+                    if not inter.isNull() and inter.area() > 0.0001:
+                        return "topology: overlap detected"
+        except Exception as e:
+            self._log_error(f"shared-node topology check: {e}")
+        return ""
+
+    def _log_error(self, msg):
+        self.stats["errors"] = self.stats.get("errors", 0) + 1
+        errors = self.store.get("room_errors") or []
+        errors.append({"ts": round(time.time(), 3), "text": str(msg)[:300]})
+        self.store.put("room_errors", errors[-50:])
+        try:
+            self.changed.emit()
+        except Exception:
+            pass
+
+
+    def _propagate_shared_nodes(self, key, lyr, fid, who, base_state, state_state, result_state, batch, op):
+        """Propagate moved common corners to all incident neighbour features in the layer.
+        Pins the node if it touches a locked neighbour (hook ready for when feature locks are implemented)
+        or one outside the member's work area."""
+        base_g = (base_state or {}).get("g")
+        state_g = (state_state or {}).get("g")
+        res_g = (result_state or {}).get("g")
+        if not base_g or not state_g or not res_g or base_g == state_g:
+            return result_state, []
+        tol = merge.layer_tolerance(lyr.crs() if lyr else None)
+        moves = merge.node_moves(base_g, state_g, tol=tol)
+        if not moves:
+            return result_state, []
+
+        user_area = area.of(who.get("rights"))
+        locks = self.store.get("locks") or {}
+        flags = []
+        effective_moves = []
+        for old_xy, new_xy in moves:
+            neighbours = self._neighbours_at_node(key, lyr, fid, old_xy, batch, tol=tol)
+            # 1. Locks check: pin if any incident neighbour is locked by someone else
+            locked_by_other = [n_fid for n_fid, _ in neighbours
+                               if locks.get(f"{key}:{n_fid}") and locks.get(f"{key}:{n_fid}") != who.get("id")]
+            if locked_by_other:
+                flags.append(f"pinned shared corner: neighbour #{locked_by_other[0]} is locked")
+                continue
+            # 2. Red-team fix: pin if any incident neighbour is outside member's work area
+            if user_area and any(not self._areas.inside(user_area, lyr, n_st) for n_fid, n_st in neighbours):
+                flags.append(f"pinned shared corner: ({old_xy[0]:.2f}, {old_xy[1]:.2f})")
+                continue
+            effective_moves.append((old_xy, new_xy))
+
+        if len(effective_moves) < len(moves):
+            pinned = [m[0] for m in moves if m not in effective_moves]
+            pinned_g, _cnt = merge.pin_nodes(res_g, pinned, tol=tol)
+            result_state = dict(result_state, g=pinned_g)
+
+        if not effective_moves:
+            return result_state, flags
+
+        for old_xy, new_xy in effective_moves:
+            neighbours = self._neighbours_at_node(key, lyr, fid, old_xy, batch, tol=tol)
+            handled_fids = set()
+            for n_fid, n_st in neighbours:
+                if not n_st or not n_st.get("g"):
+                    continue
+                handled_fids.add(n_fid)
+                new_n_g, cnt = merge.move_nodes(n_st["g"], [(old_xy, new_xy)], tol=tol)
+                if cnt > 0 and new_n_g != n_st["g"]:
+                    n_ver = batch.version(key, n_fid)
+                    n_new_st = dict(n_st, g=new_n_g)
+                    topo_flag = self._topo_check(lyr, n_fid, new_n_g, batch, key)
+                    n_op = {"uid": f"{op['uid']}:n:{n_fid}", "layer": key, "fid": n_fid,
+                            "kind": "put", "author": op.get("author", who.get("id")),
+                            "name": op.get("name", who.get("name", "")), "ts": op.get("ts", time.time())}
+                    note_parts = ["shared-node"]
+                    if topo_flag:
+                        note_parts.append(topo_flag)
+                    batch.write(n_op, n_st, n_new_st, n_ver + 1, note="; ".join(note_parts))
+
+            # T-junction check: corners lying on an edge of a neighbour without an existing vertex
+            try:
+                from qgis.core import QgsRectangle, QgsFeatureRequest
+                rect = QgsRectangle(old_xy[0] - tol * 10, old_xy[1] - tol * 10, old_xy[0] + tol * 10, old_xy[1] + tol * 10)
+                for f in lyr.getFeatures(QgsFeatureRequest().setFilterRect(rect)):
+                    n_fid = f.id()
+                    if n_fid == fid or n_fid in handled_fids:
+                        continue
+                    n_st = batch.state(key, n_fid)
+                    if not n_st or not n_st.get("g"):
+                        continue
+                    split_g, split_ok = merge.insert_and_move_node_on_edge(n_st["g"], old_xy, new_xy, tol=tol)
+                    if split_ok and split_g != n_st["g"]:
+                        n_ver = batch.version(key, n_fid)
+                        n_new_st = dict(n_st, g=split_g)
+                        n_op = {"uid": f"{op['uid']}:t:{n_fid}", "layer": key, "fid": n_fid,
+                                "kind": "put", "author": op.get("author", who.get("id")),
+                                "name": op.get("name", who.get("name", "")), "ts": op.get("ts", time.time())}
+                        batch.write(n_op, n_st, n_new_st, n_ver + 1,
+                                    note=f"shared-node: T-junction corner on neighbour #{n_fid}")
+            except Exception as e:
+                self._log_error(f"shared-node T-junction check: {e}")
+
+        return result_state, flags
+
+
 
     # ---- [I06] the merge constitution and escrowed numbers (rules.py) ----------------------------------
     def _room_rules(self):
@@ -882,7 +1058,8 @@ class Hub(QObject):
                 "merged": self.stats["merged"], "conflicts": self.stats["conflicts"],
                 "refused": self.stats["refused"], "bytes_in": self.stats["bytes_in"],
                 "bytes_out": self.stats["bytes_out"], "requests": self.stats["requests"], "by": dict(self.stats["by"]),
-                "size": size, "waiting": list(self.waiting.values()), "epoch": self.epoch}
+                "size": size, "waiting": list(self.waiting.values()), "epoch": self.epoch,
+                "errors": self.store.get("room_errors") or []}
 
     def _snapshot_info(self):
         head, folder, files = self.snapshot

@@ -669,6 +669,17 @@ class TeamDock(QDockWidget):
         wb.addWidget(self.waiting)
         wb.addLayout(wrow)
         v.addWidget(self.waiting_box)
+        # room errors
+        self.errors_list = QListWidget()
+        self.errors_list.setMaximumHeight(80)
+        self.errors_box = QFrame()
+        self.errors_box.setObjectName("GpsCard")
+        eb = QVBoxLayout(self.errors_box)
+        el = QLabel(tr("Room errors"))
+        el.setObjectName("GpsHint")
+        eb.addWidget(el)
+        eb.addWidget(self.errors_list)
+        v.addWidget(self.errors_box)
         # server controls
         box = QFrame()
         box.setObjectName("GpsCard")
@@ -793,7 +804,12 @@ class TeamDock(QDockWidget):
                     parts.append(tr("{f}: yours «{a}», {o}'s «{b}»").format(f=item["field"], a=item["mine"],
                                                                           b=item["theirs"], o=c.get("other") or "?"))
                 elif item["what"] == "geometry":
-                    parts.append(tr("the shape: you and {o} moved the same vertices").format(o=c.get("other") or "?"))
+                    if item.get("nodes"):
+                        parts.append(tr("the shape: common corner moved two ways ({n} node)").format(n=len(item["nodes"]))
+                                     if len(item["nodes"]) == 1 else
+                                     tr("the shape: {n} common corners moved two ways").format(n=len(item["nodes"])))
+                    else:
+                        parts.append(tr("the shape: you and {o} moved the same vertices").format(o=c.get("other") or "?"))
                 elif item["what"] == "deleted":
                     parts.append(tr("{o} deleted it while you edited it").format(o=c.get("other") or "?"))
                 elif item["what"] == "delete":
@@ -859,6 +875,13 @@ class TeamDock(QDockWidget):
             it.setData(Qt.ItemDataRole.UserRole, r["id"])
             self.waiting.addItem(it)
         self.waiting_box.setVisible(bool(x["waiting"]))
+        self.errors_list.clear()
+        errors = x.get("errors") or []
+        for err in reversed(errors):
+            from datetime import datetime
+            dt_str = datetime.fromtimestamp(err["ts"]).strftime("%H:%M:%S")
+            self.errors_list.addItem(f"{dt_str}: {err['text']}")
+        self.errors_box.setVisible(bool(errors))
         lines = [f"http://{a}:{n.hub.port}" for a in wire.local_addresses()]
         if n.external_url == "link:":
             lines.append(tr("Outside this network: a direct encrypted link ({n} connected through it)").format(
