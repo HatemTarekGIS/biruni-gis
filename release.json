@@ -6,17 +6,17 @@
   "assets/overview.png": "22c2162add95c638cdf5d0866e9a1cad1ec2e7247b262f90d8f402699adaa74e",
   "assets/start.png": "2b1e895df5c23f00d1a8b0dcebb7bb2ccf0fac328d2cb5100846620dc8596b41",
   "assets/toolbox.png": "673c5986ae87f3bf266c8c32cb71822789e106725918e07410afc9a1fc51c30b",
-  "d/index.html": "cea6be4483737b8f626d5bbd2319539b185dff587c0b2ab96c486d337344d462",
+  "d/index.html": "033ce689c5a2fbe29c6a12c96efe8c604ab9d7063e52c0a5601a7ade7ac5ca62",
   "index.html": "825038a37a5ad5c212586f0ae5cfcc1a8c0e6f2819e417487a94a509cd21b7b3",
   "m/index.html": "c308ca490fe421290826adae1913572f592d723e70df8aa63c28b07182d566e4",
-  "p/index.html": "d4de67afb8ed66d19e497d24a945f00878bca3fa9383dc1fb2f4c83cc7300f21",
+  "p/index.html": "99fa86c4dd90247990faa4a75a6d9cfc6a06133d1feef05a59ec549ac7d9bc39",
   "p/sw.js": "46f5e287db16818e038c6ce15ce574c2acae180b83bbd6b436fcdde9074fa543",
   "paper/index.html": "78f1c173a7e7ae8ed0a4a2a0367a7a5a608ada24e751d2c1e1bbf8eb60f45a9e",
   "portal/index.html": "654b8e6dda57881c7ec0b83cc395b776f355f18e78ab7c6fa81073ce1c58e11e",
   "r/index.html": "9eae4f224310599c4cfca10bc65e03cade9d05202674111f36653d173843469a",
-  "s/index.html": "f88004d87532571baf66018da0b0211d80f316b753dc2d0e8e341c5b945b263d",
+  "s/index.html": "a6c9f988b26461f0fe8c50f3ee801651babf247a23b504c04b88c1e94dc93963",
   "v/index.html": "b10206b33b221b209d114ead12723a0dd2249fc6930cfa1f0c450e8290097b33"
  },
  "format": "biruni-release",
- "version": "2026-11-09T03:00:51Z"
+ "version": "2026-11-11T07:14:49Z"
 }

@@ -550,36 +550,70 @@ async function seal(obj,z){let d=enc.encode(JSON.stringify(obj)),f=0;
 async function unseal(s){try{const b=b64u.dec(s);
   const p=new Uint8Array(await crypto.subtle.decrypt({name:'AES-GCM',iv:b.slice(0,12)},BK.k,b.slice(12)));
   const d=p[0]===1?await zz(p.slice(1),false):p.slice(1);return JSON.parse(dec.decode(d))}catch(e){return null}}
-/* the relays: every message goes to all of them; the first copy to arrive counts */
-class NostrRelay{constructor(url,sig){this.url=url;this.sig=sig;this.up=false;this.wait=3000;this.open()}
+/* the relays: control messages go to all; preview chunks go to at most 2 healthy Nostr relays with rate limiting */
+class NostrRelay{constructor(url,sig){this.url=url;this.sig=sig;this.up=false;this.wait=3000;this.fails=0;
+  this.backoffUntil=0;this.oks=new Map();this.notices=[];this.open()}
  open(){let ws;try{ws=new WebSocket(this.url)}catch(e){return this.later()}this.ws=ws;
   ws.onopen=()=>{this.up=true;this.wait=3000;ws.send(JSON.stringify(['REQ','b'+rid(),
    {kinds:[BR.kind],'#t':[BK.topic],since:Math.floor(Date.now()/1000)-60}]));this.sig.changed()};
-  ws.onmessage=e=>{try{const m=JSON.parse(e.data);if(m[0]==='EVENT'&&m[2]&&typeof m[2].content==='string')
-   this.sig.arrived(m[2].content)}catch(x){}};
-  ws.onclose=()=>{const was=this.up;this.up=false;if(was)this.sig.changed();this.later()};ws.onerror=()=>{try{ws.close()}catch(x){}}}
+  ws.onmessage=e=>{try{const m=JSON.parse(e.data);
+   if(m[0]==='EVENT'&&m[2]&&typeof m[2].content==='string')this.sig.arrived(m[2].content);
+   else if(m[0]==='OK'&&typeof m[1]==='string'){const ok=!!m[2];
+    if(!ok){this.fails++;this.backoffUntil=Date.now()+Math.min(60000,4000*Math.pow(2,this.fails-1))}
+    else{this.fails=0;this.backoffUntil=0}
+    const cb=this.oks.get(m[1]);if(cb){this.oks.delete(m[1]);cb(ok)}}
+   else if(m[0]==='NOTICE'){const w=String(m[1]||'');this.notices.push(w);
+    if(/rate|limit|slow|quota|ban|block|too/i.test(w)){this.fails++;this.backoffUntil=Date.now()+15000}}}catch(x){}};
+  ws.onclose=()=>{const was=this.up;this.up=false;for(const [,cb] of this.oks)cb(false);this.oks.clear();
+   if(was)this.sig.changed();this.later()};ws.onerror=()=>{try{ws.close()}catch(x){}}}
  later(){setTimeout(()=>this.open(),this.wait+Math.random()*1000);this.wait=Math.min(this.wait*2,60000)}
- send(s,ev){if(this.up&&ev)try{this.ws.send(JSON.stringify(['EVENT',ev]))}catch(e){}}}
+ send(s,ev){if(this.up&&ev&&Date.now()>=this.backoffUntil)try{this.ws.send(JSON.stringify(['EVENT',ev]))}catch(e){}}
+ sendWait(ev,ms=3500){if(!this.up||!ev||Date.now()<this.backoffUntil)return Promise.resolve(false);
+  return new Promise(r=>{const t=setTimeout(()=>{if(this.oks.delete(ev.id))r(false)},ms);
+   this.oks.set(ev.id,ok=>{clearTimeout(t);r(ok)});
+   try{this.ws.send(JSON.stringify(['EVENT',ev]))}catch(e){clearTimeout(t);this.oks.delete(ev.id);r(false)}})}}
 class NtfyRelay{constructor(sig){this.sig=sig;this.up=false;this.wait=3000;this.open()}
  open(){let ws;try{ws=new WebSocket(BR.ntfy.replace(/^http/,'ws')+BK.topic+'/ws')}catch(e){return this.later()}this.ws=ws;
   ws.onopen=()=>{this.up=true;this.wait=3000;this.sig.changed()};
-  ws.onmessage=e=>{try{const m=JSON.parse(e.data);if(m.event==='message'&&m.message)this.sig.arrived(m.message)}catch(x){}};
+  ws.onmessage=e=>{try{const m=JSON.parse(e.data);if(m.event==='message'){
+   if(m.attachment&&m.attachment.url)fetch(m.attachment.url).then(r=>r.ok?r.text():'').then(t=>{if(t)this.sig.arrived(t)}).catch(()=>{});
+   else if(m.message)this.sig.arrived(m.message)}}catch(x){}};
   ws.onclose=()=>{const was=this.up;this.up=false;if(was)this.sig.changed();this.later()};ws.onerror=()=>{try{ws.close()}catch(x){}}}
  later(){setTimeout(()=>this.open(),this.wait+Math.random()*1000);this.wait=Math.min(this.wait*2,60000)}
- send(s){if(s.length<=4000)fetch(BR.ntfy+BK.topic+'?cache=no&firebase=no',{method:'POST',body:s}).catch(()=>{})}}
-const SIG={relays:[],seen:new Set(),loose:new Set(),on:null,onchange:null,
+ send(s){if(s.length<=4000)fetch(BR.ntfy+BK.topic+'?cache=no&firebase=no',{method:'POST',body:s}).catch(()=>{})}
+ async sendChunk(s){try{const u=BR.ntfy+BK.topic+(s.length<=4000?'?cache=no&firebase=no':'?firebase=no'),
+   h=s.length>4000?{'Filename':'p.bin'}:{};return (await fetch(u,{method:'POST',body:s,headers:h})).ok}catch(e){return false}}}
+const SIG={relays:[],seen:new Set(),loose:new Set(),on:null,onchange:null,_lastChunk:0,
  start(onMsg,onChange){this.on=onMsg;this.onchange=onChange;
   this.relays=BR.relays.map(u=>new NostrRelay(u,this)).concat([new NtfyRelay(this)])},
  up(){return this.relays.filter(r=>r.up).length},
+ healthyNostr(){return this.relays.filter(r=>r instanceof NostrRelay&&r.up&&Date.now()>=r.backoffUntil).sort((a,b)=>a.fails-b.fails)},
  changed(){if(this.onchange)this.onchange(this.up())},
- async send(obj,z){obj.n=rid();obj.ts=Date.now();this.seen.add(obj.n);
-  if(obj.t==='answer'&&ID.sk){const g=await IDSIGN('BRA1|'+obj.sid+'|'+obj.sdp);obj.ip=g.pub;obj.is=g.sig}   /* the PC signs */
+ async _sign(obj){
+  if(obj.t==='answer'&&ID.sk){const g=await IDSIGN('BRA1|'+obj.sid+'|'+obj.sdp);obj.ip=g.pub;obj.is=g.sig}
+  else if(obj.t==='rhello'&&ID.sk){const g=await IDSIGN('BRH0|'+obj.sid+'|'+(obj.pk||''));obj.ip=g.pub;obj.is=g.sig}
+  else if(obj.t==='rack'&&ID.sk){const g=await IDSIGN('BRAK1|'+obj.id+'|'+obj.kind+'|'+obj.nonce);obj.ip=g.pub;obj.is=g.sig}},
+ async send(obj,z){obj.n=rid();obj.ts=Date.now();this.seen.add(obj.n);await this._sign(obj);
   const s=await seal(obj,z);let ev=null;
   try{ev=await nostrEvent(s,BK.topic)}catch(e){}for(const r of this.relays)r.send(s,ev)},
+ async sendChunk(obj){
+  const pace=BR.paceMs!=null?BR.paceMs:180,wait=Math.max(0,this._lastChunk+pace-Date.now());
+  if(wait)await sleep(wait);this._lastChunk=Date.now();
+  obj.n=rid();obj.ts=Date.now();this.seen.add(obj.n);const s=await seal(obj,true);
+  let ev=null;try{ev=await nostrEvent(s,BK.topic)}catch(e){}
+  const tried=new Set();
+  while(ev){const pair=this.healthyNostr().filter(r=>!tried.has(r)).slice(0,2);if(!pair.length)break;
+   pair.forEach(r=>tried.add(r));const res=await Promise.all(pair.map(r=>r.sendWait(ev)));
+   if(res.some(Boolean))return true}
+  const nr=this.relays.find(r=>r instanceof NtfyRelay);return nr?await nr.sendChunk(s):false},
  async arrived(s){const o=await unseal(s);if(!o||!o.n||this.seen.has(o.n))return;this.seen.add(o.n);
   if(Math.abs(Date.now()-(o.ts||0))>15*60000)return;
-  /* an answer to this phone must come from the PC (signed) - unless it answers a call for a teammate (loose) */
+  /* answers and receipts to this phone must come from the PC (signed) */
   if(o.t==='answer'&&ID.pin&&!this.loose.has(o.sid)&&!await IDOK(o.ip,o.is,'BRA1|'+o.sid+'|'+o.sdp)){
+   this.refused=(this.refused||0)+1;return}
+  if(o.t==='rhello'&&ID.pin&&!await IDOK(o.ip,o.is,'BRH0|'+o.sid+'|'+(o.pk||''))){
+   this.refused=(this.refused||0)+1;return}
+  if(o.t==='rack'&&ID.pin&&!await IDOK(o.ip,o.is,'BRAK1|'+o.id+'|'+o.kind+'|'+o.nonce)){
    this.refused=(this.refused||0)+1;return}
   if(this.on)this.on(o)}};
 /* a private line through a teammate's phone: the phone and the PC agree on a key of their own (ECDH on P-256),
