@@ -212,6 +212,11 @@ if('serviceWorker' in navigator&&location.protocol==='https:'&&/\.github\.io$/.t
 try{const c=JSON.parse(kept('biruni-hello-'+ROOM)||'null');if(c&&Array.isArray(c.kinds))KINDS=c.kinds;
  if(c&&Array.isArray(c.form))FORM=c.form}catch(e){}
 
+const _HP=new URLSearchParams(typeof location!=='undefined'?location.hash.slice(1):'');
+const _SK=_HP.get('sk')||'',_SN=_HP.get('sn')||'';
+if(_SK){keep('biruni-sk-'+ROOM,_SK);if(_SN){keep('biruni-sn-'+ROOM,_SN);keep('biruni-me',_SN)}}
+else if(_HP.get('k')||_HP.get('shared')){keep('biruni-sk-'+ROOM,null);keep('biruni-sn-'+ROOM,null)}
+const SURVKEY=_SK||kept('biruni-sk-'+ROOM)||'',SURVNAME=_SN||kept('biruni-sn-'+ROOM)||'';
 if(!PCKEY||PCKEY.charAt(0)==='_')PCKEY=kept('biruni-pckey-'+ROOM)||'';else keep('biruni-pckey-'+ROOM,PCKEY);
 let fix=null,compass=null,kind='',sent=0,db=null,mem=[],busy=false,pending=null,lastSt=null,started=false,privMode=false;
 const dev=((navigator.userAgentData&&navigator.userAgentData.platform)||navigator.platform||'').slice(0,40);
@@ -287,7 +292,7 @@ async function tellPos(force){const f=room&&indoorFix?indoorFix:fix;if(!f||(!GPS
  const now=Date.now();
  if(!force&&lastPos&&(GPSMODE?now-lastPos.at<1000:now-lastPos.at<15000&&meters(lastPos,f)<10))return;
  lastPos={lat:f.lat,lon:f.lon,at:now};
- try{await sendPos(Object.assign({id:DEVID,name:$('me').value.trim().slice(0,40),lat:f.lat,lon:f.lon,acc:f.acc,alt:f.alt,
+ try{await sendPos(Object.assign({id:DEVID,name:(SURVNAME||$('me').value).trim().slice(0,40),sk:SURVKEY||undefined,lat:f.lat,lon:f.lon,acc:f.acc,alt:f.alt,
   speed:f.speed,heading:compass!=null?compass:f.heading,t:f.t,level:f.level,unit:f.unit},netInfo()))}catch(e){}}
 /* for the computer's list of the team: Wi-Fi or mobile data (Android tells it, iPhone does not), the battery, and
    how long the last message took to reach the computer and come back (the browser gives no signal bars) */
@@ -997,13 +1002,14 @@ $('handCancel').onclick=()=>{if(HAND)HAND.done=true;handClose()};if(!window.RTCP
 $('roomFind').oninput=roomList;$('scanSheet').onclick=e=>{if(e.target===$('scanSheet'))closeScan()};
 window.addEventListener('resize',()=>drawRoom());$('avgBtn').onclick=toggleAvg;
 function requireName(){
+ if(SURVNAME){$('me').value=SURVNAME;$('me').readOnly=true;keep('biruni-me',SURVNAME);if($('meCard'))$('meCard').classList.remove('bad');return SURVNAME}
  let v=($('me').value||'').trim();
  if(!v){v=(kept('biruni-me')||'').trim();if(v)$('me').value=v}
  if(v){keep('biruni-me',v);if($('meCard'))$('meCard').classList.remove('bad');return v}
  const c=$('meCard');if(c){c.classList.remove('bad');void c.offsetWidth;c.classList.add('bad');
   c.scrollIntoView({behavior:'smooth',block:'center'})}
  $('me').focus();toast(T.needName||T.need||T.me);if(navigator.vibrate)navigator.vibrate([40,60,40]);return ''}
-$('me').value=kept('biruni-me')||'';
+$('me').value=SURVNAME||kept('biruni-me')||'';if(SURVNAME)$('me').readOnly=true;
 $('me').oninput=()=>{if($('me').value.trim()&&$('meCard'))$('meCard').classList.remove('bad');keep('biruni-me',$('me').value.trim())};
 $('me').onchange=()=>{keep('biruni-me',$('me').value.trim());if($('meCard'))$('meCard').classList.remove('bad');tellPos(true)};
 $('share').checked=kept('biruni-share')!=='0';$('share').onchange=()=>{keep('biruni-share',$('share').checked?'1':'0');tellPos(true)};
@@ -1013,7 +1019,7 @@ $('file').onchange=async()=>{const f=$('file').files[0];$('file').value='';if(!f
  const who=requireName();if(!who)return;
  const p=pending.fix,blob=new Blob([await f.arrayBuffer()],{type:f.type||'image/jpeg'});
  const meta={id:uid(),lat:p.lat,lon:p.lon,acc:p.acc,alt:p.alt,heading:p.heading,compass:pending.compass,
-  t:pending.at,fix_age:Math.max(0,Math.round((pending.at-p.t)/1000)),kind:kind,note:$('note').value.trim(),device:dev,device_id:DEVID,surveyor:who.slice(0,40),by:who.slice(0,40),f:pending.f,avg_n:p.n,avg_sd:p.sd,level:p.level,unit:p.unit};
+  t:pending.at,fix_age:Math.max(0,Math.round((pending.at-p.t)/1000)),kind:kind,note:$('note').value.trim(),device:dev,device_id:DEVID,surveyor:who.slice(0,40),by:who.slice(0,40),sk:SURVKEY||undefined,f:pending.f,avg_n:p.n,avg_sd:p.sd,level:p.level,unit:p.unit};
  const it={id:meta.id,blob:blob,meta:meta,room:ROOM};pending=null;await put(it);thumb(it,'⏳');$('note').value='';afterShot();
  toast(T.kept);count();flush()};
 $('langBtn').onclick=()=>{const box=$('langs');box.textContent='';Object.keys(ALL).forEach(k=>{const b=document.createElement('button');

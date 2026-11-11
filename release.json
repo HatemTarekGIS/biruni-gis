@@ -9,7 +9,7 @@
   "d/index.html": "033ce689c5a2fbe29c6a12c96efe8c604ab9d7063e52c0a5601a7ade7ac5ca62",
   "index.html": "825038a37a5ad5c212586f0ae5cfcc1a8c0e6f2819e417487a94a509cd21b7b3",
   "m/index.html": "c308ca490fe421290826adae1913572f592d723e70df8aa63c28b07182d566e4",
-  "p/index.html": "99fa86c4dd90247990faa4a75a6d9cfc6a06133d1feef05a59ec549ac7d9bc39",
+  "p/index.html": "b0a89571a9d351db7ffe1402b57ce2f5c4451b2f189c91d52dc6a685eafab0d9",
   "p/sw.js": "46f5e287db16818e038c6ce15ce574c2acae180b83bbd6b436fcdde9074fa543",
   "paper/index.html": "78f1c173a7e7ae8ed0a4a2a0367a7a5a608ada24e751d2c1e1bbf8eb60f45a9e",
   "portal/index.html": "654b8e6dda57881c7ec0b83cc395b776f355f18e78ab7c6fa81073ce1c58e11e",
@@ -18,5 +18,5 @@
   "v/index.html": "b10206b33b221b209d114ead12723a0dd2249fc6930cfa1f0c450e8290097b33"
  },
  "format": "biruni-release",
- "version": "2026-11-11T07:14:49Z"
+ "version": "2026-11-11T13:01:14Z"
 }
