@@ -31,6 +31,7 @@ MAX_PHOTO = 40 * 1024 * 1024
 LOG_NAME = "photos.jsonl"
 BLOCKED_NAME = "blocked_devices.json"
 REJECTED_NAME = "rejected.jsonl"
+SURVEYOR_KEYS_NAME = "surveyor_keys.json"
 ID_RE = re.compile(r"^[A-Za-z0-9-]{8,64}$")
 TYPES = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/heic": "heic", "image/heif": "heif"}
 
@@ -124,6 +125,7 @@ def clean_pos(m):
     return {"id": m["id"], "name": _text(m.get("name"), 40), "lat": lat, "lon": lon, "acc": _num(m.get("acc"), 0),
             "heading": _num(m.get("heading"), 0, 360), "seen": when.isoformat(timespec="seconds"),
             "alt": _num(m.get("alt")), "speed": _num(m.get("speed"), 0, 200), "t": t,
+            "sk": _text(m.get("sk"), 64),
             # the phone's link, for the team list: Wi-Fi or mobile data, the time to the computer and back
             # (ms; measured by the phone, or by this computer over the bridge), the route, the battery
             "net": net if net in NETS else "", "eff": eff if eff in ("slow-2g", "2g", "3g", "4g") else "",
@@ -321,6 +323,32 @@ def read_rejected(folder):
     return out
 
 
+def read_surveyor_keys(folder):
+    """Surveyor QR mode and per-surveyor secret keys:
+    {"qr_mode": "shared" | "per_surveyor", "surveyors": {srv_id: {"id", "name", "secret", "revoked", "reason", "at"}}}."""
+    try:
+        with open(os.path.join(folder, SURVEYOR_KEYS_NAME), encoding="utf-8") as f:
+            d = json.load(f)
+            if isinstance(d, dict):
+                mode = d.get("qr_mode") if d.get("qr_mode") in ("shared", "per_surveyor") else "shared"
+                survs = d.get("surveyors") if isinstance(d.get("surveyors"), dict) else {}
+                return {"qr_mode": mode, "surveyors": survs}
+    except (OSError, ValueError):
+        pass
+    return {"qr_mode": "shared", "surveyors": {}}
+
+
+def write_surveyor_keys(folder, data):
+    os.makedirs(folder, exist_ok=True)
+    path = os.path.join(folder, SURVEYOR_KEYS_NAME)
+    part = path + ".part"
+    with open(part, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(part, path)
+
+
 class PhotoStore:
     """The photo folder: one sub-folder per day, plus photos.jsonl (one line per photo)
     that lets the map layer be rebuilt if Biruni stops between the two writes."""
@@ -332,20 +360,168 @@ class PhotoStore:
         os.makedirs(folder, exist_ok=True)
         self.records = {r["id"]: r for r in read_log(folder)}
         self.blocked = read_blocked(folder)
+        self.surveyor_keys = read_surveyor_keys(folder)
+
+    def get_qr_mode(self):
+        with self.lock:
+            self.surveyor_keys = read_surveyor_keys(self.folder)
+            return self.surveyor_keys.get("qr_mode", "shared")
+
+    def set_qr_mode(self, mode):
+        mode = "per_surveyor" if mode == "per_surveyor" else "shared"
+        with self.lock:
+            self.surveyor_keys = read_surveyor_keys(self.folder)
+            self.surveyor_keys["qr_mode"] = mode
+            write_surveyor_keys(self.folder, self.surveyor_keys)
+        return mode
+
+    def issue_surveyor_key(self, name, surveyor_id=None, rotate=False):
+        """Create or return a personal QR secret key for a surveyor; rotate=True issues a fresh secret and invalidates the old one."""
+        name = _text(name, 40)
+        if not name:
+            raise ValueError("surveyor name required")
+        with self.lock:
+            self.surveyor_keys = read_surveyor_keys(self.folder)
+            survs = self.surveyor_keys.setdefault("surveyors", {})
+            existing = None
+            if surveyor_id and surveyor_id in survs:
+                existing = survs[surveyor_id]
+            else:
+                for s in survs.values():
+                    if s.get("name", "").lower() == name.lower():
+                        existing = s
+                        break
+            if existing is not None and not rotate and not existing.get("revoked"):
+                existing["name"] = name
+                write_surveyor_keys(self.folder, self.surveyor_keys)
+                return dict(existing)
+            sid = existing["id"] if existing is not None else ("srv_" + secrets.token_hex(6))
+            entry = {
+                "id": sid,
+                "name": name,
+                "secret": secrets.token_urlsafe(16),
+                "revoked": False,
+                "reason": "",
+                "at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
+            }
+            survs[sid] = entry
+            write_surveyor_keys(self.folder, self.surveyor_keys)
+            self.blocked = read_blocked(self.folder)
+            if self.blocked.pop(sid, None) is not None:
+                write_blocked(self.folder, self.blocked)
+            return dict(entry)
+
+    def list_surveyor_keys(self):
+        with self.lock:
+            self.surveyor_keys = read_surveyor_keys(self.folder)
+            return [dict(v) for v in self.surveyor_keys.get("surveyors", {}).values()]
+
+    def revoke_surveyor_key(self, target, reason=""):
+        """Revoke a surveyor's personal QR key (by id, name or secret) without affecting any other surveyor."""
+        t = _text(target, 64)
+        if not t:
+            return None
+        reason_txt = _text(reason, 200) or tr("Surveyor QR code revoked")
+        now_iso = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
+        with self.lock:
+            self.surveyor_keys = read_surveyor_keys(self.folder)
+            survs = self.surveyor_keys.get("surveyors", {})
+            hit = None
+            for s in survs.values():
+                if s.get("id") == t or s.get("secret") == t or s.get("name", "").lower() == t.lower():
+                    hit = s
+                    break
+            if hit is None:
+                return None
+            hit["revoked"] = True
+            hit["reason"] = reason_txt
+            hit["revoked_at"] = now_iso
+            write_surveyor_keys(self.folder, self.surveyor_keys)
+            self.blocked = read_blocked(self.folder)
+            self.blocked[hit["id"]] = {"reason": reason_txt, "name": hit.get("name", ""), "at": now_iso}
+            write_blocked(self.folder, self.blocked)
+            return dict(hit)
+
+    def unrevoke_surveyor_key(self, target):
+        t = _text(target, 64)
+        if not t:
+            return None
+        with self.lock:
+            self.surveyor_keys = read_surveyor_keys(self.folder)
+            survs = self.surveyor_keys.get("surveyors", {})
+            hit = None
+            for s in survs.values():
+                if s.get("id") == t or s.get("secret") == t or s.get("name", "").lower() == t.lower():
+                    hit = s
+                    break
+            if hit is None:
+                return None
+            hit["revoked"] = False
+            hit["reason"] = ""
+            write_surveyor_keys(self.folder, self.surveyor_keys)
+            self.blocked = read_blocked(self.folder)
+            if self.blocked.pop(hit["id"], None) is not None:
+                write_blocked(self.folder, self.blocked)
+            return dict(hit)
+
+    def resolve_pos(self, pos):
+        """Authenticate/bind a phone position update against surveyor_keys and blocked_devices."""
+        if not isinstance(pos, dict):
+            return None
+        sk = _text(pos.get("sk"), 64)
+        pos = dict(pos)
+        pos.pop("sk", None)
+        with self.lock:
+            self.surveyor_keys = read_surveyor_keys(self.folder)
+            self.blocked = read_blocked(self.folder)
+            mode = self.surveyor_keys.get("qr_mode", "shared")
+            survs = self.surveyor_keys.get("surveyors", {})
+            matched = None
+            if sk:
+                for s in survs.values():
+                    sec = str(s.get("secret") or "")
+                    if sec and secrets.compare_digest(sec, sk):
+                        matched = s
+                        break
+                if matched is None:
+                    return None
+                if matched.get("revoked") or matched.get("id") in self.blocked:
+                    return None
+                pos["id"] = matched["id"]
+                pos["name"] = matched["name"]
+                return pos
+            if mode == "per_surveyor":
+                return None
+            if pos.get("id") in self.blocked:
+                return None
+            return pos
 
     def block_device(self, device_id, reason="", name=""):
-        """Block a device_id so future photos from it are refused and logged; existing photos are kept."""
+        """Block a device_id (and revoke any matching personal surveyor key) so future photos from it are refused and logged; existing photos are kept."""
         device_id = _text(device_id, 64)
         if not device_id:
             return
+        reason_txt = _text(reason, 200) or tr("Blocked by the computer")
+        now_iso = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
         with self.lock:
             self.blocked = read_blocked(self.folder)
             self.blocked[device_id] = {
-                "reason": _text(reason, 200) or tr("Blocked by the computer"),
+                "reason": reason_txt,
                 "name": _text(name, 40),
-                "at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
+                "at": now_iso,
             }
             write_blocked(self.folder, self.blocked)
+            self.surveyor_keys = read_surveyor_keys(self.folder)
+            survs = self.surveyor_keys.get("surveyors", {})
+            changed = False
+            for s in survs.values():
+                if s.get("id") == device_id or (name and s.get("name", "").lower() == _text(name, 40).lower()):
+                    s["revoked"] = True
+                    s["reason"] = reason_txt
+                    s["revoked_at"] = now_iso
+                    changed = True
+            if changed:
+                write_surveyor_keys(self.folder, self.surveyor_keys)
 
     def unblock_device(self, device_id):
         device_id = _text(device_id, 64)
@@ -353,6 +529,12 @@ class PhotoStore:
             self.blocked = read_blocked(self.folder)
             self.blocked.pop(device_id, None)
             write_blocked(self.folder, self.blocked)
+            self.surveyor_keys = read_surveyor_keys(self.folder)
+            survs = self.surveyor_keys.get("surveyors", {})
+            if device_id in survs:
+                survs[device_id]["revoked"] = False
+                survs[device_id]["reason"] = ""
+                write_surveyor_keys(self.folder, self.surveyor_keys)
 
     def is_blocked(self, device_id):
         with self.lock:
@@ -360,7 +542,7 @@ class PhotoStore:
             return bool(device_id and device_id in self.blocked)
 
     def unify_name(self, new_name, device_id=None, old_names=()):
-        """Unify surveyor name across matching records in memory and photos.jsonl."""
+        """Unify surveyor name across matching records in memory, photos.jsonl, and surveyor_keys.json."""
         new_name = _text(new_name, 40)
         if not new_name:
             return 0
@@ -383,6 +565,15 @@ class PhotoStore:
                     f.flush()
                     os.fsync(f.fileno())
                 os.replace(part, path)
+            self.surveyor_keys = read_surveyor_keys(self.folder)
+            survs = self.surveyor_keys.get("surveyors", {})
+            sk_changed = False
+            for s in survs.values():
+                if (device_id and s.get("id") == device_id) or (old_set and s.get("name") in old_set):
+                    s["name"] = new_name
+                    sk_changed = True
+            if sk_changed:
+                write_surveyor_keys(self.folder, self.surveyor_keys)
         return changed
 
     def save(self, meta, data):
@@ -393,8 +584,64 @@ class PhotoStore:
         if ext is None:
             raise ValueError("not a photo")
         rec = clean_meta(meta, self.form)
+        sk = _text(meta.get("sk"), 64) if isinstance(meta, dict) else ""
         with self.lock:
             self.blocked = read_blocked(self.folder)
+            self.surveyor_keys = read_surveyor_keys(self.folder)
+            mode = self.surveyor_keys.get("qr_mode", "shared")
+            survs = self.surveyor_keys.get("surveyors", {})
+            matched_srv = None
+            if sk:
+                for s in survs.values():
+                    sec = str(s.get("secret") or "")
+                    if sec and secrets.compare_digest(sec, sk):
+                        matched_srv = s
+                        break
+                if matched_srv is None:
+                    reason = tr("Invalid or replaced surveyor QR code")
+                    dev_id = rec.get("device_id") or "invalid_qr"
+                    entry = {
+                        "at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
+                        "id": rec["id"],
+                        "device_id": dev_id,
+                        "surveyor": rec.get("surveyor") or "",
+                        "reason": reason,
+                    }
+                    with open(os.path.join(self.folder, REJECTED_NAME), "a", encoding="utf-8") as rf:
+                        rf.write(json.dumps(entry, ensure_ascii=False) + "\n")
+                        rf.flush()
+                    raise BlockedDeviceError(dev_id, reason)
+                # Bind surveyor name and device_id to the PC's verified surveyor record (cannot be spoofed on the phone)
+                rec["surveyor"] = matched_srv["name"]
+                rec["by"] = matched_srv["name"]
+                rec["device_id"] = matched_srv["id"]
+                if matched_srv.get("revoked"):
+                    reason = matched_srv.get("reason") or tr("Surveyor QR code revoked")
+                    entry = {
+                        "at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
+                        "id": rec["id"],
+                        "device_id": matched_srv["id"],
+                        "surveyor": matched_srv["name"],
+                        "reason": reason,
+                    }
+                    with open(os.path.join(self.folder, REJECTED_NAME), "a", encoding="utf-8") as rf:
+                        rf.write(json.dumps(entry, ensure_ascii=False) + "\n")
+                        rf.flush()
+                    raise BlockedDeviceError(matched_srv["id"], reason)
+            elif mode == "per_surveyor":
+                reason = tr("Each surveyor must use their own personal QR code")
+                dev_id = rec.get("device_id") or "unregistered_qr"
+                entry = {
+                    "at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
+                    "id": rec["id"],
+                    "device_id": dev_id,
+                    "surveyor": rec.get("surveyor") or "",
+                    "reason": reason,
+                }
+                with open(os.path.join(self.folder, REJECTED_NAME), "a", encoding="utf-8") as rf:
+                    rf.write(json.dumps(entry, ensure_ascii=False) + "\n")
+                    rf.flush()
+                raise BlockedDeviceError(dev_id, reason)
             dev_id = rec.get("device_id") or ""
             if dev_id and dev_id in self.blocked:
                 info = self.blocked[dev_id]
@@ -591,6 +838,8 @@ class PhotoServer:
                         pos = clean_pos(json.loads(_read(self.rfile, n) or b"{}"))
                     except ValueError:
                         pos = None
+                    if pos is not None:
+                        pos = server.store.resolve_pos(pos)
                     if pos is None:
                         self._send(400)
                         return
@@ -986,6 +1235,11 @@ function pick(l){if(!l)return null;l=String(l).replace('-','_');if(ALL[l])return
 function keep(k,v){try{if(v==null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(e){}}
 function kept(k){try{return localStorage.getItem(k)}catch(e){return null}}
 /*BOOT*/
+const _HP=new URLSearchParams(typeof location!=='undefined'?location.hash.slice(1):'');
+const _SK=_HP.get('sk')||'',_SN=_HP.get('sn')||'';
+if(_SK){keep('biruni-sk-'+ROOM,_SK);if(_SN){keep('biruni-sn-'+ROOM,_SN);keep('biruni-me',_SN)}}
+else if(_HP.get('k')||_HP.get('shared')){keep('biruni-sk-'+ROOM,null);keep('biruni-sn-'+ROOM,null)}
+const SURVKEY=_SK||kept('biruni-sk-'+ROOM)||'',SURVNAME=_SN||kept('biruni-sn-'+ROOM)||'';
 if(!PCKEY||PCKEY.charAt(0)==='_')PCKEY=kept('biruni-pckey-'+ROOM)||'';else keep('biruni-pckey-'+ROOM,PCKEY);
 let fix=null,compass=null,kind='',sent=0,db=null,mem=[],busy=false,pending=null,lastSt=null,started=false,privMode=false;
 const dev=((navigator.userAgentData&&navigator.userAgentData.platform)||navigator.platform||'').slice(0,40);
@@ -1061,7 +1315,7 @@ async function tellPos(force){const f=room&&indoorFix?indoorFix:fix;if(!f||(!GPS
  const now=Date.now();
  if(!force&&lastPos&&(GPSMODE?now-lastPos.at<1000:now-lastPos.at<15000&&meters(lastPos,f)<10))return;
  lastPos={lat:f.lat,lon:f.lon,at:now};
- try{await sendPos(Object.assign({id:DEVID,name:$('me').value.trim().slice(0,40),lat:f.lat,lon:f.lon,acc:f.acc,alt:f.alt,
+ try{await sendPos(Object.assign({id:DEVID,name:(SURVNAME||$('me').value).trim().slice(0,40),sk:SURVKEY||undefined,lat:f.lat,lon:f.lon,acc:f.acc,alt:f.alt,
   speed:f.speed,heading:compass!=null?compass:f.heading,t:f.t,level:f.level,unit:f.unit},netInfo()))}catch(e){}}
 /* for the computer's list of the team: Wi-Fi or mobile data (Android tells it, iPhone does not), the battery, and
    how long the last message took to reach the computer and come back (the browser gives no signal bars) */
@@ -1498,13 +1752,14 @@ $('handCancel').onclick=()=>{if(HAND)HAND.done=true;handClose()};if(!window.RTCP
 $('roomFind').oninput=roomList;$('scanSheet').onclick=e=>{if(e.target===$('scanSheet'))closeScan()};
 window.addEventListener('resize',()=>drawRoom());$('avgBtn').onclick=toggleAvg;
 function requireName(){
+ if(SURVNAME){$('me').value=SURVNAME;$('me').readOnly=true;keep('biruni-me',SURVNAME);if($('meCard'))$('meCard').classList.remove('bad');return SURVNAME}
  let v=($('me').value||'').trim();
  if(!v){v=(kept('biruni-me')||'').trim();if(v)$('me').value=v}
  if(v){keep('biruni-me',v);if($('meCard'))$('meCard').classList.remove('bad');return v}
  const c=$('meCard');if(c){c.classList.remove('bad');void c.offsetWidth;c.classList.add('bad');
   c.scrollIntoView({behavior:'smooth',block:'center'})}
  $('me').focus();toast(T.needName||T.need||T.me);if(navigator.vibrate)navigator.vibrate([40,60,40]);return ''}
-$('me').value=kept('biruni-me')||'';
+$('me').value=SURVNAME||kept('biruni-me')||'';if(SURVNAME)$('me').readOnly=true;
 $('me').oninput=()=>{if($('me').value.trim()&&$('meCard'))$('meCard').classList.remove('bad');keep('biruni-me',$('me').value.trim())};
 $('me').onchange=()=>{keep('biruni-me',$('me').value.trim());if($('meCard'))$('meCard').classList.remove('bad');tellPos(true)};
 $('share').checked=kept('biruni-share')!=='0';$('share').onchange=()=>{keep('biruni-share',$('share').checked?'1':'0');tellPos(true)};
@@ -1514,7 +1769,7 @@ $('file').onchange=async()=>{const f=$('file').files[0];$('file').value='';if(!f
  const who=requireName();if(!who)return;
  const p=pending.fix,blob=new Blob([await f.arrayBuffer()],{type:f.type||'image/jpeg'});
  const meta={id:uid(),lat:p.lat,lon:p.lon,acc:p.acc,alt:p.alt,heading:p.heading,compass:pending.compass,
-  t:pending.at,fix_age:Math.max(0,Math.round((pending.at-p.t)/1000)),kind:kind,note:$('note').value.trim(),device:dev,device_id:DEVID,surveyor:who.slice(0,40),by:who.slice(0,40),f:pending.f,avg_n:p.n,avg_sd:p.sd,level:p.level,unit:p.unit};
+  t:pending.at,fix_age:Math.max(0,Math.round((pending.at-p.t)/1000)),kind:kind,note:$('note').value.trim(),device:dev,device_id:DEVID,surveyor:who.slice(0,40),by:who.slice(0,40),sk:SURVKEY||undefined,f:pending.f,avg_n:p.n,avg_sd:p.sd,level:p.level,unit:p.unit};
  const it={id:meta.id,blob:blob,meta:meta,room:ROOM};pending=null;await put(it);thumb(it,'⏳');$('note').value='';afterShot();
  toast(T.kept);count();flush()};
 $('langBtn').onclick=()=>{const box=$('langs');box.textContent='';Object.keys(ALL).forEach(k=>{const b=document.createElement('button');

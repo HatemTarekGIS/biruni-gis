@@ -7895,5 +7895,20 @@
  "Waiting originals": "در انتظار نسخه اصلی",
  "Waiting originals: {n}": "در انتظار نسخه اصلی: {n}",
  "Write your name first so your photos carry it.": "ابتدا نام خود را بنویسید تا عکس‌هایتان با نام شما ثبت شوند.",
- "Zoom to their work": "بزرگ‌نمایی روی کار او"
+ "Zoom to their work": "بزرگ‌نمایی روی کار او",
+ "One QR code for all surveyors (each writes their name)": "یک کد QR برای همه نقشه‌برداران (هر کس نام خود را می‌نویسد)",
+ "Separate QR code per surveyor (verified identity & instant revoke)": "کد QR جداگانه برای هر نقشه‌بردار (هویت تأییدشده و لغو فوری)",
+ "Surveyor QR code…": "کد QR نقشه‌بردار…",
+ "Create or show a personal QR code with a secret key for one surveyor.": "ایجاد یا نمایش کد QR شخصی با کلید محرمانه برای یک نقشه‌بردار.",
+ "Team QR code": "کد QR تیم",
+ "Show the shared team QR code.": "نمایش کد QR مشترک تیم.",
+ "New QR code for this surveyor": "کد QR جدید برای این نقشه‌بردار",
+ "Surveyor QR code revoked": "کد QR نقشه‌بردار لغو شد",
+ "Invalid or replaced surveyor QR code": "کد QR نقشه‌بردار نامعتبر است یا جایگزین شده است",
+ "Each surveyor must use their own personal QR code": "هر نقشه‌بردار باید از کد QR شخصی خود استفاده کند",
+ "Per-surveyor QR mode: each surveyor needs their own QR code (Surveyor QR code…).": "حالت کد QR برای هر نقشه‌بردار: هر نقشه‌بردار به کد QR مخصوص خود نیاز دارد (کد QR نقشه‌بردار…).",
+ "Showing the shared team QR code.": "در حال نمایش کد QR مشترک تیم.",
+ "Surveyor name:": "نام نقشه‌بردار:",
+ "QR code ready for {who}.": "کد QR برای {who} آماده است.",
+ "Issued a new QR code for {who}; their old QR code is now invalid.": "کد QR جدیدی برای {who} صادر شد؛ کد QR قبلی او دیگر معتبر نیست."
 }

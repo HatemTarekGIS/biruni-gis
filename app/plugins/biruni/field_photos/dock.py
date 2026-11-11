@@ -7,6 +7,7 @@ import os
 import shutil
 import threading
 import time
+from urllib.parse import quote
 
 from qgis.core import (Qgis, QgsApplication, QgsCoordinateReferenceSystem, QgsCoordinateTransform,
                        QgsEditorWidgetSetup, QgsFeature, QgsField, QgsFields, QgsGeometry, QgsPointXY,
@@ -19,6 +20,7 @@ from qgis.PyQt.QtWidgets import (QAbstractItemView, QComboBox, QDockWidget, QFil
                                  QTreeWidgetItem, QVBoxLayout, QWidget)
 
 from ..i18n import lang, tr
+from .server import read_surveyor_keys
 
 KEY = "biruni/field-photos/"
 LAYER = "field_photos"
@@ -785,6 +787,8 @@ class FieldPhotosDock(QDockWidget):
         self._own = None  # (token, host) of the user's own tunnel while it is used
         self.team = {}  # device -> its last position message and when it came (the team list)
         self._photo_records = {}  # photo_id -> record (for surveyor stats in the table)
+        self._base_qr_url = ""
+        self._base_qr_tip = ""
         self._active_surveyor_filter = None
         self._active_today_filter = False
         self.team_live = self.team_track = None
@@ -833,6 +837,23 @@ class FieldPhotosDock(QDockWidget):
                                     "send to this computer."))
         self.new_code.clicked.connect(self._new_code)
         cv.addWidget(self.new_code)
+        self.qr_mode = QComboBox()
+        self.qr_mode.addItem(tr("One QR code for all surveyors (each writes their name)"), "shared")
+        self.qr_mode.addItem(tr("Separate QR code per surveyor (verified identity & instant revoke)"), "per_surveyor")
+        init_qrm = read_surveyor_keys(self._folder()).get("qr_mode", s.value(KEY + "qr-mode", "shared"))
+        self.qr_mode.setCurrentIndex(max(0, self.qr_mode.findData(init_qrm)))
+        self.qr_mode.currentIndexChanged.connect(self._on_qr_mode_changed)
+        cv.addWidget(self.qr_mode)
+        qmrow = QHBoxLayout()
+        self.surveyor_qr_btn = QPushButton(tr("Surveyor QR code…"))
+        self.surveyor_qr_btn.setToolTip(tr("Create or show a personal QR code with a secret key for one surveyor."))
+        self.surveyor_qr_btn.clicked.connect(self._surveyor_qr_dialog)
+        self.shared_qr_btn = QPushButton(tr("Team QR code"))
+        self.shared_qr_btn.setToolTip(tr("Show the shared team QR code."))
+        self.shared_qr_btn.clicked.connect(self.show_shared_qr)
+        qmrow.addWidget(self.surveyor_qr_btn, 1)
+        qmrow.addWidget(self.shared_qr_btn)
+        cv.addLayout(qmrow)
         self.kinds = QLineEdit(s.value(KEY + "kinds", ""))
         self.kinds.setPlaceholderText(tr("Kinds to choose on the phone, separated by commas (optional)"))
         cv.addWidget(self.kinds)
@@ -1151,8 +1172,11 @@ class FieldPhotosDock(QDockWidget):
             if not ips:
                 self.state.setText(tr("No network found. Connect this computer to the Wi-Fi or the phone's hotspot."))
             else:
-                self._show_qr(self.server.url(ips[0]), "\n".join(self.server.url(ip) for ip in ips))
+                self._base_qr_url = self.server.url(ips[0])
+                self._base_qr_tip = "\n".join(self.server.url(ip) for ip in ips)
+                self._show_qr(self._base_qr_url, self._base_qr_tip)
                 self.state.setText(tr("Scan the code with the phone's camera."))
+        self.set_qr_mode(self.qr_mode.currentData() or "shared")
         self.plugin.activity.log("field_photos", "started", mode, mode, 1)
 
     def _start_bridge(self):
@@ -1174,6 +1198,8 @@ class FieldPhotosDock(QDockWidget):
             self.bridge = None
             self.state.setText(tr("The phone page could not be trusted: no link was shown."))
             return
+        self._base_qr_url = url
+        self._base_qr_tip = url
         self._show_qr(url, url)
         self.url.setText(bridge.PAGE_URL.split("://", 1)[1])
         self.state.setText(tr("Connecting to the relays…"))
@@ -1263,7 +1289,9 @@ class FieldPhotosDock(QDockWidget):
             while not self.tunnel.events.empty():
                 kind, value = self.tunnel.events.get_nowait()
                 if kind == "url" and self.server is not None:
-                    self._show_qr(value + self.server.path())
+                    self._base_qr_url = value + self.server.path()
+                    self._base_qr_tip = self._base_qr_url
+                    self._show_qr(self._base_qr_url)
                     self.state.setText(tr("Ready. Scan the code with the phone's camera - it works on mobile data "
                                           "too."))
                     if self.tunnel.fixed:
@@ -1407,19 +1435,34 @@ class FieldPhotosDock(QDockWidget):
 
         now = time.time()
         today = dt.datetime.now().astimezone().strftime("%Y-%m-%d")
-        blocked = read_blocked(self._active_folder()) if (self.team or self._photo_records or include_disk) else {}
+        active = bool(self.server is not None or self.team or self._photo_records or include_disk)
+        blocked = read_blocked(self._active_folder()) if active else {}
+        skeys = read_surveyor_keys(self._active_folder()).get("surveyors", {}) if active else {}
         groups = {}
+        for sid, s in skeys.items():
+            nm = s.get("name") or sid
+            groups[sid] = {
+                "key": sid, "device_id": sid,
+                "name": nm,
+                "names": {nm} if nm else set(),
+                "pos": {}, "at": None,
+                "route": "",
+                "today_count": 0, "total_count": 0, "waiting_originals": 0,
+                "accs": [], "last_photo": "",
+                "blocked": bool(s.get("revoked") or sid in blocked),
+            }
         for dev, x in self.team.items():
             p = x["pos"]
+            s_entry = skeys.get(dev)
             groups[dev] = {
                 "key": dev, "device_id": dev,
-                "name": p.get("name") or tr("(no name)"),
+                "name": (s_entry.get("name") if s_entry else None) or p.get("name") or tr("(no name)"),
                 "names": {p["name"]} if p.get("name") else set(),
                 "pos": p, "at": x["at"],
                 "route": p.get("route") or "",
                 "today_count": 0, "total_count": 0, "waiting_originals": 0,
                 "accs": [], "last_photo": "",
-                "blocked": dev in blocked,
+                "blocked": bool((s_entry and s_entry.get("revoked")) or dev in blocked),
             }
         recs = self._all_photo_records(from_disk=include_disk) if (self._photo_records or include_disk) else []
         for r in recs:
@@ -1891,12 +1934,113 @@ class FieldPhotosDock(QDockWidget):
         act_today.setChecked(self._active_today_filter)
         act_today.triggered.connect(self._toggle_today_filter)
         m.addSeparator()
+        m.addAction(tr("Surveyor QR code…"), self._surveyor_qr_dialog)
+        m.addAction(tr("New QR code for this surveyor"), self._replace_selected_surveyor_qr)
+        m.addSeparator()
         m.addAction(tr("Export their work…"), self._export_selected_surveyor)
         m.addAction(tr("Unify name…"), self._unify_selected_surveyor)
         m.addAction(tr("Block device…"), self._block_selected_device)
         m.addSeparator()
         m.addAction(tr("Daily report…"), self._save_daily_report_dialog)
         m.exec(self.team_list.viewport().mapToGlobal(pos))
+
+    def qr_mode_value(self):
+        return self.qr_mode.currentData() or "shared"
+
+    def set_qr_mode(self, mode):
+        from .server import PhotoStore
+
+        mode = "per_surveyor" if mode == "per_surveyor" else "shared"
+        idx = self.qr_mode.findData(mode)
+        if idx >= 0 and self.qr_mode.currentIndex() != idx:
+            self.qr_mode.blockSignals(True)
+            self.qr_mode.setCurrentIndex(idx)
+            self.qr_mode.blockSignals(False)
+        QgsSettings().setValue(KEY + "qr-mode", mode)
+        if self.server is not None and hasattr(self.server.store, "set_qr_mode"):
+            self.server.store.set_qr_mode(mode)
+        else:
+            PhotoStore(self._active_folder(), self.form()).set_qr_mode(mode)
+        self.shared_qr_btn.setVisible(mode == "shared")
+        return mode
+
+    def _on_qr_mode_changed(self):
+        mode = self.set_qr_mode(self.qr_mode.currentData() or "shared")
+        if mode == "per_surveyor":
+            self.state.setText(tr("Per-surveyor QR mode: each surveyor needs their own QR code (Surveyor QR code…)."))
+        else:
+            self.show_shared_qr()
+
+    def _current_base_url(self):
+        if self._base_qr_url:
+            return self._base_qr_url
+        if self.server is not None:
+            from ..gps.source import local_addresses
+
+            ips = local_addresses()
+            return self.server.url(ips[0] if ips else "127.0.0.1")
+        from . import bridge
+
+        return bridge.phone_url(bridge.load_key(QgsSettings()), lang())
+
+    def show_shared_qr(self):
+        base = self._current_base_url()
+        if base:
+            self._show_qr(base, self._base_qr_tip or base)
+            self.state.setText(tr("Showing the shared team QR code."))
+        return base
+
+    def issue_surveyor_qr(self, name, surveyor_id=None, rotate=False):
+        from .server import PhotoStore
+
+        name = str(name or "").strip()[:40]
+        if not name:
+            raise ValueError("surveyor name required")
+        if self.server is not None and hasattr(self.server.store, "issue_surveyor_key"):
+            entry = self.server.store.issue_surveyor_key(name, surveyor_id=surveyor_id, rotate=rotate)
+        else:
+            entry = PhotoStore(self._active_folder(), self.form()).issue_surveyor_key(
+                name, surveyor_id=surveyor_id, rotate=rotate
+            )
+        base = self._current_base_url()
+        frag = f"sk={entry['secret']}&sn={quote(entry['name'])}"
+        url = f"{base}&{frag}" if "#" in base else f"{base}#{frag}"
+        self._show_qr(url, f"{entry['name']} — {url}")
+        self.url.setText(f"{entry['name']} ({entry['id']})")
+        self._show_team(include_disk=True)
+        return {"id": entry["id"], "name": entry["name"], "secret": entry["secret"], "url": url}
+
+    def revoke_surveyor_qr(self, target, reason=""):
+        from .server import PhotoStore
+
+        dev_id, s_name, _names = self._resolve_target(target)
+        key = dev_id or s_name or str(target or "").strip()
+        if self.server is not None and hasattr(self.server.store, "revoke_surveyor_key"):
+            res = self.server.store.revoke_surveyor_key(key, reason=reason)
+        else:
+            res = PhotoStore(self._active_folder(), self.form()).revoke_surveyor_key(key, reason=reason)
+        self._show_team(include_disk=True)
+        return res
+
+    def _surveyor_qr_dialog(self):
+        sel = self._selected_surveyors()
+        default_name = sel[0]["name"] if sel and sel[0].get("name") not in (None, "", tr("Unknown"), tr("(no name)")) else ""
+        sid = sel[0].get("device_id") if sel and str(sel[0].get("device_id") or "").startswith("srv_") else None
+        name, ok = QInputDialog.getText(self, tr("Surveyor QR code…"), tr("Surveyor name:"), text=default_name)
+        if ok and name.strip():
+            info = self.issue_surveyor_qr(name.strip(), surveyor_id=sid, rotate=False)
+            self.state.setText(tr("QR code ready for {who}.").format(who=info["name"]))
+
+    def _replace_selected_surveyor_qr(self):
+        sel = self._selected_surveyors()
+        if not sel or not sel[0].get("name"):
+            self.state.setText(tr("Select a surveyor in the list first."))
+            return
+        r = sel[0]
+        sid = r.get("device_id") if str(r.get("device_id") or "").startswith("srv_") else None
+        info = self.issue_surveyor_qr(r["name"], surveyor_id=sid, rotate=True)
+        self.state.setText(tr("Issued a new QR code for {who}; their old QR code is now invalid.").format(who=info["name"]))
+
 
     def photo_to_place(self):
         """The selected photo of the photos layer, else the last one received."""

@@ -330,6 +330,52 @@ check(rep_data["total_today"] == 4 and rep_data["waiting_originals"] == 1
       and os.path.isfile(pdf_rep) and os.path.getsize(pdf_rep) > 1000,
       f"daily report saved as both HTML and PDF ({rep_data['total_today']} today, {rep_data['waiting_originals']} waiting)")
 
+# Per-surveyor QR mode vs Shared QR mode
+d.set_qr_mode("per_surveyor")
+check(d.qr_mode_value() == "per_surveyor", "switched to per-surveyor QR mode")
+qr_mahmoud = d.issue_surveyor_qr("محمود سامي")
+qr_yasmin = d.issue_surveyor_qr("ياسمين عادل")
+check("sk=" in qr_mahmoud["url"] and "sn=" in qr_mahmoud["url"] and qr_mahmoud["secret"] != qr_yasmin["secret"],
+      "each surveyor gets a distinct personal QR code and secret key")
+
+# In per-surveyor mode, a phone without a personal QR key is refused with 403
+st_nk, _ = post_sealed_photo({
+    "id": "survphoto-0200", "lat": 30.055, "lon": 31.245, "acc": 4.0,
+    "t": now_ms + 5000, "surveyor": "محمود سامي", "device_id": "dev_random_phone1",
+})
+check(st_nk == 403, f"per-surveyor mode refuses a photo that has no personal surveyor key ({st_nk})")
+
+# A surveyor with Mahmoud's personal QR key cannot impersonate Yasmin: the PC records Mahmoud's verified name & id
+st_sp, _ = post_sealed_photo({
+    "id": "survphoto-0201", "lat": 30.056, "lon": 31.246, "acc": 4.0,
+    "t": now_ms + 6000, "surveyor": "ياسمين عادل", "by": "ياسمين عادل",
+    "device_id": "dev_spoofed_9999", "sk": qr_mahmoud["secret"],
+})
+d._read_events()
+feat_sp = next((f for f in d.layer.getFeatures() if f["photo_id"] == "survphoto-0201"), None)
+check(st_sp == 200 and feat_sp is not None
+      and feat_sp["surveyor"] == "محمود سامي" and feat_sp["device_id"] == qr_mahmoud["id"],
+      "personal QR key cryptographically binds the photo to Mahmoud even if he writes Yasmin's name")
+
+# Revoking Mahmoud's QR code blocks him even if he clears browser storage (gets a brand-new device_id),
+# while Yasmin's QR code keeps working normally
+d.revoke_surveyor_qr(qr_mahmoud["id"], reason="Phone lost - personal QR revoked")
+st_rev, _ = post_sealed_photo({
+    "id": "survphoto-0202", "lat": 30.057, "lon": 31.247, "acc": 4.0,
+    "t": now_ms + 7000, "surveyor": "محمود سامي",
+    "device_id": "dev_brand_new_after_clear", "sk": qr_mahmoud["secret"],
+})
+check(st_rev == 403, f"revoked personal QR stays blocked even after clearing browser data ({st_rev})")
+
+st_yas, _ = post_sealed_photo({
+    "id": "survphoto-0203", "lat": 30.058, "lon": 31.248, "acc": 3.5,
+    "t": now_ms + 8000, "surveyor": "ياسمين عادل",
+    "device_id": "dev_yasmin_phone", "sk": qr_yasmin["secret"],
+})
+d._read_events()
+check(st_yas == 200 and any(f["photo_id"] == "survphoto-0203" and f["surveyor"] == "ياسمين عادل" for f in d.layer.getFeatures()),
+      "revoking one surveyor's QR code does not affect other surveyors' QR codes")
+
 d.stop()
 shutil.rmtree(work, ignore_errors=True)
 print(f"\n{'FAILED: ' + str(len(failures)) if failures else 'ALL PASSED'}", flush=True)

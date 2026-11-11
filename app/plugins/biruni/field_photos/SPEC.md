@@ -39,6 +39,9 @@ The phone opens a static web page (served locally over Wi-Fi/hotspot or on GitHu
 
 ## Surveyor Identity, Control Panel, Device Blocking, and Daily Report
 
+- **Choice of QR mode (`shared` vs `per_surveyor`):**
+  - **One QR code for all surveyors (`shared`, default):** All phones scan the same team QR code, and each surveyor writes their name once (`#me`, saved in `localStorage` under `biruni-me`) before taking their first photo. Pressing **New code** rotates the team bridge key and cuts off all old phones at once.
+  - **Separate QR code per surveyor (`per_surveyor`, `surveyor_keys.json`):** Each surveyor gets their own QR code containing a 128-bit random secret token (`#...&sk=<secret>&sn=<name>`). On the phone, `#me` is pre-filled and locked to that surveyor's name, and `sk` is placed inside `meta` before `sealItem` encrypts it with `PCKEY`. On the office PC, `PhotoStore.save` verifies `sk` against `surveyor_keys.json`, binds `surveyor` and `device_id` (`srv_<id>`) to the PC's verified record (preventing name spoofing), refuses any photo without a valid `sk`, and lets the office revoke or replace a single surveyor's QR code immediately without affecting the rest of the team (cannot be bypassed by clearing browser storage).
 - **Surveyor identity inside the sealed envelope:**
   - The phone page requires the surveyor's name (`#me`, saved in `localStorage` under `biruni-me`) before the first photo is taken.
   - Each phone browser generates a persistent random `device_id` (`DEVID`, saved in `localStorage` under `biruni-dev`).

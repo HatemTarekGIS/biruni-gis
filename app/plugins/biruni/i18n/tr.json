@@ -7895,5 +7895,20 @@
  "Waiting originals": "Bekleyen orijinaller",
  "Waiting originals: {n}": "Bekleyen orijinaller: {n}",
  "Write your name first so your photos carry it.": "Fotoğraflarınızda yer alması için önce adınızı yazın.",
- "Zoom to their work": "Çalışmasına yakınlaştır"
+ "Zoom to their work": "Çalışmasına yakınlaştır",
+ "One QR code for all surveyors (each writes their name)": "Tüm haritacılar için tek QR kodu (herkes kendi adını yazar)",
+ "Separate QR code per surveyor (verified identity & instant revoke)": "Her haritacı için ayrı QR kodu (doğrulanmış kimlik ve anında iptal)",
+ "Surveyor QR code…": "Haritacı QR kodu…",
+ "Create or show a personal QR code with a secret key for one surveyor.": "Bir haritacı için gizli anahtarlı kişisel QR kodu oluşturun veya gösterin.",
+ "Team QR code": "Ekip QR kodu",
+ "Show the shared team QR code.": "Paylaşılan ekip QR kodunu göster.",
+ "New QR code for this surveyor": "Bu haritacı için yeni QR kodu",
+ "Surveyor QR code revoked": "Haritacı QR kodu iptal edildi",
+ "Invalid or replaced surveyor QR code": "Geçersiz veya değiştirilmiş haritacı QR kodu",
+ "Each surveyor must use their own personal QR code": "Her haritacı kendi kişisel QR kodunu kullanmalıdır",
+ "Per-surveyor QR mode: each surveyor needs their own QR code (Surveyor QR code…).": "Haritacı başına QR modu: her haritacının kendi QR koduna ihtiyacı vardır (Haritacı QR kodu…).",
+ "Showing the shared team QR code.": "Paylaşılan ekip QR kodu gösteriliyor.",
+ "Surveyor name:": "Haritacı adı:",
+ "QR code ready for {who}.": "{who} için QR kodu hazır.",
+ "Issued a new QR code for {who}; their old QR code is now invalid.": "{who} için yeni bir QR kodu verildi; eski QR kodu artık geçersiz."
 }

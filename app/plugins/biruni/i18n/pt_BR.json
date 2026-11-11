@@ -7895,5 +7895,20 @@
  "Waiting originals": "Originais pendentes",
  "Waiting originals: {n}": "Originais pendentes: {n}",
  "Write your name first so your photos carry it.": "Escreva seu nome primeiro para que suas fotos o levem.",
- "Zoom to their work": "Aproximar ao seu trabalho"
+ "Zoom to their work": "Aproximar ao seu trabalho",
+ "One QR code for all surveyors (each writes their name)": "Um código QR para todos os topógrafos (cada um escreve seu nome)",
+ "Separate QR code per surveyor (verified identity & instant revoke)": "Código QR separado por topógrafo (identidade verificada e revogação imediata)",
+ "Surveyor QR code…": "Código QR do topógrafo…",
+ "Create or show a personal QR code with a secret key for one surveyor.": "Criar ou mostrar um código QR pessoal com chave secreta para um topógrafo.",
+ "Team QR code": "Código QR da equipe",
+ "Show the shared team QR code.": "Mostrar o código QR compartilhado da equipe.",
+ "New QR code for this surveyor": "Novo código QR para este topógrafo",
+ "Surveyor QR code revoked": "Código QR do topógrafo revogado",
+ "Invalid or replaced surveyor QR code": "Código QR de topógrafo inválido ou substituído",
+ "Each surveyor must use their own personal QR code": "Cada topógrafo deve usar seu próprio código QR pessoal",
+ "Per-surveyor QR mode: each surveyor needs their own QR code (Surveyor QR code…).": "Modo QR por topógrafo: cada topógrafo precisa de seu próprio código QR (Código QR do topógrafo…).",
+ "Showing the shared team QR code.": "Mostrando o código QR compartilhado da equipe.",
+ "Surveyor name:": "Nome do topógrafo:",
+ "QR code ready for {who}.": "Código QR pronto para {who}.",
+ "Issued a new QR code for {who}; their old QR code is now invalid.": "Um novo código QR foi emitido para {who}; o código QR antigo não é mais válido."
 }

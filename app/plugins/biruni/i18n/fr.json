@@ -7895,5 +7895,20 @@
  "Waiting originals": "Originaux en attente",
  "Waiting originals: {n}": "Originaux en attente : {n}",
  "Write your name first so your photos carry it.": "Écrivez d'abord votre nom pour que vos photos le portent.",
- "Zoom to their work": "Zoomer sur son travail"
+ "Zoom to their work": "Zoomer sur son travail",
+ "One QR code for all surveyors (each writes their name)": "Un seul code QR pour tous les géomètres (chacun écrit son nom)",
+ "Separate QR code per surveyor (verified identity & instant revoke)": "Code QR distinct par géomètre (identité vérifiée et révocation immédiate)",
+ "Surveyor QR code…": "Code QR du géomètre…",
+ "Create or show a personal QR code with a secret key for one surveyor.": "Créer ou afficher un code QR personnel avec une clé secrète pour un géomètre.",
+ "Team QR code": "Code QR de l'équipe",
+ "Show the shared team QR code.": "Afficher le code QR partagé de l'équipe.",
+ "New QR code for this surveyor": "Nouveau code QR pour ce géomètre",
+ "Surveyor QR code revoked": "Code QR du géomètre révoqué",
+ "Invalid or replaced surveyor QR code": "Code QR de géomètre non valide ou remplacé",
+ "Each surveyor must use their own personal QR code": "Chaque géomètre doit utiliser son propre code QR personnel",
+ "Per-surveyor QR mode: each surveyor needs their own QR code (Surveyor QR code…).": "Mode QR par géomètre : chaque géomètre a besoin de son propre code QR (Code QR du géomètre…).",
+ "Showing the shared team QR code.": "Affichage du code QR partagé de l'équipe.",
+ "Surveyor name:": "Nom du géomètre :",
+ "QR code ready for {who}.": "Code QR prêt pour {who}.",
+ "Issued a new QR code for {who}; their old QR code is now invalid.": "Un nouveau code QR a été émis pour {who} ; son ancien code QR n'est plus valide."
 }

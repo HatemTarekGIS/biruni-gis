@@ -7895,5 +7895,20 @@
  "Waiting originals": "بانتظار الأصل",
  "Waiting originals: {n}": "صور بانتظار الأصل: {n}",
  "Write your name first so your photos carry it.": "اكتب اسمك أوّلًا لتُسجَّل صورك باسمك.",
- "Zoom to their work": "قرّب على عمله"
+ "Zoom to their work": "قرّب على عمله",
+ "One QR code for all surveyors (each writes their name)": "رمز QR واحد لجميع المساحين (يكتب كل مساح اسمه)",
+ "Separate QR code per surveyor (verified identity & instant revoke)": "رمز QR مستقل لكل مساح (توثيق الهوية وإلغاء فوري)",
+ "Surveyor QR code…": "رمز QR لمساح…",
+ "Create or show a personal QR code with a secret key for one surveyor.": "إنشاء أو عرض رمز QR شخصي بمفتاح سري خاص بمساح واحد.",
+ "Team QR code": "رمز QR للفريق",
+ "Show the shared team QR code.": "عرض رمز QR المشترك للفريق.",
+ "New QR code for this surveyor": "رمز QR جديد لهذا المساح",
+ "Surveyor QR code revoked": "تم إلغاء رمز QR الخاص بالمساح",
+ "Invalid or replaced surveyor QR code": "رمز QR للمساح غير صالح أو تم استبداله",
+ "Each surveyor must use their own personal QR code": "يجب على كل مساح استخدام رمز QR الشخصي الخاص به",
+ "Per-surveyor QR mode: each surveyor needs their own QR code (Surveyor QR code…).": "وضع رمز QR لكل مساح: يحتاج كل مساح إلى رمزه الخاص (رمز QR لمساح…).",
+ "Showing the shared team QR code.": "يتم عرض رمز QR المشترك للفريق.",
+ "Surveyor name:": "اسم المساح:",
+ "QR code ready for {who}.": "رمز QR جاهز للمساح {who}.",
+ "Issued a new QR code for {who}; their old QR code is now invalid.": "تم إصدار رمز QR جديد للمساح {who}؛ وأصبح رمزه القديم ملغى."
 }
