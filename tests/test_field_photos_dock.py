@@ -26,8 +26,12 @@ app.initQgis()
 from qgis.gui import QgsMapCanvas  # noqa: E402
 from qgis.PyQt.QtWidgets import QMainWindow  # noqa: E402
 
-from biruni.field_photos import dock as fd  # noqa: E402
-from biruni.field_photos.server import PHOTO_PORT  # noqa: E402
+from biruni.field_photos import dock as fd, server as _fs  # noqa: E402
+import socket as _sock  # noqa: E402
+
+with _sock.socket() as _s:
+    _s.bind(("127.0.0.1", 0))
+    _fs.PHOTO_PORT = PHOTO_PORT = _s.getsockname()[1]
 
 failures = []
 

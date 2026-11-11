@@ -1,0 +1,56 @@
+# field_photos — photos from the team's phones to this PC
+
+The phone opens a static web page (served locally over Wi-Fi/hotspot or on GitHub Pages via `bridge.py`), takes photos with GPS or indoor room coordinates, compass direction, kind, note and form answers, and sends them to the office PC.
+
+## How photos travel
+
+1. **Direct link (same Wi-Fi / hotspot, or direct WebRTC over the bridge):**
+   - The full original photo is sent directly between the phone and the office PC.
+2. **Teammate relay (`via` / `handover`):**
+   - A teammate's phone that can reach the PC (or meets the phone offline via two QR codes) carries photos sealed for the office PC (`handover.py`).
+3. **Encrypted relay fallback (when mobile-data CGNAT/NAT blocks direct WebRTC):**
+   - If the direct WebRTC channel does not open within the connection deadline (`10 s`), the page drops the stalled attempt, shows the relay-mode notice, and sends a small **encrypted preview** (in chunks of at most 24 KB to at most 2 healthy Nostr relays as ephemeral events `kind: 25050`, falling back to `ntfy.sh` if Nostr relays refuse or time out).
+   - The office PC saves the preview with `"preview": True` under the photo's `photo_id` and returns a signed `preview` receipt.
+   - The **encrypted full-resolution original stays on the phone** (`prevSent = true`) and is never deleted until a direct connection (Wi-Fi or direct WebRTC) delivers the original and returns a signed `original` receipt, replacing the preview file in the same record.
+
+## What is encrypted and what third parties see
+
+- **End-to-end encryption from phone to office PC:**
+  - Waiting photos (both the full original and the preview) are sealed in the phone's browser before being stored in IndexedDB (`biruni-photos`) using WebCrypto **ECDH P-256** with the office PC's public key (`handover-p256.key`, whose private key stays on the PC under Windows DPAPI) and **AES-256-GCM**.
+  - Messages carried over public relays are additionally sealed with **AES-256-GCM** under the bridge key (`#k=`, kept after `#` so the static web host never receives it).
+  - The office PC signs `answer`, `rhello` and every photo receipt (`BRAK1|<photo_id>|<preview|original>|<nonce>`) with its **ECDSA P-256** identity key, verified on the phone against the link pin (`&i=`). A replayed ack or a preview ack cannot cause the phone to delete an original photo.
+- **What public relays (`Nostr` and `ntfy.sh`) can see:**
+  - Relays cannot read the photo, coordinates, notes or form answers, and cannot forge a receipt.
+  - Relays **do see** the meeting topic hash, client IP addresses, ciphertext sizes and message timestamps.
+
+## Limits
+
+- **The office PC must be open:** Public relays are never used as a file store. Ephemeral Nostr events (`kind: 25050`) are not persisted on disk. If Biruni GIS on the office PC is closed or offline, encrypted photos stay in the phone's browser storage until the PC is open again.
+- **`ntfy.sh` public server limits (per IP address):**
+  - 250 messages per day; 60-request burst replenished at 1 request per 5 seconds.
+  - Attachments: 2 MB maximum per file, 20 MB active storage per IP (3-hour expiry), 350 MiB daily bandwidth. Multiple phones behind the same mobile carrier CGNAT IP share these per-IP limits.
+- **Public Nostr relays:**
+  - Default maximum event size is 64 KB (`strfry.conf`) to 128 KB (`nos.lol`, `nostr.mom`). Each chunk is sent to at most 2 healthy relays with pacing (`>= 180 ms` between chunks) and exponential backoff on `OK false` or `NOTICE`.
+- **Browser storage on the phone:**
+  - In private/incognito browsing mode, closing the page erases waiting photos (the page shows a warning banner when private mode is detected).
+  - On iOS Safari, script-writable browser storage may be evicted after 7 days of no user interaction.
+- **Data residency:**
+  - When using the bridge or relay fallback, encrypted bytes transit public relays hosted outside the country. Organizations subject to strict national data-residency regulations (such as GEOSA in Saudi Arabia) that prohibit even encrypted transit abroad must use the local Wi-Fi / hotspot mode (`"Phone nearby"`).
+
+## Surveyor Identity, Control Panel, Device Blocking, and Daily Report
+
+- **Surveyor identity inside the sealed envelope:**
+  - The phone page requires the surveyor's name (`#me`, saved in `localStorage` under `biruni-me`) before the first photo is taken.
+  - Each phone browser generates a persistent random `device_id` (`DEVID`, saved in `localStorage` under `biruni-dev`).
+  - Both `surveyor` and `device_id` are placed inside `meta` **before** `sealItem` encrypts the record with the computer's public key (`ECDH P-256 + AES-256-GCM`). The outer query parameter `?m=` carries only `{id, sealed: 1, t}`; on the computer, `server.handover.open(data)` replaces `meta` with the decrypted inner dictionary, so outer fields cannot spoof `surveyor` or `device_id`.
+  - Earlier photos without a surveyor name keep all their attributes and field order untouched (`FIELDS[:15]` unchanged; `surveyor` and `device_id` appended at the end) and are labelled `Unknown` (`غير معروف` in Arabic).
+- **Surveyors panel and controls (`field_photos/dock.py`):**
+  - Lists every surveyor/device with: Name, State (`Connected` / `Offline` / `Blocked`), Network, Link quality, Average GPS accuracy of their photos (`± X m`), Battery, Connection route (`Direct` / `Relay` / `Teammate` / `Local network`), Today's photo count, Total photo count, Previews waiting for full originals, and Last seen time.
+  - **Controls:**
+    - **Show only their photos / Show all:** applies a non-destructive `setSubsetString` filter on the `field_photos` layer without deleting any features.
+    - **Today's work:** filters by today's date (for one surveyor or all).
+    - **Zoom to their work:** zooms the map canvas to the bounding box of that surveyor's photos.
+    - **Export their work…:** exports that surveyor's features to `.gpkg` or `.csv`/`.xlsx` alongside a `<name>_photos/` folder containing copies of their photo files.
+    - **Unify name…:** unifies different spellings of a surveyor's name across `field_photos.gpkg`, `photos.jsonl`, and the live table.
+    - **Block device…:** records `device_id` and the reason in `blocked_devices.json`. Future photo uploads from that `device_id` are refused with HTTP `403` and logged with timestamp and reason in `rejected.jsonl`, while the device's existing photos remain untouched.
+  - **Daily report (`Daily report…`):** writes an HTML or PDF summary for the day showing each surveyor's photo count today, total photos, first and last photo time, previews waiting for originals, and average GPS accuracy.

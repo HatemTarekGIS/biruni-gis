@@ -20,6 +20,27 @@ def _b64u(data):
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
 
 
+def seal(pub, meta, data):
+    """Seal (meta, data) for a computer's public key (same ECDH P-256 + AES-256-GCM envelope as the phone page)."""
+    from ..vendor import ensure_vendor
+
+    ensure_vendor()
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+    raw_pub = base64.urlsafe_b64decode(str(pub) + "==="[: (len(str(pub)) + 3) % 4])
+    pk = ec.EllipticCurvePublicKey.from_encoded_point(ec.SECP256R1(), raw_pub)
+    eph = ec.generate_private_key(ec.SECP256R1())
+    shared = eph.exchange(ec.ECDH(), pk)
+    eph_raw = eph.public_key().public_bytes(serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint)
+    iv = os.urandom(12)
+    m_bytes = json.dumps(meta, ensure_ascii=False).encode("utf-8")
+    plain = len(m_bytes).to_bytes(4, "big") + m_bytes + bytes(data)
+    ct = AESGCM(hashlib.sha256(shared).digest()).encrypt(iv, plain, None)
+    return b"\x01" + eph_raw + iv + ct
+
+
 class HandoverKey:
     """This computer's key for sealed photos: made once, kept in ``folder`` (protected for this Windows user)."""
 

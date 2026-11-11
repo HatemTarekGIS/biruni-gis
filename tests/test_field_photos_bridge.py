@@ -36,7 +36,7 @@ app = QGuiApplication(sys.argv[:1])  # Chromium needs a program name
 # the simulated phone runs in this process
 profile = QWebEngineProfile.defaultProfile()
 from biruni.field_photos import bridge  # noqa: E402
-from biruni.field_photos.server import PhotoServer, phone_texts  # noqa: E402
+from biruni.field_photos.server import PhotoServer, all_phone_texts, phone_texts  # noqa: E402
 
 failures = []
 
@@ -100,7 +100,8 @@ check(len(bridge.pin(k)) == 22 and bridge.pin(k) == bridge.identity(k)[1] and br
       "each key has its own identity, and the same key keeps its pin")
 
 # ---- the page published on GitHub Pages ---------------------------------------------------------------
-ALL = {"en": phone_texts(lambda s: s), "ar": dict(phone_texts(lambda s: s), title="بيروني - صور ميدانية")}
+ALL = dict(all_phone_texts(), en=phone_texts(lambda s: s))
+ALL["ar"] = dict(ALL.get("ar") or phone_texts(lambda s: s), title="بيروني - صور ميدانية")
 page = bridge.phone_page(ALL)
 check("__TEXTS__" not in page and "__KINDS__" not in page and "/*SEND{*/" not in page and "/*BOOT*/" not in page,
       "the phone page is complete")
@@ -401,6 +402,200 @@ check(wait(lambda: bool(got3.extend(e[1] for e in drain() if e[0] == "photo" and
       "the photo arrives with its level and room")
 js("localStorage.setItem('biruni-room',JSON.stringify({u:'L1-101',t:Date.now()}));setRoom(null);roomFromStore();1")
 check(js("room&&room.id") == "L1-101", "a code read by the camera app (the room page) is picked up by the photo page")
+
+# ---- waiting photos are sealed on the phone + "X photos waiting" counter + incognito warning -------------------
+js(r"""(async()=>{window._qCheck=null;
+ const b=new Uint8Array(2400);b.set([0xff,0xd8,0xff,0xe0]);
+ const secret=new TextEncoder().encode('secret-offline-note-77');b.set(secret,100);b.set([0xff,0xd9],b.length-2);
+ const meta={id:'bridgephoto-0004',lat:24.7155,lon:46.6788,acc:3,t:Date.now(),note:'secret-offline-note-77',device:'test'};
+ await put({id:meta.id,blob:new Blob([b],{type:'image/jpeg'}),meta:meta,room:ROOM});
+ setLang('en');await count();
+ const enWait=$('waitPill').textContent,enHide=$('waitPill').classList.contains('hide');
+ setLang('ar');await count();
+ const arWait=$('waitPill').textContent,arBox=$('lWait').textContent;
+ setLang('en');await count();
+ const items=await all(),it=items.find(x=>x.id==='bridgephoto-0004');
+ const raw=new Uint8Array(await it.blob.arrayBuffer());
+ const rawStr=new TextDecoder('latin1').decode(raw);
+ window._qCheck={sealed:it.meta.sealed,metaKeys:Object.keys(it.meta).sort().join(','),
+  firstByte:raw[0],hasJpeg:raw[0]===0xff&&raw[1]===0xd8,hasNote:rawStr.includes('secret-offline-note-77'),
+  enWait:enWait,enHide:enHide,arWait:arWait,arBox:arBox}})();1""")
+check(wait(lambda: js("!!window._qCheck") is True, 15), "waiting photo inspected in phone storage")
+qc = js("window._qCheck") or {}
+check(qc.get("sealed") == 1 and qc.get("metaKeys") == "id,sealed,t" and qc.get("firstByte") == 1
+      and not qc.get("hasJpeg") and not qc.get("hasNote"),
+      f"waiting photo on the phone is encrypted with the PC's key (no readable JPEG, note or coordinates: {qc})")
+check(qc.get("enWait") == "1 photos waiting" and not qc.get("enHide")
+      and qc.get("arWait") == "1 صور مستنية" and qc.get("arBox") == "1 صور مستنية",
+      f"the page shows the clear waiting counter in English and Arabic ({qc.get('enWait')} / {qc.get('arWait')})")
+js("flush();1")
+got4 = []
+check(wait(lambda: bool(got4.extend(e[1] for e in drain() if e[0] == "photo" and e[1]["id"] == "bridgephoto-0004")
+                        or got4), 60) and got4[0].get("note") == "secret-offline-note-77"
+      and abs(got4[0].get("lat", 0) - 24.7155) < 1e-6,
+      "when the connection is back, the PC decrypts and saves the waiting photo with its note and coordinates")
+check(wait(lambda: js("$('waitPill').classList.contains('hide')") is True, 10),
+      "the waiting counter hides again once all photos reach the PC")
+
+js("window.BIRUNI_INCOGNITO=true;checkPrivate();setLang('ar');1")
+check(wait(lambda: js("!$('privWarn').classList.contains('hide')&&$('privWarn').textContent.includes('التصفح الخفي')") is True, 5),
+      "private browsing mode shows a clear warning banner")
+js("window.BIRUNI_INCOGNITO=false;checkPrivate();setLang('en');1")
+check(wait(lambda: js("$('privWarn').classList.contains('hide')") is True, 5),
+      "normal browsing mode hides the private browsing warning")
+
+# ---- direct WebRTC blocked (CGNAT): no hang on 'connecting', encrypted preview over relays, original waits -----
+js(r"""(() => {
+ BR.ice = []; BR.directMs = 1200; BR.paceMs = 10; BR.chunkSize = 700;
+ window._blockP2P = true;
+ const scrubSdp = s => String(s || '').replace(/a=candidate:(\S+) (\d+) udp (\d+) \S+ \d+ typ host/gi,
+  'a=candidate:$1 $2 udp $3 192.0.2.1 9 typ host');
+ const origSigSend = SIG.send.bind(SIG);
+ SIG.send = async (obj, z) => {
+  if (window._blockP2P && obj && obj.t === 'offer' && obj.sdp) obj = Object.assign({}, obj, {sdp: scrubSdp(obj.sdp)});
+  return await origSigSend(obj, z);
+ };
+ window._origRTC = window.RTCPeerConnection;
+ window.RTCPeerConnection = function(cfg) {
+  const p = new window._origRTC({iceServers: []});
+  const origSetRemote = p.setRemoteDescription.bind(p);
+  p.setRemoteDescription = async (desc) => {
+   const sdp = window._blockP2P ? scrubSdp(desc.sdp) : desc.sdp;
+   return await origSetRemote({type: desc.type, sdp: sdp});
+  };
+  return p;
+ };
+ drop(); RELAY = false; connect();
+})();1""")
+check(wait(lambda: js("linking === false && RELAY === true && lastState === 'relayMode'"), 15),
+      "when direct WebRTC cannot open, the page does not hang on 'connecting' and switches to relay mode")
+
+js(r"""(async () => {
+ window._relayTest = null;
+ const calls = [];
+ const fakeRelay = (name, accept) => {
+  const r = Object.create(NostrRelay.prototype);
+  r.url = name; r.up = true; r.fails = 0; r.backoffUntil = 0; r.oks = new Map(); r.notices = [];
+  r.sendWait = async (ev) => {
+   calls.push(name);
+   if (!accept) { r.fails++; r.backoffUntil = Date.now() + 20000; return false; }
+   return true;
+  };
+  return r;
+ };
+ const realRelays = SIG.relays;
+ const rBad1 = fakeRelay('bad1', false), rBad2 = fakeRelay('bad2', false),
+       rGood1 = fakeRelay('good1', true), rGood2 = fakeRelay('good2', true);
+ SIG.relays = [rBad1, rBad2, rGood1, rGood2];
+ const ok1 = await SIG.sendChunk({t: 'noop'});
+ const firstBatch = calls.slice(); calls.length = 0;
+ const ok2 = await SIG.sendChunk({t: 'noop'});
+ const secondBatch = calls.slice();
+ SIG.relays = realRelays;
+ window._relayTest = {ok1, ok2, firstBatch, secondBatch, bad1BackedOff: rBad1.backoffUntil > Date.now()};
+})();1""")
+check(wait(lambda: js("!!window._relayTest") is True, 10), "relay etiquette & failover checked")
+rt = js("window._relayTest") or {}
+check(rt.get("ok1") is True and rt.get("ok2") is True and rt.get("bad1BackedOff") is True
+      and rt.get("secondBatch") == ["good1", "good2"],
+      f"each chunk goes to at most 2 healthy relays, and rejecting relays back off and fail over ({rt})")
+
+# 3. Out-of-order and duplicate chunks + preview saved on PC while encrypted original stays on phone:
+js(r"""(async () => {
+ window._prevDone = null;
+ const realSendChunk = SIG.sendChunk.bind(SIG);
+ const bufChunks = [];
+ SIG.sendChunk = async (obj) => {
+  if (obj && obj.t === 'rchunk' && obj.id === 'bridgephoto-0005') {
+   bufChunks.push(obj);
+   if (bufChunks.length === obj.k) {
+    const order = [bufChunks[obj.k - 1], bufChunks[0], bufChunks[obj.k - 1], ...bufChunks.slice(1, -1)];
+    for (const c of order) await realSendChunk(Object.assign({}, c));
+   }
+   return true;
+  }
+  return await realSendChunk(obj);
+ };
+ const b = new Uint8Array(8000);
+ b.set([0xff, 0xd8, 0xff, 0xe0]);
+ const noteBytes = new TextEncoder().encode('relay-preview-note-55');
+ b.set(noteBytes, 60);
+ b.set([0xff, 0xd9], b.length - 2);
+ const meta = {id: 'bridgephoto-0005', lat: 24.7201, lon: 46.6802, acc: 4, t: Date.now(), note: 'relay-preview-note-55', device: 'test'};
+ await put({id: meta.id, blob: new Blob([b], {type: 'image/jpeg'}), meta: meta, room: ROOM});
+ await flush();
+ SIG.sendChunk = realSendChunk;
+ setLang('en'); await count();
+ const enPill = $('waitPill').textContent;
+ setLang('ar'); await count();
+ const arPill = $('waitPill').textContent;
+ setLang('en'); await count();
+ const left = await all(), it = left.find(x => x.id === 'bridgephoto-0005');
+ window._prevDone = {leftCount: left.length, prevSent: !!(it && it.prevSent), hasOrigBlob: !!(it && it.blob && it.blob.size > 4000),
+  enPill: enPill, arPill: arPill};
+})();1""")
+got5_prev = []
+check(wait(lambda: bool(got5_prev.extend(e[1] for e in drain() if e[0] == "photo" and e[1]["id"] == "bridgephoto-0005")
+                        or got5_prev), 30),
+      "out-of-order and duplicated encrypted chunks reassemble on the PC and save the preview")
+check(wait(lambda: js("!!window._prevDone") is True, 15), "phone processed the signed preview ack")
+pd = js("window._prevDone") or {}
+rec5_prev = srv.store.records.get("bridgephoto-0005") or {}
+prev_size = os.path.getsize(rec5_prev["photo"]) if rec5_prev.get("photo") and os.path.isfile(rec5_prev["photo"]) else 0
+check(rec5_prev.get("preview") is True and 0 < prev_size < 8000 and rec5_prev.get("note") == "relay-preview-note-55",
+      f"PC saved the preview marked 'preview': True ({prev_size} bytes < 8000 original)")
+check(pd.get("leftCount") == 1 and pd.get("prevSent") is True and pd.get("hasOrigBlob") is True,
+      f"phone kept the encrypted original waiting for Wi-Fi ({pd})")
+check(pd.get("enPill") == "1 arrived as preview, original waiting for Wi-Fi"
+      and pd.get("arPill") == "1 وصلت مصغّرة، الأصل بانتظار الواي فاي",
+      f"page shows '1 arrived as preview, original waiting for Wi-Fi' in English and Arabic ({pd.get('enPill')} / {pd.get('arPill')})")
+
+# 4. Signed ack bound to (id, kind, nonce): a forged, wrong-kind or wrong-nonce ack never deletes the original
+js(r"""(async () => {
+ window._ackGuard = null;
+ const beforeRefused = SIG.refused || 0;
+ acks.set('bridgephoto-0005', {kind: 'original', nonce: 'real-nonce-1', resolve: () => { window._ackForged = true; }, reject: () => {}});
+ await handleAck({id: 'bridgephoto-0005', kind: 'preview', nonce: 'real-nonce-1', status: 200, ip: 'bad', is: 'bad'});
+ await handleAck({id: 'bridgephoto-0005', kind: 'original', nonce: 'wrong-nonce', status: 200, ip: 'bad', is: 'bad'});
+ await handleAck({id: 'bridgephoto-0005', kind: 'original', nonce: 'real-nonce-1', status: 200, ip: 'bad', is: 'bad'});
+ acks.delete('bridgephoto-0005');
+ const left = await all();
+ window._ackGuard = {refusedDelta: (SIG.refused || 0) - beforeRefused, forgedAccepted: !!window._ackForged, stillThere: left.length === 1};
+})();1""")
+check(wait(lambda: js("!!window._ackGuard") is True, 10), "ack guard checked")
+ag = js("window._ackGuard") or {}
+check(ag.get("refusedDelta") == 3 and not ag.get("forgedAccepted") and ag.get("stillThere") is True,
+      f"ack with wrong kind, wrong nonce or bad signature is refused and never deletes the original ({ag})")
+
+# 5. When the PC is unreachable, new photos stay encrypted on the phone
+js(r"""(async () => {
+ window._pcOffCheck = null;
+ RELAY = false;
+ const b = new Uint8Array(3000); b.set([0xff, 0xd8, 0xff, 0xe0]); b.set([0xff, 0xd9], b.length - 2);
+ const meta = {id: 'bridgephoto-0006', lat: 24.721, lon: 46.681, acc: 5, t: Date.now(), note: 'while-pc-off', device: 'test'};
+ await put({id: meta.id, blob: new Blob([b], {type: 'image/jpeg'}), meta: meta, room: ROOM});
+ const left = await all(), it = left.find(x => x.id === 'bridgephoto-0006');
+ window._pcOffCheck = {count: left.length, sealed: it && it.meta && it.meta.sealed};
+ await del('bridgephoto-0006');
+})();1""")
+check(wait(lambda: js("!!window._pcOffCheck") is True, 10), "offline storage while PC unreachable checked")
+pco = js("window._pcOffCheck") or {}
+check(pco.get("count") == 2 and pco.get("sealed") == 1,
+      f"when the PC is unreachable, photos stay encrypted on the phone ({pco})")
+
+# 6. Direct WebRTC restored (Wi-Fi): the full original is sent, replaces the preview in the same record, and is then deleted
+js("window._blockP2P = false; window.RTCPeerConnection = window._origRTC; drop(); connect(); 1")
+got5_orig = []
+check(wait(lambda: bool(got5_orig.extend(e[1] for e in drain()
+                        if e[0] == "photo" and e[1]["id"] == "bridgephoto-0005" and not e[1].get("preview"))
+                        or got5_orig), 30),
+      "once direct WebRTC opens, the full original arrives at the PC")
+rec5_orig = srv.store.records.get("bridgephoto-0005") or {}
+orig_size = os.path.getsize(rec5_orig["photo"]) if rec5_orig.get("photo") and os.path.isfile(rec5_orig["photo"]) else 0
+check(rec5_orig.get("preview") is False and orig_size == 8000,
+      f"the original replaced the preview in the same record (preview={rec5_orig.get('preview')}, size={orig_size} bytes)")
+check(wait(lambda: js("(async()=>{window._afterOrig=(await all()).length})();window._afterOrig") == 0, 10),
+      "after the signed original ack, the phone deletes the original from its waiting queue")
 
 # ---- the receiver page is for this PC only -------------------------------------------------------------
 import http.client  # noqa: E402

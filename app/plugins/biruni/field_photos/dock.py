@@ -1,17 +1,22 @@
 """Field photos panel: start, show the QR code, and watch the photos arrive as points."""
+import csv
+import datetime as dt
+import html as html_mod
 import json
 import os
+import shutil
 import threading
 import time
 
 from qgis.core import (Qgis, QgsApplication, QgsCoordinateReferenceSystem, QgsCoordinateTransform,
                        QgsEditorWidgetSetup, QgsFeature, QgsField, QgsFields, QgsGeometry, QgsPointXY,
-                       QgsProject, QgsProperty, QgsSettings, QgsSimpleMarkerSymbolLayer, QgsSymbolLayer,
+                       QgsProject, QgsProperty, QgsRectangle, QgsSettings, QgsSimpleMarkerSymbolLayer, QgsSymbolLayer,
                        QgsVectorFileWriter, QgsVectorLayer)
 from qgis.PyQt.QtCore import QMetaType, Qt, QTimer, QUrl
 from qgis.PyQt.QtGui import QColor, QDesktopServices, QPixmap
-from qgis.PyQt.QtWidgets import (QComboBox, QDockWidget, QFileDialog, QFrame, QHBoxLayout, QLabel, QLineEdit,
-                                 QMessageBox, QPushButton, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget)
+from qgis.PyQt.QtWidgets import (QAbstractItemView, QComboBox, QDockWidget, QFileDialog, QFrame, QHBoxLayout,
+                                 QInputDialog, QLabel, QLineEdit, QMenu, QMessageBox, QPushButton, QTreeWidget,
+                                 QTreeWidgetItem, QVBoxLayout, QWidget)
 
 from ..i18n import lang, tr
 
@@ -25,7 +30,8 @@ FIELDS = (("photo_id", QMetaType.Type.QString), ("photo", QMetaType.Type.QString
           ("compass", QMetaType.Type.Double), ("heading", QMetaType.Type.Double),
           ("fix_age_s", QMetaType.Type.Double), ("device", QMetaType.Type.QString),
           ("avg_n", QMetaType.Type.Int), ("avg_sd_m", QMetaType.Type.Double),
-          ("level_id", QMetaType.Type.Int), ("unit_id", QMetaType.Type.QString))
+          ("level_id", QMetaType.Type.Int), ("unit_id", QMetaType.Type.QString),
+          ("surveyor", QMetaType.Type.QString), ("device_id", QMetaType.Type.QString))
 ROOM_URL = "https://hatemtarekgis.github.io/biruni-gis/r/"
 TEAM_LAYER = "field_team_track"
 TEAM_FIELDS = (("device", QMetaType.Type.QString), ("name", QMetaType.Type.QString),
@@ -55,6 +61,9 @@ def _gpkg_layer(path, layer, spec, title):
     uri = f"{path}|layername={layer}"
     for lyr in QgsProject.instance().mapLayers().values():
         if isinstance(lyr, QgsVectorLayer) and os.path.normcase(lyr.source()) == os.path.normcase(uri):
+            missing = [QgsField(n, t) for n, t in spec if lyr.fields().indexOf(n) < 0]
+            if missing and lyr.dataProvider().addAttributes(missing):
+                lyr.updateFields()
             return lyr, False
     lyr = QgsVectorLayer(uri, title, "ogr") if os.path.exists(path) else None
     if lyr is None or not lyr.isValid():
@@ -114,10 +123,27 @@ def form_columns(lyr, form, records=()):
                 "allow_null": True}))
 
 
+def _backfill_unknown_surveyor(lyr):
+    """Old photos that had no surveyor name keep all their data and get 'Unknown' in surveyor."""
+    s_idx = lyr.fields().indexOf("surveyor")
+    if s_idx < 0:
+        return
+    sub = lyr.subsetString()
+    if sub:
+        lyr.setSubsetString("")
+    unk = tr("Unknown")
+    updates = {f.id(): {s_idx: unk} for f in lyr.getFeatures() if not f["surveyor"]}
+    if updates:
+        lyr.dataProvider().changeAttributeValues(updates)
+    if sub:
+        lyr.setSubsetString(sub)
+
+
 def open_layer(folder, add=True):
     """The photos layer of this folder (created when missing), added to the project once."""
     os.makedirs(folder, exist_ok=True)
     lyr, new = _gpkg_layer(os.path.join(folder, GPKG), LAYER, FIELDS, tr("Field photos"))
+    _backfill_unknown_surveyor(lyr)
     if not new:
         return lyr
     style_layer(lyr)
@@ -153,39 +179,72 @@ def style_layer(lyr):
 
 
 def add_records(lyr, records):
-    """Add the records whose photo_id is not in the layer yet; returns the features added."""
-    have = {f["photo_id"] for f in lyr.getFeatures()} if records else set()
-    feats = []
-    for r in records:
-        if r["id"] in have:
-            continue
-        f = QgsFeature(lyr.fields())
-        f.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(r["lon"], r["lat"])))
-        for name, value in (("photo_id", r["id"]), ("photo", r["photo"]), ("taken", r.get("taken")),
-                            ("kind", r.get("kind") or None), ("note", r.get("note") or None),
-                            ("accuracy_m", r.get("acc")), ("altitude", r.get("alt")),
-                            ("compass", r.get("compass")), ("heading", r.get("heading")),
-                            ("fix_age_s", r.get("fix_age")), ("device", r.get("device") or None),
-                            ("avg_n", r.get("avg_n")), ("avg_sd_m", r.get("avg_sd")),
-                            ("level_id", r.get("level")), ("unit_id", r.get("unit") or None)):
-            f[name] = value
-        for name, value in (r.get("fields") or {}).items():
-            if f.fields().indexOf(name) >= 0:
-                f[name] = value
-        feats.append(f)
-        have.add(r["id"])
-    if feats:
-        # straight to the file: not part of an edit session, nothing to save, safe from power cuts
-        ok, added = lyr.dataProvider().addFeatures(feats)
-        if not ok:
-            raise OSError(lyr.dataProvider().lastError() or "write failed")
-        lyr.updateExtents()
-        lyr.triggerRepaint()
-        from .. import team
+    """Add the records whose photo_id is not in the layer yet (and update the file path when an original replaces a
+    preview); returns the features added."""
+    if not records:
+        return []
+    sub = lyr.subsetString()
+    if sub:
+        lyr.setSubsetString("")
+    try:
+        existing = {f["photo_id"]: f for f in lyr.getFeatures()}
+        have = set(existing)
+        feats = []
+        p_idx = lyr.fields().indexOf("photo")
+        s_idx = lyr.fields().indexOf("surveyor")
+        d_idx = lyr.fields().indexOf("device_id")
+        updates = {}
+        for r in records:
+            surveyor = r.get("surveyor") or r.get("by") or tr("Unknown")
+            dev_id = r.get("device_id") or None
+            if r["id"] in have:
+                old_f = existing.get(r["id"])
+                if old_f is not None:
+                    chg = {}
+                    if p_idx >= 0 and old_f["photo"] != r["photo"]:
+                        chg[p_idx] = r["photo"]
+                    if s_idx >= 0 and surveyor and old_f["surveyor"] != surveyor:
+                        chg[s_idx] = surveyor
+                    if d_idx >= 0 and dev_id and old_f["device_id"] != dev_id:
+                        chg[d_idx] = dev_id
+                    if chg:
+                        updates[old_f.id()] = chg
+                continue
+            f = QgsFeature(lyr.fields())
+            f.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(r["lon"], r["lat"])))
+            for name, value in (("photo_id", r["id"]), ("photo", r["photo"]), ("taken", r.get("taken")),
+                                ("kind", r.get("kind") or None), ("note", r.get("note") or None),
+                                ("accuracy_m", r.get("acc")), ("altitude", r.get("alt")),
+                                ("compass", r.get("compass")), ("heading", r.get("heading")),
+                                ("fix_age_s", r.get("fix_age")), ("device", r.get("device") or None),
+                                ("avg_n", r.get("avg_n")), ("avg_sd_m", r.get("avg_sd")),
+                                ("level_id", r.get("level")), ("unit_id", r.get("unit") or None),
+                                ("surveyor", surveyor), ("device_id", dev_id)):
+                if f.fields().indexOf(name) >= 0:
+                    f[name] = value
+            for name, value in (r.get("fields") or {}).items():
+                if f.fields().indexOf(name) >= 0:
+                    f[name] = value
+            feats.append(f)
+            have.add(r["id"])
+        if updates:
+            lyr.dataProvider().changeAttributeValues(updates)
+            lyr.triggerRepaint()
+        if feats:
+            # straight to the file: not part of an edit session, nothing to save, safe from power cuts
+            ok, added = lyr.dataProvider().addFeatures(feats)
+            if not ok:
+                raise OSError(lyr.dataProvider().lastError() or "write failed")
+            lyr.updateExtents()
+            lyr.triggerRepaint()
+            from .. import team
 
-        team.notify_added(lyr, added)  # a layer shared in a team room: the others get the phone's points too
-        return added
-    return []
+            team.notify_added(lyr, added)  # a layer shared in a team room: the others get the phone's points too
+            return added
+        return []
+    finally:
+        if sub:
+            lyr.setSubsetString(sub)
 
 
 # ---- the team: where each phone is (live), and the way it went (kept) ------------------------------
@@ -369,6 +428,201 @@ def _battery_text(p):
     return "{n}%".format(n=round(p["bat"] * 100)) + (" ⚡" if p.get("chg") else "")
 
 
+def _route_text(route):
+    return {
+        "direct": tr("Direct"),
+        "relay": tr("Relay"),
+        "peer": tr("Teammate"),
+        "lan": tr("Local network"),
+        "tunnel": tr("Tunnel"),
+    }.get(route or "", "—")
+
+
+def _local_day(iso_str):
+    if not iso_str:
+        return ""
+    try:
+        return dt.datetime.fromisoformat(str(iso_str)).astimezone().strftime("%Y-%m-%d")
+    except ValueError:
+        return str(iso_str)[:10]
+
+
+def _local_time_str(iso_str):
+    if not iso_str:
+        return "—"
+    try:
+        d = dt.datetime.fromisoformat(str(iso_str)).astimezone()
+        today = dt.datetime.now().astimezone().strftime("%Y-%m-%d")
+        return d.strftime("%H:%M:%S") if d.strftime("%Y-%m-%d") == today else d.strftime("%Y-%m-%d %H:%M")
+    except ValueError:
+        return str(iso_str).replace("T", " ")[:19]
+
+
+def daily_report_data(records, day=None):
+    """Summary of the day's field photos per surveyor: today's count, first and last photo, waiting originals."""
+    day = day or dt.datetime.now().astimezone().strftime("%Y-%m-%d")
+    groups = {}
+    for r in records or ():
+        dev = r.get("device_id") or ""
+        name = r.get("surveyor") or r.get("by") or tr("Unknown")
+        key = dev if dev else f"name:{name}"
+        g = groups.setdefault(key, {
+            "key": key, "surveyor": name, "device_id": dev,
+            "today_count": 0, "total_count": 0, "waiting_originals": 0,
+            "first_photo": None, "last_photo": None, "accs": [], "waiting_ids": [],
+        })
+        if name and (g["surveyor"] == tr("Unknown") or dev):
+            g["surveyor"] = name
+        g["total_count"] += 1
+        if r.get("preview"):
+            g["waiting_originals"] += 1
+            g["waiting_ids"].append(r.get("id") or "")
+        if r.get("acc") is not None:
+            g["accs"].append(float(r["acc"]))
+        taken = r.get("taken") or ""
+        if _local_day(taken) == day or str(taken).startswith(day):
+            g["today_count"] += 1
+            if g["first_photo"] is None or taken < g["first_photo"]:
+                g["first_photo"] = taken
+            if g["last_photo"] is None or taken > g["last_photo"]:
+                g["last_photo"] = taken
+    rows = []
+    for g in sorted(groups.values(), key=lambda x: (-x["today_count"], -x["total_count"], x["surveyor"].lower())):
+        avg_acc = round(sum(g["accs"]) / len(g["accs"]), 1) if g["accs"] else None
+        rows.append({
+            "surveyor": g["surveyor"],
+            "device_id": g["device_id"],
+            "today_count": g["today_count"],
+            "total_count": g["total_count"],
+            "first_photo": _local_time_str(g["first_photo"]) if g["first_photo"] else "—",
+            "last_photo": _local_time_str(g["last_photo"]) if g["last_photo"] else "—",
+            "first_iso": g["first_photo"] or "",
+            "last_iso": g["last_photo"] or "",
+            "waiting_originals": g["waiting_originals"],
+            "waiting_ids": g["waiting_ids"],
+            "avg_accuracy_m": avg_acc,
+        })
+    return {
+        "day": day,
+        "surveyors": rows,
+        "total_today": sum(r["today_count"] for r in rows),
+        "total_all": sum(r["total_count"] for r in rows),
+        "waiting_originals": sum(r["waiting_originals"] for r in rows),
+    }
+
+
+def write_daily_report(path, records, day=None):
+    """Write the daily report as HTML or PDF; returns the report summary dict."""
+    rep = daily_report_data(records, day=day)
+    is_rtl = lang() in ("ar", "fa")
+    direction = "rtl" if is_rtl else "ltr"
+    title = tr("Field Photos Daily Report") + f" — {rep['day']}"
+    if path.lower().endswith(".pdf"):
+        from qgis.PyQt.QtCore import QMarginsF, QRectF
+        from qgis.PyQt.QtGui import QFont, QPageLayout, QPageSize, QPainter, QPdfWriter
+
+        pdf = QPdfWriter(path)
+        pdf.setPageLayout(QPageLayout(QPageSize(QPageSize.PageSizeId.A4), QPageLayout.Orientation.Portrait,
+                                      QMarginsF(12, 12, 12, 12), QPageLayout.Unit.Millimeter))
+        pdf.setResolution(300)
+        painter = QPainter(pdf)
+        mm = 300 / 25.4
+        page_w = (210 - 24) * mm
+        y = 4 * mm
+        font = QFont("Segoe UI")
+        font.setPixelSize(int(6 * mm))
+        font.setBold(True)
+        painter.setFont(font)
+        painter.setPen(QColor("#111111"))
+        painter.drawText(QRectF(0, y, page_w, 10 * mm),
+                         int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter), title)
+        y += 12 * mm
+        font.setPixelSize(int(3.6 * mm))
+        font.setBold(False)
+        painter.setFont(font)
+        summary = (tr("Photos today: {n}").format(n=rep["total_today"]) + " · "
+                   + tr("Total photos: {n}").format(n=rep["total_all"]) + " · "
+                   + tr("Waiting originals: {n}").format(n=rep["waiting_originals"]))
+        painter.drawText(QRectF(0, y, page_w, 7 * mm),
+                         int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter), summary)
+        y += 10 * mm
+        cols = [
+            (tr("Surveyor"), 0.24),
+            (tr("Device ID"), 0.18),
+            (tr("Today"), 0.10),
+            (tr("Total"), 0.10),
+            (tr("First photo"), 0.14),
+            (tr("Last photo"), 0.14),
+            (tr("Waiting originals"), 0.10),
+        ]
+        font.setBold(True)
+        painter.setFont(font)
+        x = 0.0
+        for label, frac in cols:
+            w = page_w * frac
+            painter.drawRect(QRectF(x, y, w, 8 * mm))
+            painter.drawText(QRectF(x + 1.5 * mm, y, w - 3 * mm, 8 * mm),
+                             int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter), label)
+            x += w
+        y += 8 * mm
+        font.setBold(False)
+        painter.setFont(font)
+        for r in rep["surveyors"]:
+            if y > (297 - 36) * mm:
+                pdf.newPage()
+                y = 4 * mm
+            vals = [
+                r["surveyor"],
+                r["device_id"] or "—",
+                str(r["today_count"]),
+                str(r["total_count"]),
+                r["first_photo"],
+                r["last_photo"],
+                str(r["waiting_originals"]),
+            ]
+            x = 0.0
+            for val, (_label, frac) in zip(vals, cols):
+                w = page_w * frac
+                painter.drawRect(QRectF(x, y, w, 7.5 * mm))
+                painter.drawText(QRectF(x + 1.5 * mm, y, w - 3 * mm, 7.5 * mm),
+                                 int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter), str(val))
+                x += w
+            y += 7.5 * mm
+        painter.end()
+        return rep
+    esc = html_mod.escape
+    trs = []
+    for r in rep["surveyors"]:
+        acc_txt = f"± {r['avg_accuracy_m']:.1f} m" if r["avg_accuracy_m"] is not None else "—"
+        trs.append(
+            f"<tr><td><b>{esc(r['surveyor'])}</b></td><td><code>{esc(r['device_id'] or '—')}</code></td>"
+            f"<td>{r['today_count']}</td><td>{r['total_count']}</td><td>{esc(r['first_photo'])}</td>"
+            f"<td>{esc(r['last_photo'])}</td><td>{r['waiting_originals']}</td><td>{esc(acc_txt)}</td></tr>"
+        )
+    doc = f"""<!doctype html><html lang="{esc(lang())}" dir="{direction}"><head><meta charset="utf-8">
+<title>{esc(title)}</title>
+<style>
+body{{font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans Arabic",Tahoma,sans-serif;margin:28px;color:#14181D;background:#F4F6F8}}
+.card{{background:#fff;border:1px solid #E1E6EB;border-radius:14px;padding:20px;max-width:960px;margin:0 auto}}
+h1{{margin:0 0 8px;font-size:22px}}
+.meta{{color:#5F6B76;margin-bottom:16px;font-weight:600}}
+table{{width:100%;border-collapse:collapse;margin-top:10px}}
+th,td{{border:1px solid #E1E6EB;padding:9px 11px;text-align:start}}
+th{{background:#F4F6F8;font-weight:700}}
+code{{font-size:13px;color:#5F6B76}}
+</style></head><body><div class="card">
+<h1>{esc(title)}</h1>
+<div class="meta">{esc(tr("Photos today: {n}").format(n=rep["total_today"]))} · {esc(tr("Total photos: {n}").format(n=rep["total_all"]))} · {esc(tr("Waiting originals: {n}").format(n=rep["waiting_originals"]))}</div>
+<table><thead><tr>
+<th>{esc(tr("Surveyor"))}</th><th>{esc(tr("Device ID"))}</th><th>{esc(tr("Today"))}</th><th>{esc(tr("Total"))}</th>
+<th>{esc(tr("First photo"))}</th><th>{esc(tr("Last photo"))}</th><th>{esc(tr("Waiting originals"))}</th><th>{esc(tr("Accuracy"))}</th>
+</tr></thead><tbody>{"".join(trs)}</tbody></table>
+</div></body></html>"""
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(doc)
+    return rep
+
+
 # ---- the guide: features the phones are led to --------------------------------------------------------
 def guide_items(layer, features, limit=MAX_GUIDE_FEATURES):
     """Features of a layer as the guide's items (lon/lat), named by the layer's display name."""
@@ -530,6 +784,9 @@ class FieldPhotosDock(QDockWidget):
         self._downloading = None
         self._own = None  # (token, host) of the user's own tunnel while it is used
         self.team = {}  # device -> its last position message and when it came (the team list)
+        self._photo_records = {}  # photo_id -> record (for surveyor stats in the table)
+        self._active_surveyor_filter = None
+        self._active_today_filter = False
         self.team_live = self.team_track = None
         self._last_photo = None
         self._poll = QTimer(self)
@@ -658,13 +915,44 @@ class FieldPhotosDock(QDockWidget):
         tv.addWidget(self.team_info)
         self.team_list = QTreeWidget()
         self.team_list.setRootIsDecorated(False)
-        self.team_list.setHeaderLabels([tr("Name"), tr("State"), tr("Network"), tr("Link"), tr("Location"),
-                                        tr("Battery")])
+        self.team_list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.team_list.setHeaderLabels([
+            tr("Name"), tr("State"), tr("Network"), tr("Link"), tr("Location"),
+            tr("Battery"), tr("Route"), tr("Today"), tr("Total"),
+            tr("Waiting originals"), tr("Last seen"),
+        ])
         self.team_list.setToolTip(tr("Double-click a phone to see it on the map."))
         self.team_list.itemDoubleClicked.connect(self._go_to_phone)
-        self.team_list.setMaximumHeight(170)
+        self.team_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.team_list.customContextMenuRequested.connect(self._team_menu)
+        self.team_list.setMaximumHeight(190)
         self.team_list.hide()
         tv.addWidget(self.team_list)
+        srow1 = QHBoxLayout()
+        self.filter_surveyor_btn = QPushButton(tr("Show only their photos"))
+        self.filter_surveyor_btn.clicked.connect(self._filter_selected_surveyor)
+        self.show_all_btn = QPushButton(tr("Show all"))
+        self.show_all_btn.clicked.connect(self.show_all_photos)
+        self.zoom_surveyor_btn = QPushButton(tr("Zoom to their work"))
+        self.zoom_surveyor_btn.clicked.connect(self._zoom_selected_surveyor)
+        self.today_btn = QPushButton(tr("Today's work"))
+        self.today_btn.setCheckable(True)
+        self.today_btn.clicked.connect(self._toggle_today_filter)
+        for b in (self.filter_surveyor_btn, self.show_all_btn, self.zoom_surveyor_btn, self.today_btn):
+            srow1.addWidget(b)
+        tv.addLayout(srow1)
+        srow2 = QHBoxLayout()
+        self.export_surveyor_btn = QPushButton(tr("Export their work…"))
+        self.export_surveyor_btn.clicked.connect(self._export_selected_surveyor)
+        self.unify_name_btn = QPushButton(tr("Unify name…"))
+        self.unify_name_btn.clicked.connect(self._unify_selected_surveyor)
+        self.block_dev_btn = QPushButton(tr("Block device…"))
+        self.block_dev_btn.clicked.connect(self._block_selected_device)
+        self.report_btn = QPushButton(tr("Daily report…"))
+        self.report_btn.clicked.connect(self._save_daily_report_dialog)
+        for b in (self.export_surveyor_btn, self.unify_name_btn, self.block_dev_btn, self.report_btn):
+            srow2.addWidget(b)
+        tv.addLayout(srow2)
         self._team_tick = QTimer(self)
         self._team_tick.setInterval(5000)
         self._team_tick.timeout.connect(self._show_team)
@@ -830,6 +1118,7 @@ class FieldPhotosDock(QDockWidget):
         try:
             self.layer = open_layer(folder)
             records = read_log(folder)
+            self._photo_records = {r["id"]: r for r in records}
             form_columns(self.layer, form, records)
             add_records(self.layer, records)  # photos saved while the map was not updated
         except OSError as e:
@@ -936,6 +1225,7 @@ class FieldPhotosDock(QDockWidget):
         self.url.clear()
         self.start_btn.setText(tr("Start"))
         self.team = {}
+        self._photo_records = {}
         self._team_tick.stop()
         self._show_team()
         self.mode.setEnabled(True)
@@ -1016,6 +1306,9 @@ class FieldPhotosDock(QDockWidget):
                 self._on_bridge(value)
             elif kind == "pos":
                 self._on_pos(value)
+            elif kind == "rejected":
+                self.state.setText(tr("Refused a photo from blocked device {d} ({r}).").format(
+                    d=value.get("device_id", ""), r=value.get("reason", "")))
         if photos:
             self._on_photos(photos)
 
@@ -1028,11 +1321,13 @@ class FieldPhotosDock(QDockWidget):
             elif not self._relays_up:
                 self.state.setText(tr("Connecting to the relays…"))
         elif t == "phone":
-            self.state.setText(tr("A phone is connected through a teammate's phone.") if ev.get("via")
+            self.state.setText(tr("A phone is connected through the relays (previews now, originals on Wi-Fi).")
+                               if ev.get("relay") else
+                               tr("A phone is connected through a teammate's phone.") if ev.get("via")
                                else tr("A phone is connected directly."))
         elif t == "p2pfail":
-            self.state.setText(tr("A phone's network did not allow a direct link. It keeps its photos; on that "
-                                  "network use \"Phone anywhere (over the internet)\"."))
+            self.state.setText(tr("A phone's network blocked a direct link: receiving encrypted previews over the "
+                                  "relays; full originals wait for Wi-Fi."))
 
     def _check_own(self, url):
         """Your own tunnel works only when its address leads here: try it once from this computer."""
@@ -1089,25 +1384,127 @@ class FieldPhotosDock(QDockWidget):
     # a phone sends its position at least every 30 s while its page is open (and sharing its place is on)
     LOST_AFTER = 75
 
-    def _show_team(self):
-        """The team list: who is connected, over Wi-Fi or mobile data, how good the link is, the battery."""
+    def _active_folder(self):
+        if self.server is not None and hasattr(self.server, "store"):
+            return self.server.store.folder
+        return self._folder()
+
+    def _all_photo_records(self, from_disk=False):
+        from .server import read_log
+
+        if self.server is not None and hasattr(self.server.store, "records"):
+            return list(self.server.store.records.values())
+        if self._photo_records and not from_disk:
+            return list(self._photo_records.values())
+        if from_disk or self._live_layer() is not None:
+            recs = read_log(self._active_folder())
+            if recs:
+                return recs
+        return []
+
+    def _surveyor_rows(self, include_disk=False):
+        from .server import read_blocked
+
         now = time.time()
-        rows = sorted(self.team.items(), key=lambda kv: (kv[1]["pos"].get("name") or "~").lower())
-        on = sum(1 for _d, x in rows if now - x["at"] < self.LOST_AFTER)
+        today = dt.datetime.now().astimezone().strftime("%Y-%m-%d")
+        blocked = read_blocked(self._active_folder()) if (self.team or self._photo_records or include_disk) else {}
+        groups = {}
+        for dev, x in self.team.items():
+            p = x["pos"]
+            groups[dev] = {
+                "key": dev, "device_id": dev,
+                "name": p.get("name") or tr("(no name)"),
+                "names": {p["name"]} if p.get("name") else set(),
+                "pos": p, "at": x["at"],
+                "route": p.get("route") or "",
+                "today_count": 0, "total_count": 0, "waiting_originals": 0,
+                "accs": [], "last_photo": "",
+                "blocked": dev in blocked,
+            }
+        recs = self._all_photo_records(from_disk=include_disk) if (self._photo_records or include_disk) else []
+        for r in recs:
+            dev = r.get("device_id") or ""
+            s_name = r.get("surveyor") or r.get("by") or tr("Unknown")
+            key = dev if dev else f"name:{s_name}"
+            g = groups.get(key)
+            if g is None:
+                g = groups[key] = {
+                    "key": key, "device_id": dev,
+                    "name": s_name, "names": set(),
+                    "pos": {}, "at": None, "route": "",
+                    "today_count": 0, "total_count": 0, "waiting_originals": 0,
+                    "accs": [], "last_photo": "",
+                    "blocked": bool(dev and dev in blocked),
+                }
+            if s_name:
+                g["names"].add(s_name)
+                if g["name"] in (tr("(no name)"), tr("Unknown")) or dev:
+                    g["name"] = s_name
+            g["total_count"] += 1
+            if r.get("preview"):
+                g["waiting_originals"] += 1
+            if r.get("acc") is not None:
+                g["accs"].append(float(r["acc"]))
+            taken = r.get("taken") or ""
+            if _local_day(taken) == today or str(taken).startswith(today):
+                g["today_count"] += 1
+            if taken > g["last_photo"]:
+                g["last_photo"] = taken
+            if not g["route"] and r.get("route"):
+                g["route"] = r["route"]
+            elif not g["route"] and r.get("preview"):
+                g["route"] = "relay"
+        out = []
+        for g in sorted(groups.values(), key=lambda x: (x["name"] or "~").lower()):
+            g["avg_acc"] = (sum(g["accs"]) / len(g["accs"])) if g["accs"] else g["pos"].get("acc")
+            g["connected"] = bool(g["at"] is not None and (now - g["at"] < self.LOST_AFTER) and not g["blocked"])
+            out.append(g)
+        return out
+
+    def _show_team(self, include_disk=False):
+        """The surveyors table: name, state, network, link, average accuracy, battery, route, today/total/preview counts, last seen."""
+        now = time.time()
+        rows = self._surveyor_rows(include_disk=include_disk)
+        on = sum(1 for r in rows if r["connected"])
         if not rows:
             self.team_info.setText(tr("Field team: no phone yet"))
         else:
             self.team_info.setText(tr("Field team: {n} phones, {k} connected now").format(n=len(rows), k=on))
         self.team_list.setVisible(bool(rows))
         self.team_list.clear()
-        for dev, x in rows:
-            p, ago = x["pos"], now - x["at"]
-            it = QTreeWidgetItem([p.get("name") or tr("(no name)"), _state_text(ago, self.LOST_AFTER),
-                                  _net_text(p), _link_text(p), "± {m} m".format(m=round(p["acc"])) if p.get("acc")
-                                  is not None else "—", _battery_text(p)])
-            it.setData(0, Qt.ItemDataRole.UserRole, dev)
+        for r in rows:
+            p = r["pos"]
+            ago = (now - r["at"]) if r["at"] is not None else None
+            if r["blocked"]:
+                st_txt = tr("Blocked")
+            elif ago is not None:
+                st_txt = _state_text(ago, self.LOST_AFTER)
+            else:
+                st_txt = tr("Offline")
+            if r["at"] is not None:
+                seen_iso = dt.datetime.fromtimestamp(r["at"], dt.timezone.utc).isoformat(timespec="seconds")
+                if r["last_photo"] and r["last_photo"] > seen_iso:
+                    seen_iso = r["last_photo"]
+            else:
+                seen_iso = r["last_photo"]
+            acc_txt = "± {m} m".format(m=round(r["avg_acc"])) if r["avg_acc"] is not None else "—"
+            it = QTreeWidgetItem([
+                r["name"],
+                st_txt,
+                _net_text(p),
+                _link_text(p),
+                acc_txt,
+                _battery_text(p),
+                _route_text(r["route"]),
+                str(r["today_count"]),
+                str(r["total_count"]),
+                str(r["waiting_originals"]),
+                _local_time_str(seen_iso),
+            ])
+            it.setData(0, Qt.ItemDataRole.UserRole, r["key"])
+            it.setData(0, Qt.ItemDataRole.UserRole + 1, r)
             it.setToolTip(3, _link_tip(p))
-            if ago >= self.LOST_AFTER:
+            if not r["connected"]:
                 for c in range(it.columnCount()):
                     it.setForeground(c, QColor("#8A8F98"))
             self.team_list.addTopLevelItem(it)
@@ -1115,8 +1512,10 @@ class FieldPhotosDock(QDockWidget):
             self.team_list.resizeColumnToContents(c)
 
     def _go_to_phone(self, item, _col):
-        x = self.team.get(item.data(0, Qt.ItemDataRole.UserRole))
+        key = item.data(0, Qt.ItemDataRole.UserRole)
+        x = self.team.get(key)
         if x is None:
+            self.zoom_to_surveyor(key)
             return
         canvas = self.iface.mapCanvas()
         pt = QgsCoordinateTransform(QgsCoordinateReferenceSystem("EPSG:4326"), canvas.mapSettings().destinationCrs(),
@@ -1126,6 +1525,378 @@ class FieldPhotosDock(QDockWidget):
         if self.team_live is not None:
             canvas.flashGeometries([QgsGeometry.fromPointXY(QgsPointXY(x["pos"]["lon"], x["pos"]["lat"]))],
                                    QgsCoordinateReferenceSystem("EPSG:4326"))
+
+    def _selected_surveyors(self):
+        out = []
+        for it in self.team_list.selectedItems():
+            r = it.data(0, Qt.ItemDataRole.UserRole + 1)
+            if isinstance(r, dict):
+                out.append(r)
+        if not out and self.team_list.currentItem() is not None:
+            r = self.team_list.currentItem().data(0, Qt.ItemDataRole.UserRole + 1)
+            if isinstance(r, dict):
+                out.append(r)
+        return out
+
+    def _resolve_target(self, target):
+        """Return (device_id, surveyor_name, names_set) for a key, name, device_id or row dict."""
+        if isinstance(target, dict):
+            return (target.get("device_id") or "", target.get("name") or target.get("surveyor") or "",
+                    set(target.get("names") or ()))
+        s = str(target or "").strip()
+        if not s:
+            return "", "", set()
+        if s.startswith("name:"):
+            return "", s[5:], {s[5:]}
+        for r in self._surveyor_rows(include_disk=True):
+            if r["key"] == s or r["device_id"] == s or r["name"] == s or s in r["names"]:
+                return r["device_id"], r["name"], set(r["names"]) | ({r["name"]} if r["name"] else set())
+        return s, s, {s}
+
+    def _apply_layer_filter(self):
+        lyr = self._live_layer()
+        if lyr is None:
+            return ""
+        q = lambda v: "'" + str(v).replace("'", "''") + "'"
+        clauses = []
+        if self._active_surveyor_filter:
+            dev_id, s_name, names = self._resolve_target(self._active_surveyor_filter)
+            parts = []
+            if dev_id:
+                parts.append(f'"device_id" = {q(dev_id)}')
+            for n in sorted(names | ({s_name} if s_name else set())):
+                if n:
+                    parts.append(f'"surveyor" = {q(n)}')
+            if parts:
+                clauses.append("(" + " OR ".join(parts) + ")")
+        if self._active_today_filter:
+            now_local = dt.datetime.now().astimezone()
+            start_utc = now_local.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(
+                dt.timezone.utc).isoformat(timespec="seconds")
+            end_utc = now_local.replace(hour=23, minute=59, second=59, microsecond=0).astimezone(
+                dt.timezone.utc).isoformat(timespec="seconds")
+            day_str = now_local.strftime("%Y-%m-%d")
+            clauses.append(
+                f'(("taken" >= {q(start_utc)} AND "taken" <= {q(end_utc)}) OR "taken" LIKE {q(day_str + "%")})'
+            )
+        expr = " AND ".join(clauses)
+        lyr.setSubsetString(expr)
+        lyr.triggerRepaint()
+        self.iface.mapCanvas().refresh()
+        return expr
+
+    def filter_by_surveyor(self, surveyor_or_dev, only_today=None):
+        """Show only one surveyor's photos on the map and layer (display filter only; nothing is deleted)."""
+        self._active_surveyor_filter = surveyor_or_dev
+        if only_today is not None:
+            self._active_today_filter = bool(only_today)
+            self.today_btn.setChecked(self._active_today_filter)
+        return self._apply_layer_filter()
+
+    def filter_today(self, only_today=True, surveyor_or_dev=False):
+        """Filter the layer to today's photos (for one surveyor or for all)."""
+        self._active_today_filter = bool(only_today)
+        self.today_btn.setChecked(self._active_today_filter)
+        if surveyor_or_dev is not False:
+            self._active_surveyor_filter = surveyor_or_dev
+        return self._apply_layer_filter()
+
+    def show_all_photos(self):
+        """Clear surveyor and date filters so all photos are shown again."""
+        self._active_surveyor_filter = None
+        self._active_today_filter = False
+        self.today_btn.setChecked(False)
+        return self._apply_layer_filter()
+
+    def zoom_to_surveyor(self, surveyor_or_dev=None):
+        """Zoom the map canvas to the selected surveyor's photos."""
+        lyr = self._live_layer()
+        if lyr is None:
+            return None
+        dev_id, s_name, names = self._resolve_target(surveyor_or_dev)
+        sub = lyr.subsetString()
+        if sub:
+            lyr.setSubsetString("")
+        try:
+            pts = []
+            for f in lyr.getFeatures():
+                if ((dev_id and f["device_id"] == dev_id)
+                        or (s_name and f["surveyor"] == s_name)
+                        or (f["surveyor"] in names)):
+                    if not f.geometry().isEmpty():
+                        pts.append(f.geometry().asPoint())
+        finally:
+            if sub:
+                lyr.setSubsetString(sub)
+        if not pts:
+            return None
+        xs = [p.x() for p in pts]
+        ys = [p.y() for p in pts]
+        rect = QgsRectangle(min(xs), min(ys), max(xs), max(ys))
+        if rect.width() < 0.0005 or rect.height() < 0.0005:
+            rect.grow(0.001)
+        else:
+            rect.scale(1.25)
+        canvas = self.iface.mapCanvas()
+        xf = QgsCoordinateTransform(WGS84, canvas.mapSettings().destinationCrs(), QgsProject.instance())
+        try:
+            rect = xf.transformBoundingBox(rect)
+        except Exception:  # noqa: BLE001
+            pass
+        canvas.setExtent(rect)
+        canvas.refresh()
+        return rect
+
+    def export_surveyor_work(self, surveyor_or_dev, out_path):
+        """Export a surveyor's photos and attribute table (GeoPackage or CSV/Excel) with a folder of their photos."""
+        lyr = self._live_layer()
+        if lyr is None:
+            lyr = open_layer(self._active_folder(), add=False)
+        dev_id, s_name, names = self._resolve_target(surveyor_or_dev)
+        sub = lyr.subsetString()
+        if sub:
+            lyr.setSubsetString("")
+        try:
+            feats = [
+                f for f in lyr.getFeatures()
+                if (dev_id and f["device_id"] == dev_id)
+                or (s_name and f["surveyor"] == s_name)
+                or (f["surveyor"] in names)
+            ]
+            fields = lyr.fields()
+        finally:
+            if sub:
+                lyr.setSubsetString(sub)
+        os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
+        stem = os.path.splitext(os.path.basename(out_path))[0]
+        photos_dir = os.path.join(os.path.dirname(os.path.abspath(out_path)), f"{stem}_photos")
+        os.makedirs(photos_dir, exist_ok=True)
+        copied_feats = []
+        for f in feats:
+            nf = QgsFeature(fields)
+            nf.setGeometry(f.geometry())
+            nf.setAttributes(f.attributes())
+            src = f["photo"] or ""
+            if src and os.path.isfile(src):
+                dst = os.path.join(photos_dir, os.path.basename(src))
+                if os.path.abspath(src) != os.path.abspath(dst):
+                    shutil.copy2(src, dst)
+                nf["photo"] = dst
+            copied_feats.append(nf)
+        ext = os.path.splitext(out_path)[1].lower()
+        if ext == ".gpkg":
+            opts = QgsVectorFileWriter.SaveVectorOptions()
+            opts.driverName = "GPKG"
+            opts.layerName = LAYER
+            w = QgsVectorFileWriter.create(out_path, fields, Qgis.WkbType.Point, WGS84,
+                                           QgsProject.instance().transformContext(), opts)
+            w.addFeatures(copied_feats)
+            del w
+        elif ext == ".xlsx":
+            opts = QgsVectorFileWriter.SaveVectorOptions()
+            opts.driverName = "XLSX"
+            opts.layerName = LAYER
+            w = QgsVectorFileWriter.create(out_path, fields, Qgis.WkbType.Point, WGS84,
+                                           QgsProject.instance().transformContext(), opts)
+            if w.hasError() == QgsVectorFileWriter.WriterError.NoError:
+                w.addFeatures(copied_feats)
+                del w
+            else:
+                del w
+                self._write_csv_export(out_path, fields, copied_feats)
+        else:
+            self._write_csv_export(out_path, fields, copied_feats)
+        return {"path": out_path, "photos_dir": photos_dir, "count": len(copied_feats)}
+
+    def _write_csv_export(self, out_path, fields, feats):
+        names = [fields.at(i).name() for i in range(fields.count())]
+        with open(out_path, "w", encoding="utf-8-sig", newline="") as f:
+            w = csv.writer(f)
+            w.writerow(["lon", "lat"] + names)
+            for feat in feats:
+                pt = feat.geometry().asPoint() if not feat.geometry().isEmpty() else QgsPointXY(0, 0)
+                w.writerow([pt.x(), pt.y()] + [feat[n] if feat[n] is not None else "" for n in names])
+
+    def unify_surveyor_name(self, new_name, device_id=None, old_names=()):
+        """Unify surveyor name across the GeoPackage layer, photos.jsonl, and the live team table."""
+        from .server import PhotoStore
+
+        new_name = str(new_name or "").strip()[:40]
+        if not new_name:
+            return 0
+        old_set = {str(x).strip()[:40] for x in (old_names or ()) if str(x).strip()}
+        if self.server is not None and hasattr(self.server.store, "unify_name"):
+            self.server.store.unify_name(new_name, device_id=device_id, old_names=old_set)
+        else:
+            PhotoStore(self._active_folder(), self.form()).unify_name(new_name, device_id=device_id, old_names=old_set)
+        for r in self._photo_records.values():
+            if (device_id and r.get("device_id") == device_id) or (
+                old_set and (r.get("surveyor") in old_set or r.get("by") in old_set)
+            ):
+                r["surveyor"] = new_name
+                r["by"] = new_name
+        if device_id and device_id in self.team:
+            self.team[device_id]["pos"]["name"] = new_name
+        for x in self.team.values():
+            if x["pos"].get("name") in old_set:
+                x["pos"]["name"] = new_name
+        lyr = self._live_layer()
+        changed = 0
+        if lyr is not None:
+            s_idx = lyr.fields().indexOf("surveyor")
+            if s_idx >= 0:
+                sub = lyr.subsetString()
+                if sub:
+                    lyr.setSubsetString("")
+                try:
+                    updates = {}
+                    for f in lyr.getFeatures():
+                        if (device_id and f["device_id"] == device_id) or (old_set and f["surveyor"] in old_set):
+                            updates[f.id()] = {s_idx: new_name}
+                    if updates:
+                        lyr.dataProvider().changeAttributeValues(updates)
+                        lyr.triggerRepaint()
+                        changed = len(updates)
+                finally:
+                    if sub:
+                        lyr.setSubsetString(sub)
+        if self._active_surveyor_filter in old_set:
+            self._active_surveyor_filter = new_name
+            self._apply_layer_filter()
+        self._show_team(include_disk=True)
+        return changed
+
+    def block_device(self, device_id, reason="", name=""):
+        """Block a device_id so future photos from it are refused and logged; existing photos stay untouched."""
+        from .server import PhotoStore
+
+        device_id = str(device_id or "").strip()[:64]
+        if not device_id:
+            return
+        if self.server is not None and hasattr(self.server.store, "block_device"):
+            self.server.store.block_device(device_id, reason=reason, name=name)
+        else:
+            PhotoStore(self._active_folder(), self.form()).block_device(device_id, reason=reason, name=name)
+        self._show_team(include_disk=bool(self._photo_records))
+
+    def unblock_device(self, device_id):
+        from .server import PhotoStore
+
+        device_id = str(device_id or "").strip()[:64]
+        if not device_id:
+            return
+        if self.server is not None and hasattr(self.server.store, "unblock_device"):
+            self.server.store.unblock_device(device_id)
+        else:
+            PhotoStore(self._active_folder(), self.form()).unblock_device(device_id)
+        self._show_team(include_disk=bool(self._photo_records))
+
+    def save_daily_report(self, out_path, day=None):
+        """Write the daily report (HTML or PDF) for all photos in the folder."""
+        recs = self._all_photo_records(from_disk=True)
+        return write_daily_report(out_path, recs, day=day)
+
+    def _filter_selected_surveyor(self):
+        sel = self._selected_surveyors()
+        if not sel:
+            self.state.setText(tr("Select a surveyor in the list first."))
+            return
+        self.filter_by_surveyor(sel[0])
+        self.state.setText(tr("Showing only photos from {who}.").format(who=sel[0]["name"]))
+
+    def _zoom_selected_surveyor(self):
+        sel = self._selected_surveyors()
+        if not sel:
+            self.state.setText(tr("Select a surveyor in the list first."))
+            return
+        if self.zoom_to_surveyor(sel[0]) is None:
+            self.state.setText(tr("No photos on the map for {who}.").format(who=sel[0]["name"]))
+
+    def _toggle_today_filter(self, checked=False):
+        self.filter_today(bool(checked))
+
+    def _export_selected_surveyor(self):
+        sel = self._selected_surveyors()
+        if not sel:
+            self.state.setText(tr("Select a surveyor in the list first."))
+            return
+        who = sel[0]["name"]
+        safe = "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in who).strip("_") or "surveyor"
+        path, _ = QFileDialog.getSaveFileName(
+            self, tr("Export their work…"),
+            os.path.join(self._active_folder(), f"{safe}.gpkg"),
+            "GeoPackage (*.gpkg);;CSV / Excel (*.csv *.xlsx)",
+        )
+        if path:
+            res = self.export_surveyor_work(sel[0], path)
+            self.state.setText(tr("Exported {n} photos for {who}.").format(n=res["count"], who=who))
+
+    def _unify_selected_surveyor(self):
+        sel = self._selected_surveyors()
+        if not sel:
+            self.state.setText(tr("Select a surveyor in the list first."))
+            return
+        names = set()
+        dev_id = sel[0].get("device_id") or None
+        for r in sel:
+            names.update(r.get("names") or ())
+            if r.get("name"):
+                names.add(r["name"])
+        new_name, ok = QInputDialog.getText(self, tr("Unify name…"), tr("Unified surveyor name:"),
+                                            text=sel[0]["name"])
+        if ok and new_name.strip():
+            n = self.unify_surveyor_name(new_name.strip(), device_id=dev_id, old_names=names)
+            self.state.setText(tr("Unified name to {who} ({n} photos).").format(who=new_name.strip(), n=n))
+
+    def _block_selected_device(self):
+        sel = self._selected_surveyors()
+        if not sel or not sel[0].get("device_id"):
+            self.state.setText(tr("Select a surveyor with a device ID in the list first."))
+            return
+        r = sel[0]
+        if r.get("blocked"):
+            self.unblock_device(r["device_id"])
+            self.state.setText(tr("Device {d} is unblocked.").format(d=r["device_id"]))
+            return
+        reason, ok = QInputDialog.getText(self, tr("Block device…"),
+                                          tr("Reason for blocking {who}:").format(who=r["name"]),
+                                          text=tr("Lost phone or left the team"))
+        if ok:
+            self.block_device(r["device_id"], reason=reason.strip(), name=r["name"])
+            self.state.setText(tr("Blocked device {d} ({who}). Existing photos are kept.").format(
+                d=r["device_id"], who=r["name"]))
+
+    def _save_daily_report_dialog(self):
+        day = dt.datetime.now().astimezone().strftime("%Y-%m-%d")
+        path, _ = QFileDialog.getSaveFileName(
+            self, tr("Daily report…"),
+            os.path.join(self._active_folder(), f"daily_report_{day}.pdf"),
+            "PDF (*.pdf);;HTML (*.html)",
+        )
+        if path:
+            self.save_daily_report(path, day=day)
+            self.state.setText(tr("Daily report saved: {p}").format(p=path))
+            QDesktopServices.openUrl(QUrl.fromLocalFile(path))
+
+    def _team_menu(self, pos):
+        it = self.team_list.itemAt(pos)
+        if it is not None and not it.isSelected():
+            it.setSelected(True)
+        m = QMenu(self)
+        m.addAction(tr("Show only their photos"), self._filter_selected_surveyor)
+        m.addAction(tr("Show all"), self.show_all_photos)
+        m.addAction(tr("Zoom to their work"), self._zoom_selected_surveyor)
+        act_today = m.addAction(tr("Today's work"))
+        act_today.setCheckable(True)
+        act_today.setChecked(self._active_today_filter)
+        act_today.triggered.connect(self._toggle_today_filter)
+        m.addSeparator()
+        m.addAction(tr("Export their work…"), self._export_selected_surveyor)
+        m.addAction(tr("Unify name…"), self._unify_selected_surveyor)
+        m.addAction(tr("Block device…"), self._block_selected_device)
+        m.addSeparator()
+        m.addAction(tr("Daily report…"), self._save_daily_report_dialog)
+        m.exec(self.team_list.viewport().mapToGlobal(pos))
 
     def photo_to_place(self):
         """The selected photo of the photos layer, else the last one received."""
@@ -1248,7 +2019,27 @@ class FieldPhotosDock(QDockWidget):
         except OSError as e:
             self.state.setText(tr("Photo saved, but not added to the map ({e}). It is added next time.").format(e=e))
             return
-        self.received += len(records)
+        seen_ids = getattr(self, "_seen_photo_ids", None)
+        if seen_ids is None:
+            self._seen_photo_ids = seen_ids = set()
+        new_recs = [r for r in records if r["id"] not in seen_ids]
+        for r in new_recs:
+            seen_ids.add(r["id"])
+        for r in records:
+            if not r.get("route"):
+                r["route"] = ("relay" if r.get("preview")
+                              else {"local": "lan", "bridge": "direct", "internet": "tunnel", "own": "tunnel"}
+                              .get(self.mode.currentData(), ""))
+            self._photo_records[r["id"]] = r
+            dev = r.get("device_id") or ""
+            if dev and dev in self.team:
+                self.team[dev]["at"] = time.time()
+                if r.get("by"):
+                    self.team[dev]["pos"]["name"] = r["by"]
+                if not self.team[dev]["pos"].get("route") and r.get("route"):
+                    self.team[dev]["pos"]["route"] = r["route"]
+        self._show_team()
+        self.received += len(new_recs)
         self.count.setText(tr("Photos received: {n}").format(n=self.received))
         senders = sorted({r.get("by") or r.get("device") or tr("a phone") for r in records})
         self._notify(tr("{n} photos received from {who}.").format(n=len(records), who=", ".join(senders))
@@ -1260,8 +2051,9 @@ class FieldPhotosDock(QDockWidget):
             self.thumb.setPixmap(pm.scaled(280, 200, Qt.AspectRatioMode.KeepAspectRatio,
                                            Qt.TransformationMode.SmoothTransformation))
         acc = f" · ± {r['acc']:.0f} m" if r.get("acc") is not None else ""
+        prev_tag = (" · " + tr("preview")) if r.get("preview") else ""
         self.last_info.setText(" · ".join(x for x in (r.get("kind"), r.get("taken", "").replace("T", " ")[:19]) if x)
-                               + acc + (f"\n{r['note']}" if r.get("note") else "") + self._answers(r))
+                               + acc + prev_tag + (f"\n{r['note']}" if r.get("note") else "") + self._answers(r))
         canvas = self.iface.mapCanvas()
         xf = QgsCoordinateTransform(WGS84, canvas.mapSettings().destinationCrs(), QgsProject.instance())
         geoms = []

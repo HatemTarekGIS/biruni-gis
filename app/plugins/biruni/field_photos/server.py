@@ -23,13 +23,25 @@ import unicodedata
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlsplit
 
+from ..i18n import tr
 from ..local_server import ExclusiveServer
 
 PHOTO_PORT = 10112
 MAX_PHOTO = 40 * 1024 * 1024
 LOG_NAME = "photos.jsonl"
+BLOCKED_NAME = "blocked_devices.json"
+REJECTED_NAME = "rejected.jsonl"
 ID_RE = re.compile(r"^[A-Za-z0-9-]{8,64}$")
 TYPES = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/heic": "heic", "image/heif": "heif"}
+
+
+class BlockedDeviceError(PermissionError):
+    """Raised when a photo comes from a device_id that the computer has blocked."""
+
+    def __init__(self, device_id, reason=""):
+        super().__init__(reason or "device blocked")
+        self.device_id = device_id
+        self.reason = reason or "device blocked"
 
 
 def sniff(data):
@@ -70,16 +82,25 @@ def clean_meta(m, form=()):
         raise ValueError("no position")
     t = _num(m.get("t"), 0)
     when = dt.datetime.fromtimestamp(t / 1000, dt.timezone.utc) if t else dt.datetime.now(dt.timezone.utc)
+    by = _text(m.get("surveyor") or m.get("by"), 40)
+    dev_id = _text(m.get("device_id"), 64)
+    if dev_id and not DEV_RE.match(dev_id):
+        dev_id = ""
+    route = str(m.get("route") or "")
+    route = route if route in ("lan", "direct", "relay", "peer") else ("relay" if m.get("preview") else "")
     return {"id": m["id"], "lat": lat, "lon": lon, "acc": _num(m.get("acc"), 0),
             "alt": _num(m.get("alt")), "heading": _num(m.get("heading"), 0, 360),
             "compass": _num(m.get("compass"), 0, 360), "fix_age": _num(m.get("fix_age")),
             "taken": when.isoformat(timespec="seconds"), "kind": _text(m.get("kind"), 80),
-            "note": _text(m.get("note"), 500), "device": _text(m.get("device"), 80), "by": _text(m.get("by"), 40),
+            "note": _text(m.get("note"), 500), "device": _text(m.get("device"), 80), "by": by,
+            "surveyor": by or tr("Unknown"), "device_id": dev_id, "route": route,
             "fields": clean_values(form, m.get("f")),
             # a position averaged on the phone: readings kept and their spread in metres
             "avg_n": _num(m.get("avg_n"), 1, 100000), "avg_sd": _num(m.get("avg_sd"), 0, 10000),
             # inside a building: the level and the room whose code was scanned
-            "level": _int(m.get("level"), -20, 300), "unit": _text(m.get("unit"), 40)}
+            "level": _int(m.get("level"), -20, 300), "unit": _text(m.get("unit"), 40),
+            # relay fallback sends a small preview first; the original replaces it when a direct link opens
+            "preview": bool(m.get("preview"))}
 
 
 def _int(v, lo, hi):
@@ -87,7 +108,7 @@ def _int(v, lo, hi):
     return int(v) if v is not None and v == int(v) else None
 
 
-DEV_RE = re.compile(r"^[A-Za-z0-9-]{8,64}$")
+DEV_RE = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
 
 
 def clean_pos(m):
@@ -173,7 +194,8 @@ FIELD_TYPES = ("text", "number", "integer", "choice", "multi", "yesno", "date")
 MAX_FIELDS, MAX_CHOICES = 30, 50
 # columns the photos layer has already (dock.FIELDS) - a question never takes one of these names
 RESERVED = {"fid", "geom", "geometry", "photo_id", "photo", "taken", "kind", "note", "accuracy_m", "altitude",
-            "compass", "heading", "fix_age_s", "device"}
+            "compass", "heading", "fix_age_s", "device", "avg_n", "avg_sd_m", "level_id", "unit_id",
+            "surveyor", "device_id"}
 NAME_RE = re.compile(r"^[^\W\d]\w{0,29}$")
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
@@ -261,6 +283,44 @@ def clean_values(form, values):
     return out
 
 
+def read_blocked(folder):
+    """Blocked device_ids of the folder: {device_id: {"reason": str, "at": str, "name": str}}."""
+    try:
+        with open(os.path.join(folder, BLOCKED_NAME), encoding="utf-8") as f:
+            d = json.load(f)
+            return d if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def write_blocked(folder, blocked):
+    os.makedirs(folder, exist_ok=True)
+    path = os.path.join(folder, BLOCKED_NAME)
+    part = path + ".part"
+    with open(part, "w", encoding="utf-8") as f:
+        json.dump(blocked, f, ensure_ascii=False, indent=2)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(part, path)
+
+
+def read_rejected(folder):
+    """Every rejected photo attempt logged in rejected.jsonl."""
+    out = []
+    try:
+        with open(os.path.join(folder, REJECTED_NAME), encoding="utf-8") as f:
+            for line in f:
+                try:
+                    r = json.loads(line)
+                except ValueError:
+                    continue
+                if isinstance(r, dict) and r.get("device_id"):
+                    out.append(r)
+    except OSError:
+        pass
+    return out
+
+
 class PhotoStore:
     """The photo folder: one sub-folder per day, plus photos.jsonl (one line per photo)
     that lets the map layer be rebuilt if Biruni stops between the two writes."""
@@ -271,16 +331,121 @@ class PhotoStore:
         self.lock = threading.Lock()
         os.makedirs(folder, exist_ok=True)
         self.records = {r["id"]: r for r in read_log(folder)}
+        self.blocked = read_blocked(folder)
+
+    def block_device(self, device_id, reason="", name=""):
+        """Block a device_id so future photos from it are refused and logged; existing photos are kept."""
+        device_id = _text(device_id, 64)
+        if not device_id:
+            return
+        with self.lock:
+            self.blocked = read_blocked(self.folder)
+            self.blocked[device_id] = {
+                "reason": _text(reason, 200) or tr("Blocked by the computer"),
+                "name": _text(name, 40),
+                "at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
+            }
+            write_blocked(self.folder, self.blocked)
+
+    def unblock_device(self, device_id):
+        device_id = _text(device_id, 64)
+        with self.lock:
+            self.blocked = read_blocked(self.folder)
+            self.blocked.pop(device_id, None)
+            write_blocked(self.folder, self.blocked)
+
+    def is_blocked(self, device_id):
+        with self.lock:
+            self.blocked = read_blocked(self.folder)
+            return bool(device_id and device_id in self.blocked)
+
+    def unify_name(self, new_name, device_id=None, old_names=()):
+        """Unify surveyor name across matching records in memory and photos.jsonl."""
+        new_name = _text(new_name, 40)
+        if not new_name:
+            return 0
+        old_set = {_text(x, 40) for x in (old_names or ()) if _text(x, 40)}
+        changed = 0
+        with self.lock:
+            for r in self.records.values():
+                if (device_id and r.get("device_id") == device_id) or (
+                    old_set and (r.get("surveyor") in old_set or r.get("by") in old_set)
+                ):
+                    r["surveyor"] = new_name
+                    r["by"] = new_name
+                    changed += 1
+            if changed:
+                path = os.path.join(self.folder, LOG_NAME)
+                part = path + ".part"
+                with open(part, "w", encoding="utf-8") as f:
+                    for r in self.records.values():
+                        f.write(json.dumps(r, ensure_ascii=False) + "\n")
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.replace(part, path)
+        return changed
 
     def save(self, meta, data):
-        """(record, new) - the photo is on disk when this returns."""
+        """(record, new) - the photo is on disk when this returns.
+        When a preview arrived earlier over the relays and the full original arrives later with the same id,
+        the original replaces the preview file in the same record."""
         ext = sniff(data)
         if ext is None:
             raise ValueError("not a photo")
         rec = clean_meta(meta, self.form)
         with self.lock:
-            if rec["id"] in self.records:
-                return self.records[rec["id"]], False
+            self.blocked = read_blocked(self.folder)
+            dev_id = rec.get("device_id") or ""
+            if dev_id and dev_id in self.blocked:
+                info = self.blocked[dev_id]
+                reason = (info.get("reason") if isinstance(info, dict) else str(info)) or tr("Blocked by the computer")
+                entry = {
+                    "at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
+                    "id": rec["id"],
+                    "device_id": dev_id,
+                    "surveyor": rec.get("surveyor") or "",
+                    "reason": reason,
+                }
+                with open(os.path.join(self.folder, REJECTED_NAME), "a", encoding="utf-8") as rf:
+                    rf.write(json.dumps(entry, ensure_ascii=False) + "\n")
+                    rf.flush()
+                raise BlockedDeviceError(dev_id, reason)
+            old = self.records.get(rec["id"])
+            if old is not None:
+                if not old.get("preview") or rec.get("preview"):
+                    return old, False
+                if not rec.get("by") and old.get("by"):
+                    rec["by"] = old["by"]
+                    rec["surveyor"] = old.get("surveyor") or old["by"]
+                if not rec.get("device_id") and old.get("device_id"):
+                    rec["device_id"] = old["device_id"]
+                # replacing an earlier preview with the full original in the same record
+                old_path = old.get("photo") or ""
+                base = os.path.splitext(old_path)[0] if old_path else ""
+                path = f"{base}.{ext}" if base else ""
+                if not path:
+                    local = dt.datetime.fromisoformat(rec["taken"]).astimezone()
+                    day = os.path.join(self.folder, local.strftime("%Y-%m-%d"))
+                    os.makedirs(day, exist_ok=True)
+                    path = os.path.join(day, f"{local:%Y%m%d_%H%M%S}_{rec['id'][:8]}.{ext}")
+                part = path + ".part"
+                with open(part, "wb") as f:
+                    f.write(data)
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.replace(part, path)
+                if old_path and old_path != path and os.path.isfile(old_path):
+                    try:
+                        os.remove(old_path)
+                    except OSError:
+                        pass
+                rec["photo"] = path
+                with open(os.path.join(self.folder, LOG_NAME), "a", encoding="utf-8") as f:
+                    f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+                    f.flush()
+                    os.fsync(f.fileno())
+                self.records[rec["id"]] = rec
+                return rec, "upgraded"
             local = dt.datetime.fromisoformat(rec["taken"]).astimezone()
             day = os.path.join(self.folder, local.strftime("%Y-%m-%d"))
             os.makedirs(day, exist_ok=True)
@@ -307,7 +472,7 @@ class PhotoStore:
 
 def read_log(folder):
     """Every photo record of the folder (a damaged last line - power cut - is skipped)."""
-    out = []
+    by_id = {}
     try:
         with open(os.path.join(folder, LOG_NAME), encoding="utf-8") as f:
             for line in f:
@@ -316,10 +481,14 @@ def read_log(folder):
                 except ValueError:
                     continue
                 if isinstance(r, dict) and r.get("id") and r.get("photo"):
-                    out.append(r)
+                    if not r.get("surveyor"):
+                        r["surveyor"] = r.get("by") or tr("Unknown")
+                    if "device_id" not in r:
+                        r["device_id"] = ""
+                    by_id[r["id"]] = r
     except OSError:
         pass
-    return out
+    return list(by_id.values())
 
 
 class PhotoServer:
@@ -444,11 +613,17 @@ class PhotoServer:
                     self.close_connection = True
                     return
                 try:
-                    meta = json.loads(parse_qs(parts.query).get("m", [""])[0])
-                    if isinstance(meta, dict) and meta.get("sealed"):
-                        # handed to a teammate's phone without internet, sealed for this computer: opened here
+                    raw_m = json.loads(parse_qs(parts.query).get("m", [""])[0])
+                    if isinstance(raw_m, dict) and raw_m.get("sealed"):
+                        # sealed for this computer: surveyor and device_id are read from inside the sealed payload only
                         meta, data = server.handover.open(data)
+                    else:
+                        meta = raw_m
                     rec, new = server.store.save(meta, data)
+                except BlockedDeviceError as b:
+                    server.events.put(("rejected", {"device_id": b.device_id, "reason": b.reason}))
+                    self._send(403, json.dumps({"ok": False, "error": "blocked", "reason": b.reason}).encode())
+                    return
                 except (ValueError, TypeError):
                     self._send(400)
                     return
@@ -517,6 +692,12 @@ def phone_texts(tr):
                         "is saved there. Keep this page open."),
             "start": tr("Start"), "waiting": tr("Waiting for the location…"), "shoot": tr("Take a photo"),
             "note": tr("Note (optional)"), "sent": tr("On the computer:"), "queued": tr("Waiting to send:"),
+            "waitingPhotos": tr("{n} photos waiting"),
+            "previewSent": tr("{n} arrived as preview, original waiting for Wi-Fi"),
+            "relayMode": tr("Direct link blocked by the mobile network - sending encrypted previews over the relays; "
+                            "full originals wait for Wi-Fi."),
+            "incognito": tr("Private browsing is on: closing this page will erase waiting photos. Open the link in a "
+                            "normal browser tab."),
             "connected": tr("Connected to the computer"),
             "via": tr("Connected through a teammate's phone."),
             "lost": tr("Not reaching the computer - photos are kept on the phone and sent later."),
@@ -541,6 +722,8 @@ def phone_texts(tr):
             "bad": tr("This value is not right."), "required": tr("Required"),
             # the team map, the guide and the averaged position
             "me": tr("Your name on the computer's map"), "share": tr("Show me on the computer's map"),
+            "needName": tr("Write your name first so your photos carry it."),
+            "blocked": tr("This phone has been blocked by the computer."),
             "guide": tr("Guide from the computer"), "inside": tr("Inside - {d} from the edge"),
             "outside": tr("Outside - {d} to the edge"), "near": tr("{d} from the line"),
             "target": tr("{d} to {name}"), "point": tr("the point"),
@@ -620,6 +803,7 @@ button{font:inherit;cursor:pointer}
 .tools{display:flex;gap:8px;align-items:center}
 .pill{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;padding:6px 11px;border-radius:999px;
  background:var(--card);border:1px solid var(--line);color:var(--dim);white-space:nowrap}
+.pill.warn{border-color:var(--fair);color:var(--fair);font-weight:700}
 .pill svg{font-size:15px}
 .dot{width:8px;height:8px;border-radius:50%;background:var(--dim)}
 .dot.on{background:var(--good)}.dot.off{background:var(--poor)}.dot.wait{background:var(--fair);animation:pulse 1.2s infinite}
@@ -660,9 +844,9 @@ input.in{width:100%;font:inherit;padding:12px 14px;border-radius:13px;border:1px
 input.in:focus{border-color:var(--accent)}
 .fld{margin-bottom:14px}.fld .lbl{display:block;margin-bottom:7px}.fld .kinds{flex-wrap:wrap;overflow:visible;margin:0;padding:0}
 .req{color:var(--poor);margin-inline-start:3px}
-.fld.bad .lbl{color:var(--poor)}.fld.bad input.in{border-color:var(--poor)}
+.fld.bad .lbl,.card.bad .lbl{color:var(--poor)}.fld.bad input.in,.card.bad input.in{border-color:var(--poor)}
 .fld.bad .kinds button:not(.sel){border-color:var(--poor)}
-@keyframes shake{25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}.fld.bad{animation:shake .3s}
+@keyframes shake{25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}.fld.bad,.card.bad{animation:shake .3s}
 .stats{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px}
 .stat{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:12px 15px;box-shadow:var(--shadow)}
 .stat b{display:block;font-size:27px;line-height:1.15;font-variant-numeric:tabular-nums}
@@ -736,10 +920,11 @@ input.in:focus{border-color:var(--accent)}
 </style></head><body>
 <header class="top">
  <div class="brand"><span class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="11" r="3"/><path d="M17.66 16.66L13.41 20.9a2 2 0 0 1-2.83 0l-4.24-4.24a8 8 0 1 1 11.32 0z"/></svg></span><span id="title">Biruni GIS</span></div>
- <div class="tools"><span class="pill" id="chip"><i class="dot wait" id="dot"></i><span id="chipText"></span></span>
+ <div class="tools"><span class="pill warn hide" id="waitPill"></span><span class="pill" id="chip"><i class="dot wait" id="dot"></i><span id="chipText"></span></span>
  <button class="pill" id="langBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3.6 9h16.8M3.6 15h16.8M11.5 3a17 17 0 0 0 0 18M12.5 3a17 17 0 0 1 0 18"/></svg><span id="langCode"></span></button></div>
 </header>
 <div class="banner hide" id="st"></div>
+<div class="banner hide" id="privWarn"></div>
 <main>
 <section id="intro" class="intro">
  <div class="hero"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h1a2 2 0 0 0 2-2a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1a2 2 0 0 0 2 2h1a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2"/><circle cx="12" cy="13" r="3"/></svg>
@@ -768,7 +953,7 @@ input.in:focus{border-color:var(--accent)}
   <div id="form"></div>
   <input type="text" class="in" id="note" enterkeyhint="done" autocomplete="off">
  </div>
- <div class="card"><label class="lbl" for="me" id="lMe"></label>
+ <div class="card" id="meCard"><label class="lbl" for="me" id="lMe"></label>
   <div class="mrow"><input type="text" class="in" id="me" maxlength="40" autocomplete="name">
    <label class="sw"><input type="checkbox" id="share" checked><span></span></label></div></div>
  <div class="stats"><div class="stat"><b id="nSent">0</b><span id="lSent"></span></div>
@@ -802,18 +987,21 @@ function keep(k,v){try{if(v==null)localStorage.removeItem(k);else localStorage.s
 function kept(k){try{return localStorage.getItem(k)}catch(e){return null}}
 /*BOOT*/
 if(!PCKEY||PCKEY.charAt(0)==='_')PCKEY=kept('biruni-pckey-'+ROOM)||'';else keep('biruni-pckey-'+ROOM,PCKEY);
-let fix=null,compass=null,kind='',sent=0,db=null,mem=[],busy=false,pending=null,lastSt=null,started=false;
+let fix=null,compass=null,kind='',sent=0,db=null,mem=[],busy=false,pending=null,lastSt=null,started=false,privMode=false;
 const dev=((navigator.userAgentData&&navigator.userAgentData.platform)||navigator.platform||'').slice(0,40);
 const bare=s=>String(s||'').replace(/\s*[:：]\s*$/,'');
 function label(){document.title=T.title;$('hero').textContent=T.hero;$('introText').textContent=T.intro;
  $('go').textContent=T.start;$('note').placeholder=T.note;$('lPos').textContent=T.position;$('lDir').textContent=T.direction;
  $('lKind').textContent=T.kind;$('lRecent').textContent=T.recent;$('lLang').textContent=T.language;
- $('lGuide').textContent=T.guide;$('lMe').textContent=T.me;$('share').setAttribute('aria-label',T.share);
+ $('lGuide').textContent=T.guide;$('lMe').textContent=T.me;
+ {const r=document.createElement('span');r.className='req';r.textContent='*';r.title=T.required||'';$('lMe').appendChild(r)}
+ $('share').setAttribute('aria-label',T.share);
  $('me').placeholder=T.me;$('roomBtn').textContent=T.scanRoom;$('roomOff').setAttribute('aria-label',T.leaveRoom);if(room)$('roomHint').textContent=T.tapRoom;if(!avg)$('avgBtn').textContent=T.avg;
  $('lHand').textContent=T.hand;$('giveBtn').textContent=T.handGiveBtn;$('takeBtn').textContent=T.handTakeBtn;
  $('handCancel').textContent=T.handCancel;$('lSent').textContent=bare(T.sent);$('lWait').textContent=bare(T.queued);$('shotHint').textContent=fix?T.shoot:T.waiting;
  $('shot').setAttribute('aria-label',T.shoot);$('langBtn').setAttribute('aria-label',T.language);
- $('langCode').textContent=LANG.split('_')[0].toUpperCase();const e=$('list').querySelector('.empty');if(e)e.textContent=T.none}
+ $('langCode').textContent=LANG.split('_')[0].toUpperCase();const e=$('list').querySelector('.empty');if(e)e.textContent=T.none;
+ if(privMode&&$('privWarn'))$('privWarn').textContent=T.incognito||'';if(typeof count==='function')count()}
 function setLang(l){LANG=l;T=Object.assign({},ALL.en||{},ALL[l]||{});const h=document.documentElement;
  h.lang=l.replace('_','-');h.dir=(l==='ar'||l==='fa')?'rtl':'ltr';label();drawKinds();drawForm();
  if(lastSt)status(lastSt[0],lastSt[1]);else chip('wait')}
@@ -1026,16 +1214,51 @@ setInterval(tickAvg,500);
 /* the averaged position is used when it is recent and the phone has not moved away from it */
 function shotFix(){if(room&&indoorFix)return indoorFix;if(avgFix&&fix&&Date.now()-avgFix.t<120000&&meters(avgFix,fix)<Math.max(15,2*(fix.acc||0))){
   const a=avgFix;avgFix=null;$('avgInfo').textContent='';return a}return fix}
-/* photos not yet on the PC wait in the phone's browser storage (kept if the page or phone restarts) */
+/* photos not yet on the PC wait in the phone's browser storage, sealed with the PC's key (ECDH P-256 + AES-GCM) */
+async function makePreview(blob){
+ if(typeof createImageBitmap==='function'){
+  try{const bm=await createImageBitmap(blob),m=Math.max(bm.width,bm.height,1),s=m>720?720/m:1,
+    c=document.createElement('canvas');c.width=Math.max(1,Math.round(bm.width*s));c.height=Math.max(1,Math.round(bm.height*s));
+   c.getContext('2d').drawImage(bm,0,0,c.width,c.height);if(bm.close)bm.close();
+   const pb=await new Promise(r=>c.toBlob(r,'image/jpeg',0.65));if(pb&&pb.size>0&&pb.size<blob.size)return pb}catch(e){}}
+ const raw=new Uint8Array(await blob.arrayBuffer()),n=Math.min(raw.length,Math.max(512,raw.length>>2));
+ if(n>=raw.length)return blob;const out=raw.slice(0,n);
+ if(raw[0]===0xff&&raw[1]===0xd8){out[n-2]=0xff;out[n-1]=0xd9}
+ return new Blob([out],{type:blob.type||'image/jpeg'})}
+async function sealRecord(it){if(!PCKEY||!it||!it.meta||it.meta.sealed||!it.blob)return it;
+ try{const orig=await sealItem({meta:it.meta,blob:it.blob});let prev=null;
+  if(!it.carried&&!it.prevSent){const pb=await makePreview(it.blob);
+   prev=await sealItem({meta:Object.assign({},it.meta,{preview:true}),blob:pb})}
+  return {id:it.id,blob:orig,prev:prev,prevSent:!!it.prevSent,meta:{id:it.id,sealed:1,t:it.meta.t||Date.now()},
+   room:it.room||ROOM,carried:!!it.carried}}catch(e){return it}}
 function openDb(){return new Promise(r=>{try{const q=indexedDB.open('biruni-photos',1);
  q.onupgradeneeded=()=>q.result.createObjectStore('q',{keyPath:'id'});q.onsuccess=()=>r(q.result);
  q.onerror=()=>r(null)}catch(e){r(null)}})}
 function tx(mode,fn){return new Promise((res,rej)=>{const t=db.transaction('q',mode),q=fn(t.objectStore('q'));
  t.oncomplete=()=>res(q&&q.result);t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error)})}
-async function put(it){if(db){try{await tx('readwrite',s=>s.put(it));return}catch(e){}}mem.push(it)}
+async function put(it){
+ if(it&&it.meta&&!it.meta.sealed&&!it.carried){
+  if(!it.meta.device_id)it.meta.device_id=DEVID;
+  const nm=($('me')&&$('me').value||kept('biruni-me')||'').trim().slice(0,40);
+  if(!it.meta.by&&nm)it.meta.by=nm;
+  if(!it.meta.surveyor)it.meta.surveyor=it.meta.by||nm}
+ it=await sealRecord(it);if(db){try{await tx('readwrite',s=>s.put(it));return it}catch(e){}}
+ mem=mem.filter(x=>x.id!==it.id);mem.push(it);return it}
 async function all(){let a=[];if(db){try{a=await tx('readonly',s=>s.getAll())||[]}catch(e){}}
  return a.concat(mem).filter(x=>(x.room||'')===ROOM)}
+async function sealWaiting(){if(!PCKEY)return;const a=await all();
+ for(const x of a)if(x.meta&&!x.meta.sealed)await put(x)}
 async function del(id){mem=mem.filter(x=>x.id!==id);if(db){try{await tx('readwrite',s=>s.delete(id))}catch(e){}}}
+function setPrivate(on){privMode=!!on;const b=$('privWarn');if(!b)return;
+ b.textContent=T.incognito||'Private browsing is on: closing this page will erase waiting photos. Open the link in a normal browser tab.';
+ b.classList.toggle('hide',!privMode)}
+async function checkPrivate(){if(window.BIRUNI_INCOGNITO!=null){setPrivate(!!window.BIRUNI_INCOGNITO);return privMode}
+ if(!db){setPrivate(true);return true}
+ try{localStorage.setItem('__bt','1');localStorage.removeItem('__bt')}catch(e){setPrivate(true);return true}
+ if(navigator.storage&&navigator.storage.estimate){
+  try{const e=await navigator.storage.estimate();if(e&&e.quota&&e.quota<120*1024*1024){setPrivate(true);return true}}
+  catch(e){setPrivate(true);return true}}
+ setPrivate(false);return false}
 function chip(state){$('dot').className='dot '+state;$('chipText').textContent=state==='on'?T.online:state==='wait'?T.linking:T.offline}
 function status(on,key){lastSt=[on,key];const b=$('st');chip(on?'on':key==='connecting'?'wait':'off');
  if(on){b.classList.add('hide')}else{b.textContent=T[key]||key;b.classList.remove('hide')}}
@@ -1043,8 +1266,14 @@ let tt=null;function toast(s){const t=$('toast');t.textContent=s;t.classList.add
  tt=setTimeout(()=>t.classList.remove('show'),2200)}
 function mark(id,s){const e=document.querySelector('[data-id="'+id+'"] .badge');if(!e)return;e.textContent=s;
  e.className='badge'+(s==='✓'?' ok':s==='✗'?' bad':'')}
-async function count(){const a=await all(),n=a.length,c=a.filter(x=>x.carried).length;$('nSent').textContent=sent;
- $('nWait').textContent=n;$('handInfo').textContent=c?T.handCarry.replace('{n}',c):'';
+async function count(){const a=await all(),n=a.length,p=a.filter(x=>x.prevSent).length,c=a.filter(x=>x.carried).length;
+ $('nSent').textContent=sent;$('nWait').textContent=n;
+ const wTxt=(T.waitingPhotos||'{n} photos waiting').replace('{n}',n-p),
+  pTxt=(T.previewSent||'{n} arrived as preview, original waiting for Wi-Fi').replace('{n}',p),
+  wt=p?(p===n?pTxt:wTxt+' · '+pTxt):(T.waitingPhotos||'{n} photos waiting').replace('{n}',n);
+ if($('waitPill')){$('waitPill').textContent=wt;$('waitPill').classList.toggle('hide',!n)}
+ $('lWait').textContent=n?wt:bare(T.queued);
+ $('handInfo').textContent=c?T.handCarry.replace('{n}',c):'';
  $('waitBox').classList.toggle('warn',n>0)}
 /*SEND{*/
 /* the phone talks to the PC's own server: one request per photo */
@@ -1078,7 +1307,7 @@ async function sealFor(pub,bytes){const pk=await crypto.subtle.importKey('raw',H
  const key=await crypto.subtle.importKey('raw',await crypto.subtle.digest('SHA-256',bits),'AES-GCM',false,['encrypt']);
  const iv=crypto.getRandomValues(new Uint8Array(12)),raw=new Uint8Array(await crypto.subtle.exportKey('raw',eph.publicKey));
  return hcat(new Uint8Array([1]),raw,iv,new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv:iv},key,bytes)))}
-async function sealItem(it){if(it.meta&&it.meta.sealed)return it.blob;   /* carried for someone else: passed on as it is */
+async function sealItem(it){if(it.meta&&it.meta.sealed)return it.blob;   /* already sealed for the PC: kept as it is */
  const m=new TextEncoder().encode(JSON.stringify(it.meta)),img=new Uint8Array(await it.blob.arrayBuffer()),n=new Uint8Array(4);
  new DataView(n.buffer).setUint32(0,m.length);return new Blob([await sealFor(PCKEY,hcat(n,m,img))],{type:'application/octet-stream'})}
 /* the link's offer and answer, short enough for a QR code: only what a direct link on one network needs */
@@ -1224,14 +1453,17 @@ function handReceive(h,ch){ch.binaryType='arraybuffer';let cur=null,q=Promise.re
  ch.onclose=()=>{if(HAND===h&&!h.done){h.done=true;handClose();toast(h.n?T.handTook.replace('{n}',h.n):T.handFail);count()}}}
 /*}HAND*/
 async function flush(){if(busy)return;busy=true;
- let arrived=0;try{const items=(await all()).sort((a,b)=>a.meta.t-b.meta.t);
+ let arrived=0;try{const allItems=(await all()).sort((a,b)=>a.meta.t-b.meta.t),
+   rOnly=typeof relayOnly==='function'&&relayOnly(),items=rOnly?allItems.filter(x=>!x.prevSent&&!x.carried):allItems;
   for(const it of items){
    const st=await sendItem(it);
    if(st===200){await del(it.id);sent++;arrived++;mark(it.id,'✓')}
+   else if(st===202){it.prevSent=true;it.prev=null;await put(it);mark(it.id,'◐')}
+   else if(st===403){await del(it.id);mark(it.id,'✗');status(false,'blocked')}
    else if(st===400||st===413){await del(it.id);mark(it.id,'✗')}
    else throw new Error(st);count()}
   const ok=items.length?true:await alive();
-  if(ok)status(true,'connected');else offline()}catch(e){offline()}
+  if(ok&&!rOnly)status(true,'connected');else if(!ok)offline()}catch(e){offline()}
  if(arrived){toast(T.arrived.replace('{n}',arrived));if(navigator.vibrate)navigator.vibrate([20,40,20])}
  busy=false;count()}
 setInterval(flush,5000);window.addEventListener('online',flush);
@@ -1265,14 +1497,24 @@ $('go').onclick=start;$('giveBtn').onclick=handGive;$('takeBtn').onclick=handTak
 $('handCancel').onclick=()=>{if(HAND)HAND.done=true;handClose()};if(!window.RTCPeerConnection)$('handCard').classList.add('hide');$('roomBtn').onclick=openScan;$('roomOff').onclick=()=>setRoom(null);
 $('roomFind').oninput=roomList;$('scanSheet').onclick=e=>{if(e.target===$('scanSheet'))closeScan()};
 window.addEventListener('resize',()=>drawRoom());$('avgBtn').onclick=toggleAvg;
-$('me').value=kept('biruni-me')||'';$('me').onchange=()=>{keep('biruni-me',$('me').value.trim());tellPos(true)};
+function requireName(){
+ let v=($('me').value||'').trim();
+ if(!v){v=(kept('biruni-me')||'').trim();if(v)$('me').value=v}
+ if(v){keep('biruni-me',v);if($('meCard'))$('meCard').classList.remove('bad');return v}
+ const c=$('meCard');if(c){c.classList.remove('bad');void c.offsetWidth;c.classList.add('bad');
+  c.scrollIntoView({behavior:'smooth',block:'center'})}
+ $('me').focus();toast(T.needName||T.need||T.me);if(navigator.vibrate)navigator.vibrate([40,60,40]);return ''}
+$('me').value=kept('biruni-me')||'';
+$('me').oninput=()=>{if($('me').value.trim()&&$('meCard'))$('meCard').classList.remove('bad');keep('biruni-me',$('me').value.trim())};
+$('me').onchange=()=>{keep('biruni-me',$('me').value.trim());if($('meCard'))$('meCard').classList.remove('bad');tellPos(true)};
 $('share').checked=kept('biruni-share')!=='0';$('share').onchange=()=>{keep('biruni-share',$('share').checked?'1':'0');tellPos(true)};
-$('shot').onclick=()=>{if(!fix&&!indoorFix)return;const f=answers();if(!f)return;if(navigator.vibrate)navigator.vibrate(25);
+$('shot').onclick=()=>{if(!fix&&!indoorFix)return;if(!requireName())return;const f=answers();if(!f)return;if(navigator.vibrate)navigator.vibrate(25);
  pending={fix:shotFix(),compass:compass,at:Date.now(),f:f};$('file').click()};
 $('file').onchange=async()=>{const f=$('file').files[0];$('file').value='';if(!f||!pending)return;
+ const who=requireName();if(!who)return;
  const p=pending.fix,blob=new Blob([await f.arrayBuffer()],{type:f.type||'image/jpeg'});
  const meta={id:uid(),lat:p.lat,lon:p.lon,acc:p.acc,alt:p.alt,heading:p.heading,compass:pending.compass,
-  t:pending.at,fix_age:Math.max(0,Math.round((pending.at-p.t)/1000)),kind:kind,note:$('note').value.trim(),device:dev,by:$('me').value.trim().slice(0,40),f:pending.f,avg_n:p.n,avg_sd:p.sd,level:p.level,unit:p.unit};
+  t:pending.at,fix_age:Math.max(0,Math.round((pending.at-p.t)/1000)),kind:kind,note:$('note').value.trim(),device:dev,device_id:DEVID,surveyor:who.slice(0,40),by:who.slice(0,40),f:pending.f,avg_n:p.n,avg_sd:p.sd,level:p.level,unit:p.unit};
  const it={id:meta.id,blob:blob,meta:meta,room:ROOM};pending=null;await put(it);thumb(it,'⏳');$('note').value='';afterShot();
  toast(T.kept);count();flush()};
 $('langBtn').onclick=()=>{const box=$('langs');box.textContent='';Object.keys(ALL).forEach(k=>{const b=document.createElement('button');
@@ -1283,5 +1525,5 @@ $('sheet').onclick=e=>{if(e.target===$('sheet'))$('sheet').classList.add('hide')
 setLang(pick(kept('biruni-lang'))||pick(HASHL)||pick(DEF)||pick(navigator.language)||'en');
 try{const g=JSON.parse(kept('biruni-guide-'+ROOM)||'null');if(g)setGuide(g)}catch(e){}
 {const e=document.createElement('div');e.className='empty';e.textContent=T.none;$('list').appendChild(e)}
-(async()=>{db=await openDb();const w=await all();w.filter(it=>!it.carried).slice(-9).forEach(it=>thumb(it,'⏳'));count();flush()})();
+(async()=>{db=await openDb();await checkPrivate();await sealWaiting();const w=await all();w.filter(it=>!it.carried).slice(-9).forEach(it=>thumb(it,'⏳'));count();flush()})();
 </script></body></html>"""
