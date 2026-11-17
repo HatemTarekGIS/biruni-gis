@@ -7974,8 +7974,8 @@
  "Wrong password, or not a Biruni key backup.": "Yanlış parola veya bir Biruni anahtar yedeği değil.",
  "Your Google Drive is full. Photos wait on this phone until the computer is in reach.": "Google Drive'ınız dolu. Bilgisayar erişilebilir olana kadar fotoğraflar bu telefonda bekler.",
  "in your own Google Drive. If the office uses another account, choose the folder it shared.": "kendi Google Drive'ınızda. Ofis başka bir hesap kullanıyorsa, paylaştığı klasörü seçin.",
- "is deleted at once": "hemen silinir",
- "is deleted when the surveyor taps “Free space”": "haritacı “Yer aç” seçeneğine dokunduğunda silinir",
  "is kept": "saklanır",
- "{n} shown on the computer, original going to Google Drive": "{n} tanesi bilgisayarda gösteriliyor, aslı Google Drive'a gidiyor"
+ "{n} shown on the computer, original going to Google Drive": "{n} tanesi bilgisayarda gösteriliyor, aslı Google Drive'a gidiyor",
+ "goes to the bin when the surveyor taps “Free space”": "haritacı “Yer aç” seçeneğine dokunduğunda çöp kutusuna gider",
+ "goes to the bin at once": "hemen çöp kutusuna gider"
 }

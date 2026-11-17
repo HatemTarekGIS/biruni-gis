@@ -282,14 +282,14 @@ def drive_got(ids):
     return out
 
 
-check(drive_got(["formphoto-0001", "never-came", 5]) == (200, {"clean": "manual", "ids": ["formphoto-0001"]}),
-      "receipts for Drive: only the photos held here are named, with the office's choice (manual at first)")
+check(drive_got(["formphoto-0001", "never-came", 5]) == (200, {"clean": "keep", "ids": ["formphoto-0001"]}),
+      "receipts for Drive: only the photos held here are named, with the office's choice (keep at first)")
 fsrv.store.records["formphoto-0001"]["preview"] = True
 fsrv.drive_clean = "auto"
 check(drive_got(["formphoto-0001"]) == (200, {"clean": "auto", "ids": []}),
       "a photo here only as a preview is not named: its Drive copy must stay")
 fsrv.store.records["formphoto-0001"]["preview"] = False
-fsrv.drive_clean = "manual"
+fsrv.drive_clean = "keep"
 flyr = fd.open_layer(fsrv.store.folder, add=False)
 fd.form_columns(flyr, fsrv.store.form, [dict(frec, fields=dict(frec["fields"], old_question="x"))])
 fl = flyr.fields()

@@ -26,7 +26,7 @@ from .server import read_surveyor_keys
 KEY = "biruni/field-photos/"
 P_SCOPE = "Biruni"
 P_DRIVE = "/field-photos/drive"
-P_CLEAN = "/field-photos/drive-clean"   # the surveyors' Drive copies once here: manual / auto / keep
+P_CLEAN = "/field-photos/drive-clean"   # the surveyors' Drive copies once here: keep (default) / manual / auto
 P_NOTICE = "/field-photos/drive-notice"
 DRIVE_ROOTS = KEY + "drive-roots"
 DRIVE_MADE = KEY + "drive-made"   # the office tags whose Drive folder Biruni already made once (never made again)
@@ -936,8 +936,9 @@ class FieldPhotosDock(QDockWidget):
         clean_lbl.setWordWrap(True)
         dv.addWidget(clean_lbl)
         self.drive_clean_box = QComboBox()
-        for key, text in (("manual", tr("is deleted when the surveyor taps “Free space”")),
-                          ("auto", tr("is deleted at once")), ("keep", tr("is kept"))):
+        for key, text in (("keep", tr("is kept")),
+                          ("manual", tr("goes to the bin when the surveyor taps “Free space”")),
+                          ("auto", tr("goes to the bin at once"))):
             self.drive_clean_box.addItem(text, key)
         self.drive_clean_box.currentIndexChanged.connect(self._on_drive_clean_changed)
         dv.addWidget(self.drive_clean_box)
@@ -2584,12 +2585,12 @@ class FieldPhotosDock(QDockWidget):
             self._backup_key()
 
     def drive_clean(self):
-        v = QgsProject.instance().readEntry(P_SCOPE, P_CLEAN, "manual")[0]
-        return v if v in ("manual", "auto", "keep") else "manual"
+        v = QgsProject.instance().readEntry(P_SCOPE, P_CLEAN, "keep")[0]
+        return v if v in ("manual", "auto", "keep") else "keep"
 
     def _on_drive_clean_changed(self, _i=None):
         v = self.drive_clean_box.currentData()
-        if v == "manual":
+        if v == "keep":
             QgsProject.instance().removeEntry(P_SCOPE, P_CLEAN)
         else:
             QgsProject.instance().writeEntry(P_SCOPE, P_CLEAN, v)

@@ -7974,8 +7974,8 @@
  "Wrong password, or not a Biruni key backup.": "كلمة مرور خاطئة، أو أن الملف ليس نسخة احتياطية لمفتاح Biruni.",
  "Your Google Drive is full. Photos wait on this phone until the computer is in reach.": "مساحة Google Drive لديك ممتلئة. تنتظر الصور على هذا الهاتف حتى يصبح الكمبيوتر في النطاق.",
  "in your own Google Drive. If the office uses another account, choose the folder it shared.": "في Google Drive الخاص بك. إذا كان المكتب يستخدم حسابًا آخر، فاختر المجلد الذي شاركه.",
- "is deleted at once": "تُحذف فورًا",
- "is deleted when the surveyor taps “Free space”": "تُحذف عندما ينقر المسّاح على «إخلاء المساحة»",
  "is kept": "تُحفظ",
- "{n} shown on the computer, original going to Google Drive": "{n} معروضة على الكمبيوتر، والأصلية تنتقل إلى Google Drive"
+ "{n} shown on the computer, original going to Google Drive": "{n} معروضة على الكمبيوتر، والأصلية تنتقل إلى Google Drive",
+ "goes to the bin when the surveyor taps “Free space”": "تُنقل إلى سلة المهملات عندما ينقر المسّاح على «إخلاء المساحة»",
+ "goes to the bin at once": "تُنقل إلى سلة المهملات فورًا"
 }

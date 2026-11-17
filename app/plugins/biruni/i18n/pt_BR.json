@@ -7974,8 +7974,8 @@
  "Wrong password, or not a Biruni key backup.": "Senha incorreta ou não é um backup de chave do Biruni.",
  "Your Google Drive is full. Photos wait on this phone until the computer is in reach.": "Seu Google Drive está cheio. As fotos aguardam neste telefone até que o computador esteja ao alcance.",
  "in your own Google Drive. If the office uses another account, choose the folder it shared.": "no seu próprio Google Drive. Se o escritório usar outra conta, escolha a pasta que ele compartilhou.",
- "is deleted at once": "é excluída imediatamente",
- "is deleted when the surveyor taps “Free space”": "é excluída quando o topógrafo toca em “Liberar espaço”",
  "is kept": "é mantida",
- "{n} shown on the computer, original going to Google Drive": "{n} mostradas no computador, original indo para o Google Drive"
+ "{n} shown on the computer, original going to Google Drive": "{n} mostradas no computador, original indo para o Google Drive",
+ "goes to the bin when the surveyor taps “Free space”": "vai para a lixeira quando o topógrafo toca em “Liberar espaço”",
+ "goes to the bin at once": "vai para a lixeira imediatamente"
 }

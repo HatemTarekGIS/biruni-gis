@@ -772,7 +772,7 @@ class PhotoServer:
                                         ensure_ascii=False).encode("utf-8")
         self._phones = set()
         self.guide_v = 0
-        self.drive_clean = "manual"   # the office's choice for the surveyors' Drive copies: auto / manual / keep
+        self.drive_clean = "keep"   # the office's choice for the surveyors' Drive copies: keep / manual / auto
         self.guide = guide_bytes(0, [])[0]
         server = self
 

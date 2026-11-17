@@ -356,8 +356,9 @@ async function drivePump(){if(!DRV.on)return;
 
 /* ---- freeing the surveyor's Drive (step 10). The files are the surveyor's (drive.file), so only this phone can delete
    them, and only those the PC says it holds as full originals: a receipt over the line, signed with the PC's identity
-   key (no pin, no receipts). The office chooses: auto (at once), manual (a button here), keep. A file goes for good,
-   not to the bin, which would still count against the surveyor's storage. The small record of it goes 30 days later */
+   key (no pin, no receipts). The office chooses: keep (the default), manual (a button here) or auto (at once). A file
+   goes to the surveyor's bin (Hatem's choice: it can still be restored; Drive empties the bin after 30 days). The small
+   record of it goes 30 days later */
 async function dall(){const d=await ddb();if(!d)return [];return new Promise(r=>{try{const g=d.transaction('d').objectStore('d').getAll();
  g.onsuccess=()=>r((g.result||[]).filter(x=>x&&x.id&&x.id[0]!=='#'));g.onerror=()=>r([])}catch(e){r([])}})}
 async function ddrop(id){const d=await ddb();if(!d)return;return new Promise(r=>{try{const t=d.transaction('d','readwrite');
@@ -383,7 +384,8 @@ async function dshowFree(){const c=DRV.card;if(!c)return;const n=(await dall()).
 var DFREEING=false;   /* var: driveSay may look at it before this line has run */
 async function dfree(){if(DFREEING||!DRV.ok())return;DFREEING=true;
  try{for(const r of await dall()){if(r.st!=='got'||!r.fid)continue;let res;
-   try{res=await dapi('/drive/v3/files/'+encodeURIComponent(r.fid)+'?supportsAllDrives=true',{method:'DELETE'})}catch(e){break}
+   try{res=await dapi('/drive/v3/files/'+encodeURIComponent(r.fid)+'?supportsAllDrives=true&fields=id',
+    {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({trashed:true})})}catch(e){break}
    if(res.status===204||res.status===200||res.status===404){r.st='freed';r.at=Date.now();await dput(r)}
    else if(res.status===401){driveDead();break}
    else if(res.status===403)continue;   /* not ours to delete (the office took it over): left there */

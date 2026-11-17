@@ -112,7 +112,7 @@ import tempfile as _tf  # noqa: E402
 
 DRIVE_DISK = _tf.mkdtemp()
 FILES, FAKE = {}, {"drop": 0, "uploads": 0, "next": 0, "pick": [], "picks": [], "fault": [], "times": [],
-                  "tap": 0, "tapped": [], "deleted": []}
+                  "tap": 0, "tapped": [], "deleted": [], "binned": []}
 GRANTS, PICKER_GETS = set(), []
 
 
@@ -202,7 +202,7 @@ class Handler(BaseHTTPRequestHandler):
         if cors:
             self.send_header("Access-Control-Allow-Origin", "*")
             self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type")
-            self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE")
             self.send_header("Access-Control-Expose-Headers", "Retry-After")
         self.end_headers()
         self.wfile.write(body)
@@ -283,6 +283,21 @@ class Handler(BaseHTTPRequestHandler):
             self._send(401, b"{}", "application/json", cors=True)
             return False
         return True
+
+    def do_PATCH(self):  # noqa: N802   only {"trashed": true}: the file goes to its owner's bin
+        if self._auth():
+            fid = self.path.split("?", 1)[0].rsplit("/", 1)[1]
+            body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+            if not visible(fid):
+                drive_error(self, 404, "notFound")
+                return
+            if body.get("trashed") is True:
+                path = drive_path(fid)
+                FILES[fid]["trashed"] = True
+                FAKE["binned"].append(fid)
+                if os.path.isfile(path):   # Drive for desktop takes it out of the synced folder
+                    os.remove(path)
+            self._send(200, json.dumps({"id": fid}).encode(), "application/json", cors=True)
 
     def do_DELETE(self):  # noqa: N802
         if self._auth():
@@ -734,25 +749,25 @@ def free_btn():
 nd = ajs(ph, "dall().then(a=>a.filter(r=>r.st==='done'&&r.fid).length)")
 check(nd and receipt("manual", forge=True) == 0, f"a receipt not signed by the computer frees nothing ({nd} uploaded)")
 nb, dn = len(bfps()), js(ph, "DRV.n")
-check(receipt("manual") == nd and FAKE["deleted"] == [] and free_btn() == js(ph, f"String(T.driveFree).replace('{{n}}',{nd})"),
+check(receipt("manual") == nd and FAKE["binned"] == [] and free_btn() == js(ph, f"String(T.driveFree).replace('{{n}}',{nd})"),
       f"manual: the receipt shows the button, nothing deleted yet ({free_btn()!r})")
 ph.runJavaScript("document.querySelector('.dfree').click()")
 t_free = time.monotonic()
-check(wait(lambda: len(FAKE["deleted"]) == nd and not any(f in FILES for f in FAKE["deleted"]) and free_btn() == "", 20)
-      and js(ph, "DRV.n") == dn,
-      f"one tap: those {nd} files leave the surveyor's Drive for good, the button goes ({len(FAKE['deleted'])}, "
+check(wait(lambda: len(FAKE["binned"]) == nd and all(FILES[f].get("trashed") for f in FAKE["binned"])
+           and free_btn() == "", 20) and js(ph, "DRV.n") == dn and FAKE["deleted"] == [],
+      f"one tap: those {nd} files go to the surveyor's bin (not deleted), the button goes ({len(FAKE['binned'])}, "
       f"disk {nb}->{len(bfps())}, n {dn}->{js(ph, 'DRV.n')}, button {free_btn()!r}, {time.monotonic() - t_free:.1f} s)")
 check(ajs(ph, "dall().then(a=>a.filter(r=>r.st==='freed').length)") == nd, "… and the phone notes them as freed")
 nb = len(bfps())
 take("photo-drive-0016")
 up1 = lambda: ajs(ph, "dall().then(a=>a.filter(r=>r.st==='done'&&r.fid).length)") == 1   # noqa: E731
 check(wait(lambda: len(bfps()) == nb + 1 and up1(), 20) and receipt("auto") >= 0
-      and wait(lambda: len(FAKE["deleted"]) == nd + 1 and len(bfps()) == nb and free_btn() == "", 15),
-      "auto: the receipt deletes the copy at once, no button")
+      and wait(lambda: len(FAKE["binned"]) == nd + 1 and len(bfps()) == nb and free_btn() == "", 15),
+      "auto: the receipt puts the copy in the bin at once, no button")
 take("photo-drive-0017")
 kp = wait(lambda: len(bfps()) == nb + 1 and up1(), 20) and receipt("keep")
-check(kp == 1 and free_btn() == "" and not wait(lambda: len(FAKE["deleted"]) > nd + 1, 2),
-      f"keep: nothing is deleted and no button shows ({kp}, {free_btn()!r}, {len(FAKE['deleted']) - nd})")
+check(kp == 1 and free_btn() == "" and not wait(lambda: len(FAKE["binned"]) > nd + 1, 2),
+      f"keep: nothing goes to the bin and no button shows ({kp}, {free_btn()!r}, {len(FAKE['binned']) - nd})")
 
 check(not any("Content Security Policy" in m for m in CONSOLE), "nothing was refused by the CSP")
 print(f"\n{'FAILED ' + str(len(failures)) if failures else 'ALL PASSED'}")
