@@ -12,7 +12,7 @@
   "drive-spike.html": "a0c5c7d4d5039f64fcbd0f9c9155d716fe05ee454447a5467bc03d513d4e2287",
   "index.html": "c2e7e40ae665b8e43d3dd640715742b235add9b5dcb11eb1b261e6f9bc0bb64d",
   "m/index.html": "c308ca490fe421290826adae1913572f592d723e70df8aa63c28b07182d566e4",
-  "p/index.html": "7e0b9b994080851949d0c516edc44fae9170dea2da613eb67151c49dd9fc1c2f",
+  "p/index.html": "bd717ac629852afda995c1c3d8381e66d6780c3db2cd265559f44ee4fa43730b",
   "p/sw.js": "46f5e287db16818e038c6ce15ce574c2acae180b83bbd6b436fcdde9074fa543",
   "paper/index.html": "78f1c173a7e7ae8ed0a4a2a0367a7a5a608ada24e751d2c1e1bbf8eb60f45a9e",
   "portal/index.html": "654b8e6dda57881c7ec0b83cc395b776f355f18e78ab7c6fa81073ce1c58e11e",
@@ -22,5 +22,5 @@
   "v/index.html": "b10206b33b221b209d114ead12723a0dd2249fc6930cfa1f0c450e8290097b33"
  },
  "format": "biruni-release",
- "version": "2026-11-17T19:11:43Z"
+ "version": "2026-11-17T19:19:30Z"
 }
