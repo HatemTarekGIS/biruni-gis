@@ -322,7 +322,8 @@ class Page(QWebEnginePage):
     def createWindow(self, _type):  # noqa: N802
         w = Page(self.profile())   # the link page opened as a window (where the office folder is chosen)
         POPUPS.append(w)
-        return w
+        w.windowCloseRequested.connect(lambda: (POPUPS.remove(w) if w in POPUPS else None, w.deleteLater()))
+        return w   # window.close() really closes it, as a browser does
 
 
 profile = QWebEngineProfile.defaultProfile()
@@ -544,7 +545,10 @@ check(wait(lambda: js(ph, "DRV.n") == 4, 20) and len([f for f in FILES.values() 
 def repick():
     FAKE["pick"] = ["office"]
     ph.runJavaScript("driveOpenPick()")
-    return wait(lambda: js(ph, "!!DRV.fold") is True, 30)
+    ok = wait(lambda: js(ph, "!!DRV.fold") is True, 30)
+    wait(lambda: False, 0.5)
+    ph.runJavaScript("drivePump()")   # what the 15 s timer would do
+    return ok
 
 
 # the office shares for viewing only: the card says so, the photo waits; made an Editor and chosen again, it goes
@@ -563,7 +567,7 @@ check(wait(lambda: js(ph, "DRV.state") == "gone", 20) and queued("photo-drive-00
 FILES[OFFICE_ID]["revoked"] = False
 check(repick() and wait(lambda: js(ph, "DRV.n") == 6, 20)
       and len([f for f in FILES.values() if f["name"] == f"p-{dev}"]) == 1,
-      "shared and chosen again: the photo goes, into the same p-<device>")
+      "shared and chosen again: the photo goes, into the same p-<device> ")
 # the office folder is put in the bin (Drive still takes uploads into it): the phone notices within 5 minutes
 FILES[OFFICE_ID]["trashed"] = True
 n0, nb = js(ph, "DRV.n"), len(bfps())
@@ -595,6 +599,12 @@ ph.runJavaScript("DRV.tok='bad-token';DRV.exp=Date.now()+9e6")
 take("photo-drive-0004")
 check(wait(lambda: js(ph, "DRV.state") == "auth", 15) and len(bfps()) == n0 and queued("photo-drive-0004") is True,
       "a refused token: the card asks to link again, the photo waits")
+
+ph.runJavaScript("(()=>{document.body.style.width='360px';const p=$('waitPill');"
+                 "p.textContent='12 '+(T.drivePreview||'x').repeat(12);p.classList.remove('hide')})()")
+wait(lambda: False, 0.5)
+check(js(ph, "(()=>{const t=document.querySelector('.top');return t.scrollWidth<=t.clientWidth&&t.clientWidth<=360})()") is True,
+      "a long waiting count never makes the phone's top bar wider than the screen")
 
 check(not any("Content Security Policy" in m for m in CONSOLE), "nothing was refused by the CSP")
 print(f"\n{'FAILED ' + str(len(failures)) if failures else 'ALL PASSED'}")

@@ -1070,9 +1070,10 @@ svg{width:1em;height:1em;flex:none}
 button{font:inherit;cursor:pointer}
 .top{position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:10px;
  padding:calc(10px + env(safe-area-inset-top)) 16px 10px;background:var(--bg)}
-.brand{display:flex;align-items:center;gap:9px;font-weight:700;font-size:17px;letter-spacing:-.01em}
+.brand{display:flex;flex:none;align-items:center;gap:9px;font-weight:700;font-size:17px;letter-spacing:-.01em}
 .logo{width:30px;height:30px;border-radius:10px;background:var(--accent);color:var(--ink);display:grid;place-items:center;font-size:18px}
-.tools{display:flex;gap:8px;align-items:center}
+.tools{display:flex;gap:8px;align-items:center;min-width:0}
+#waitPill{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis}   /* a long count never widens the page */
 .pill{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;padding:6px 11px;border-radius:999px;
  background:var(--card);border:1px solid var(--line);color:var(--dim);white-space:nowrap}
 .pill.warn{border-color:var(--fair);color:var(--fair);font-weight:700}
