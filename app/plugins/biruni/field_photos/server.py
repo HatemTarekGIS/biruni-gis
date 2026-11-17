@@ -1501,13 +1501,30 @@ function shotFix(){if(room&&indoorFix)return indoorFix;if(avgFix&&fix&&Date.now(
    one go; a bigger one is saved again as JPEG, first only a little more compressed, then smaller, until it fits.
    PMAX leaves room for the seal around it. The browser canvas holds about 16 million pixels at most (iPhone) */
 const PMAX=5*1024*1024-65536,PPIX=16000000;
+/* the camera's EXIF block (make, model, exposure, lens...) is carried over to the photo saved again; its
+   Orientation is set to 1, the pixels being drawn upright already */
+function jpegExif(u){if(!u||u[0]!==0xff||u[1]!==0xd8)return null;let i=2;
+ while(i+10<=u.length&&u[i]===0xff){const m=u[i+1],n=(u[i+2]<<8)|u[i+3];if(m===0xda||m===0xd9)break;
+  if(m===0xe1&&u[i+4]===0x45&&u[i+5]===0x78&&u[i+6]===0x69&&u[i+7]===0x66&&u[i+8]===0&&u[i+9]===0)
+   return i+2+n<=u.length?u.slice(i,i+2+n):null;
+  i+=2+n}return null}
+function exifUpright(s){try{const t=10,le=s[t]===0x49,g16=o=>le?s[o]|(s[o+1]<<8):(s[o]<<8)|s[o+1],
+  g32=o=>(le?(s[o]|(s[o+1]<<8)|(s[o+2]<<16)|(s[o+3]<<24)):((s[o]<<24)|(s[o+1]<<16)|(s[o+2]<<8)|s[o+3]))>>>0,
+  ifd=t+g32(t+4);if(ifd+2>s.length)return s;const n=g16(ifd);
+ for(let k=0;k<n;k++){const e=ifd+2+k*12;if(e+12>s.length)break;
+  if(g16(e)===0x0112){if(le){s[e+8]=1;s[e+9]=0}else{s[e+8]=0;s[e+9]=1}}}}catch(e){}return s}
+async function withExif(b,ex){if(!ex)return b;const u=new Uint8Array(await b.arrayBuffer());if(u[0]!==0xff||u[1]!==0xd8)return b;
+ let at=2;if(u[2]===0xff&&u[3]===0xe0)at=4+((u[4]<<8)|u[5]);   /* after the JFIF block, which comes first */
+ return new Blob([u.subarray(0,at),ex,u.subarray(at)],{type:'image/jpeg'})}
 async function fitPhoto(blob){if(!blob||blob.size<=PMAX||typeof createImageBitmap!=='function')return blob;
+ let ex=null;try{ex=jpegExif(new Uint8Array(await blob.slice(0,262144).arrayBuffer()));if(ex)ex=exifUpright(ex)}catch(e){}
+ const room=PMAX-(ex?ex.length:0);
  let bm;try{bm=await createImageBitmap(blob);const w=bm.width,h=bm.height,s0=Math.min(1,Math.sqrt(PPIX/Math.max(1,w*h)));
   for(const [s,q] of [[1,.92],[1,.85],[.85,.85],[.7,.85],[.55,.82],[.4,.8],[.3,.75]]){
    const c=document.createElement('canvas');c.width=Math.max(1,Math.round(w*s*s0));c.height=Math.max(1,Math.round(h*s*s0));
    c.getContext('2d').drawImage(bm,0,0,c.width,c.height);
    const b=await new Promise(r=>c.toBlob(r,'image/jpeg',q));c.width=c.height=0;
-   if(b&&b.size>0&&b.size<=PMAX)return b}}catch(e){}finally{if(bm&&bm.close)bm.close()}
+   if(b&&b.size>0&&b.size<=room)return await withExif(b,ex)}}catch(e){}finally{if(bm&&bm.close)bm.close()}
  return blob}
 async function makePreview(blob){
  if(typeof createImageBitmap==='function'){

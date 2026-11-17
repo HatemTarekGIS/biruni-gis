@@ -609,12 +609,21 @@ check(js(ph, "(()=>{const t=document.querySelector('.top');return t.scrollWidth<
 # a photo is kept at 5 MB at most: a bigger camera photo is saved again smaller, a small one is kept as it came
 fit = ajs(ph, "(async()=>{const c=document.createElement('canvas');c.width=4000;c.height=3000;const x=c.getContext('2d'),"
               "d=x.createImageData(4000,3000);for(let i=0;i<d.data.length;i++)d.data[i]=(i*2654435761>>>13)&255;"
-              "x.putImageData(d,0,0);const big=await new Promise(r=>c.toBlob(r,'image/jpeg',1));"
-              "const out=await fitPhoto(big),bm=await createImageBitmap(out),small=new Blob([new Uint8Array(3000)]);"
-              "return {big:big.size,out:out.size,w:bm.width,type:out.type,same:(await fitPhoto(small))===small}})()")
+              "x.putImageData(d,0,0);const raw=await new Promise(r=>c.toBlob(r,'image/jpeg',1));"
+              # a camera EXIF block: little-endian, IFD0 with Orientation 6 and Make 'TestCam'
+              "const t=[0x49,0x49,42,0,8,0,0,0, 2,0, 0x12,0x01,3,0,1,0,0,0,6,0,0,0, 0x0f,0x01,2,0,8,0,0,0,38,0,0,0,"
+              " 0,0,0,0].concat(Array.from('TestCam').map(ch=>ch.charCodeAt(0)),[0]),"
+              "body=[0x45,0x78,0x69,0x66,0,0].concat(t),seg=new Uint8Array([0xff,0xe1,(body.length+2)>>8,(body.length+2)&255].concat(body)),"
+              "big=await withExif(raw,seg);"
+              "const out=await fitPhoto(big),bm=await createImageBitmap(out),small=new Blob([new Uint8Array(3000)]),"
+              "ex=jpegExif(new Uint8Array(await out.arrayBuffer()));"
+              "return {big:big.size,out:out.size,w:bm.width,type:out.type,same:(await fitPhoto(small))===small,"
+              "exif:!!ex&&new TextDecoder().decode(ex).includes('TestCam'),orient:ex?ex[10+8+2+8]:null}})()")
 check(isinstance(fit, dict) and fit["big"] > 5 * 1024 * 1024 and fit["out"] <= 5 * 1024 * 1024 - 65536
       and fit["w"] >= 1200 and fit["type"] == "image/jpeg" and fit["same"],
       f"a camera photo over 5 MB is saved again under 5 MB and still opens; a small one is not touched ({fit})")
+check(isinstance(fit, dict) and fit["exif"] and fit["orient"] == 1,
+      "the camera's EXIF (make, model...) goes with it, set upright since the pixels already are")
 
 check(not any("Content Security Policy" in m for m in CONSOLE), "nothing was refused by the CSP")
 print(f"\n{'FAILED ' + str(len(failures)) if failures else 'ALL PASSED'}")
