@@ -1,0 +1,1370 @@
+<!doctype html><html lang="en" dir="ltr"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-ik9i9L4w3jCPkHTC2k85HsPmPh7v1t0Q9ji+d906gIY='; style-src 'sha256-iw34GEk4IRVqboxfqMJMCXH6RhAoWw9d3gCrrJk1m5g='; img-src 'self' blob:; media-src blob:; connect-src wss://relay.damus.io wss://nos.lol wss://relay.primal.net wss://nostr.mom wss://relay.nostr.band https://ntfy.sh wss://ntfy.sh https://www.googleapis.com; worker-src 'self'; manifest-src 'self'; frame-src https://drive.biruni-gis.com; base-uri 'none'; form-action 'none'">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#F4F6F8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0E1114" media="(prefers-color-scheme: dark)">
+<meta name="color-scheme" content="light dark"><title>Biruni GIS</title><meta name="robots" content="noindex"><meta name="referrer" content="no-referrer">
+<style>
+:root{--bg:#F4F6F8;--card:#FFFFFF;--text:#14181D;--dim:#5F6B76;--line:#E1E6EB;--accent:#12A594;--ink:#FFFFFF;
+ --soft:#E1F4F1;--good:#12A36E;--fair:#C98A12;--poor:#D24B4B;--shadow:0 1px 2px rgba(16,24,32,.05),0 6px 20px rgba(16,24,32,.06)}
+@media (prefers-color-scheme:dark){:root{--bg:#0E1114;--card:#171B20;--text:#E8ECEF;--dim:#97A3AE;--line:#262C33;
+ --accent:#2CC5B4;--ink:#05201C;--soft:#11302C;--good:#3DD39A;--fair:#E8B04B;--poor:#F07070;--shadow:none}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--text)}
+body{font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans Arabic","Noto Sans",Tahoma,sans-serif;
+ min-height:100vh;-webkit-font-smoothing:antialiased}
+body.working{padding-bottom:calc(118px + env(safe-area-inset-bottom))}
+svg{width:1em;height:1em;flex:none}
+button{font:inherit;cursor:pointer}
+.top{position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:10px;
+ padding:calc(10px + env(safe-area-inset-top)) 16px 10px;background:var(--bg)}
+.brand{display:flex;flex:none;align-items:center;gap:9px;font-weight:700;font-size:17px;letter-spacing:-.01em}
+.logo{width:30px;height:30px;border-radius:10px;background:var(--accent);color:var(--ink);display:grid;place-items:center;font-size:18px}
+.tools{display:flex;gap:8px;align-items:center;min-width:0}
+#waitPill{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis}   /* a long count never widens the page */
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;padding:6px 11px;border-radius:999px;
+ background:var(--card);border:1px solid var(--line);color:var(--dim);white-space:nowrap}
+.pill.warn{border-color:var(--fair);color:var(--fair);font-weight:700}
+.pill svg{font-size:15px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--dim)}
+.dot.on{background:var(--good)}.dot.off{background:var(--poor)}.dot.wait{background:var(--fair);animation:pulse 1.2s infinite}
+@keyframes pulse{50%{opacity:.3}}
+.banner{margin:2px 16px 4px;padding:10px 13px;border-radius:14px;font-size:14px;line-height:1.45;
+ background:var(--card);border:1px solid var(--line);border-inline-start:4px solid var(--fair)}
+main{max-width:520px;margin:0 auto;padding:10px 16px 16px}
+.intro{text-align:center;padding:26px 6px 10px}
+.hero{position:relative;width:118px;height:118px;margin:10px auto 22px;border-radius:34px;background:var(--soft);
+ color:var(--accent);display:grid;place-items:center;font-size:54px}
+.hero .pin{position:absolute;inset-inline-end:-8px;top:-8px;width:44px;height:44px;border-radius:50%;background:var(--accent);
+ color:var(--ink);display:grid;place-items:center;font-size:24px;border:4px solid var(--bg)}
+h1{font-size:27px;line-height:1.2;margin:0 0 10px;letter-spacing:-.02em}
+.intro p{color:var(--dim);margin:0 auto 26px;max-width:32ch}
+.primary{width:100%;padding:16px;border:0;border-radius:16px;background:var(--accent);color:var(--ink);font-size:17px;
+ font-weight:700;box-shadow:var(--shadow);transition:transform .12s}
+.primary:active{transform:scale(.98)}.primary:disabled{opacity:.45}
+.card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:15px;margin-bottom:12px;box-shadow:var(--shadow)}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.lbl{font-size:13px;font-weight:600;color:var(--dim)}
+.coords{display:block;font:600 21px/1.3 ui-monospace,"SF Mono",Menlo,Consolas,monospace;margin:6px 0 12px;
+ font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.meter{height:6px;border-radius:6px;background:var(--line);overflow:hidden}
+.meter i{display:block;height:100%;width:6%;border-radius:6px;background:var(--dim);transition:width .6s,background .6s}
+.acc{font-weight:700;font-variant-numeric:tabular-nums;direction:ltr;unicode-bidi:isolate}
+.good{color:var(--good)}.fair{color:var(--fair)}.poor{color:var(--poor)}
+.meter i.good{background:var(--good)}.meter i.fair{background:var(--fair)}.meter i.poor{background:var(--poor)}
+.sub{margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+.dir{display:inline-flex;align-items:center;gap:7px;font-weight:700;font-variant-numeric:tabular-nums}
+.dir svg{font-size:18px;color:var(--accent);transition:transform .35s}
+.kinds{display:flex;gap:8px;overflow-x:auto;margin:10px -15px 12px;padding:0 15px;scrollbar-width:none}
+.kinds::-webkit-scrollbar{display:none}
+.kinds button{flex:none;font-size:15px;font-weight:600;padding:8px 15px;border-radius:999px;border:1px solid var(--line);
+ background:var(--bg);color:var(--text);transition:background .15s,color .15s,border-color .15s}
+.kinds button.sel{background:var(--accent);border-color:var(--accent);color:var(--ink)}
+input.in{width:100%;font:inherit;padding:12px 14px;border-radius:13px;border:1px solid var(--line);
+ background:var(--bg);color:var(--text);outline:none;transition:border-color .15s;min-height:48px}
+input.in:focus{border-color:var(--accent)}
+.fld{margin-bottom:14px}.fld .lbl{display:block;margin-bottom:7px}.fld .kinds{flex-wrap:wrap;overflow:visible;margin:0;padding:0}
+.req{color:var(--poor);margin-inline-start:3px}
+.fld.bad .lbl,.card.bad .lbl{color:var(--poor)}.fld.bad input.in,.card.bad input.in{border-color:var(--poor)}
+.fld.bad .kinds button:not(.sel){border-color:var(--poor)}
+@keyframes shake{25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}.fld.bad,.card.bad{animation:shake .3s}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:12px 15px;box-shadow:var(--shadow)}
+.stat b{display:block;font-size:27px;line-height:1.15;font-variant-numeric:tabular-nums}
+.stat span{font-size:13px;color:var(--dim)}.stat.warn b{color:var(--fair)}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:9px}
+.grid div{position:relative;aspect-ratio:1;border-radius:15px;overflow:hidden;background:var(--line);animation:pop .35s ease-out}
+@keyframes pop{from{transform:scale(.86);opacity:0}}
+.grid img,.last img{width:100%;height:100%;object-fit:cover;display:block}
+.badge{position:absolute;bottom:6px;inset-inline-end:6px;min-width:24px;height:24px;padding:0 6px;display:grid;
+ place-items:center;border-radius:12px;font-size:13px;font-weight:700;background:rgba(0,0,0,.62);color:#fff}
+.badge.ok{background:var(--good)}.badge.bad{background:var(--poor)}
+.empty{grid-column:1/-1;aspect-ratio:auto!important;animation:none!important;background:transparent!important;
+ color:var(--dim);font-size:14px;text-align:center;padding:14px 0}
+.shutterbar{position:fixed;inset-inline:0;bottom:0;z-index:6;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;
+ gap:12px;padding:12px 22px calc(12px + env(safe-area-inset-bottom));background:var(--card);border-top:1px solid var(--line)}
+.last{width:54px;height:54px;border-radius:15px;overflow:hidden;background:var(--line);justify-self:start}
+.shutter{width:80px;height:80px;border:0;padding:0;border-radius:50%;background:transparent;position:relative}
+.shutter .ring{position:absolute;inset:0;border-radius:50%;border:4px solid var(--accent)}
+.shutter .core{position:absolute;inset:9px;border-radius:50%;background:var(--accent);color:var(--ink);display:grid;
+ place-items:center;font-size:28px;transition:transform .12s}
+.shutter:active .core{transform:scale(.9)}
+.shutter:disabled .ring{border-color:var(--line);border-top-color:var(--accent);animation:spin 1s linear infinite}
+.shutter:disabled .core{background:var(--line);color:var(--dim)}
+@keyframes spin{to{transform:rotate(360deg)}}
+.hint{justify-self:end;font-size:13px;line-height:1.35;color:var(--dim);text-align:end;max-width:118px}
+.sheet{position:fixed;inset:0;z-index:10;background:rgba(0,0,0,.42);display:flex;align-items:flex-end;animation:fade .2s}
+.panel{width:100%;max-width:520px;margin:0 auto;background:var(--card);border-radius:24px 24px 0 0;
+ padding:10px 12px calc(14px + env(safe-area-inset-bottom));animation:up .25s ease-out}
+.grab{width:40px;height:5px;border-radius:3px;background:var(--line);margin:0 auto 10px}
+.panel .lbl{padding:0 12px 6px}
+.panel button{display:flex;justify-content:space-between;align-items:center;width:100%;font-size:17px;padding:13px 12px;
+ border:0;border-radius:13px;background:transparent;color:var(--text);text-align:start}
+.panel button.sel{background:var(--soft);font-weight:700}.panel button.sel::after{content:"✓";color:var(--accent)}
+@keyframes up{from{transform:translateY(48px);opacity:0}}@keyframes fade{from{opacity:0}}
+.toast{position:fixed;left:50%;bottom:calc(126px + env(safe-area-inset-bottom));z-index:8;transform:translate(-50%,16px);
+ opacity:0;background:var(--text);color:var(--bg);padding:10px 18px;border-radius:999px;font-size:14px;font-weight:600;
+ transition:opacity .25s,transform .25s;pointer-events:none;white-space:nowrap;max-width:90vw;overflow:hidden;text-overflow:ellipsis}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.ghost{font-size:14px;font-weight:600;padding:8px 13px;border-radius:12px;border:1px solid var(--accent);
+ background:transparent;color:var(--accent)}
+.ghost.on{background:var(--accent);color:var(--ink)}
+.avgInfo{font-size:13px;color:var(--dim);text-align:end;flex:1}
+#avgBar{margin-top:10px}
+.mrow{display:flex;gap:10px;align-items:center;margin-top:8px}
+.sw{position:relative;flex:none;width:50px;height:30px}
+.sw input{opacity:0;width:0;height:0;position:absolute}
+.sw span{position:absolute;inset:0;border-radius:15px;background:var(--line);transition:background .2s}
+.sw span::after{content:"";position:absolute;top:3px;inset-inline-start:3px;width:24px;height:24px;border-radius:50%;
+ background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .2s}
+.sw input:checked+span{background:var(--accent)}
+.sw input:checked+span::after{transform:translateX(20px)}
+[dir=rtl] .sw input:checked+span::after{transform:translateX(-20px)}
+.sw input:focus-visible+span{outline:2px solid var(--accent);outline-offset:2px}
+#gmap{display:block;width:100%;height:190px;margin:10px 0 8px;border-radius:14px;background:var(--bg)}
+.gtext{font-size:17px;font-weight:700}
+.gtext.in{color:var(--good)}.gtext.out{color:var(--fair)}
+.coords.inroom{font:700 19px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans Arabic",Tahoma,sans-serif;letter-spacing:0}
+.roomrow{display:flex;gap:8px;align-items:center;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+.roomrow .ghost{flex:none}.roomName{flex:1;font-weight:700;font-size:15px}
+#rmap{display:block;width:100%;height:220px;margin:10px 0 4px;border-radius:14px;background:var(--bg);touch-action:none}
+.scan{position:relative;width:100%;aspect-ratio:1;border-radius:16px;overflow:hidden;background:#000;margin-bottom:10px}
+.scan video{width:100%;height:100%;object-fit:cover}
+.scan i{position:absolute;inset:18%;border:3px solid rgba(255,255,255,.85);border-radius:18px}
+.rooms{max-height:40vh;overflow:auto}
+.handInfo{font-size:13px;color:var(--dim);margin-top:8px}.handInfo:empty{display:none}
+.handStep{font-size:16px;font-weight:600;line-height:1.45;padding:2px 12px 12px;text-align:center}
+#handQr{display:block;width:min(78vw,300px);height:auto;margin:0 auto 12px;border-radius:12px;image-rendering:pixelated}
+#handScan{max-width:260px;margin:0 auto 12px}.panel button#handCancel{justify-content:center}
+.hide{display:none!important}
+.dframe{display:block;width:100%;height:84px;border:0;margin-top:8px;background:transparent}
+.dstate{font-size:14px;color:var(--dim);margin-top:4px}.dcount{font-weight:700;font-variant-numeric:tabular-nums}
+.dpop,.dpick{margin-top:8px}.dfold{font-size:13px;color:var(--dim);margin-top:4px;overflow-wrap:anywhere}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style></head><body>
+<header class="top">
+ <div class="brand"><span class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="11" r="3"/><path d="M17.66 16.66L13.41 20.9a2 2 0 0 1-2.83 0l-4.24-4.24a8 8 0 1 1 11.32 0z"/></svg></span><span id="title">Biruni GIS</span></div>
+ <div class="tools"><span class="pill warn hide" id="waitPill"></span><span class="pill" id="chip"><i class="dot wait" id="dot"></i><span id="chipText"></span></span>
+ <button class="pill" id="langBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3.6 9h16.8M3.6 15h16.8M11.5 3a17 17 0 0 0 0 18M12.5 3a17 17 0 0 1 0 18"/></svg><span id="langCode"></span></button></div>
+</header>
+<div class="banner hide" id="st"></div>
+<div class="banner hide" id="privWarn"></div>
+<main>
+<section id="intro" class="intro">
+ <div class="hero"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h1a2 2 0 0 0 2-2a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1a2 2 0 0 0 2 2h1a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2"/><circle cx="12" cy="13" r="3"/></svg>
+ <span class="pin"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="11" r="3"/><path d="M17.66 16.66L13.41 20.9a2 2 0 0 1-2.83 0l-4.24-4.24a8 8 0 1 1 11.32 0z"/></svg></span></div>
+ <h1 id="hero"></h1><p id="introText"></p><button class="primary" id="go" type="button"></button>
+</section>
+<section id="work" class="hide">
+ <div class="card hide" id="guideCard">
+  <div class="row"><span class="lbl" id="lGuide"></span><span class="dir"><svg id="garrow" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l7.5 19L12 16.8 4.5 21z"/></svg></span></div>
+  <canvas id="gmap"></canvas>
+  <div class="gtext" id="gtext">—</div>
+ </div>
+ <div class="card">
+  <div class="row"><span class="lbl" id="lPos"></span><span class="acc" id="acc"></span></div>
+  <bdi class="coords" id="pos">—</bdi>
+  <div class="meter"><i id="accBar"></i></div>
+  <div class="row sub"><span class="lbl" id="lDir"></span><span class="dir"><svg id="arrow" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l7.5 19L12 16.8 4.5 21z"/></svg><bdi id="deg">—</bdi></span></div>
+  <div class="row sub"><button class="ghost" id="avgBtn" type="button"></button><span class="avgInfo" id="avgInfo"></span></div>
+  <div class="meter hide" id="avgBar"><i id="avgFill"></i></div>
+  <div class="roomrow hide" id="roomRow"><button class="ghost" id="roomBtn" type="button"></button>
+   <span class="roomName" id="roomName"></span><button class="ghost hide" id="roomOff" type="button">×</button></div>
+  <div class="hide" id="roomPlan"><canvas id="rmap"></canvas><span class="lbl" id="roomHint"></span></div>
+ </div>
+ <div class="card">
+  <span class="lbl" id="lKind"></span><div class="kinds" id="kinds"></div>
+  <div id="form"></div>
+  <input type="text" class="in" id="note" enterkeyhint="done" autocomplete="off">
+ </div>
+ <div class="card" id="meCard"><label class="lbl" for="me" id="lMe"></label>
+  <div class="mrow"><input type="text" class="in" id="me" maxlength="40" autocomplete="name">
+   <label class="sw"><input type="checkbox" id="share" checked><span></span></label></div></div>
+ <div class="stats"><div class="stat"><b id="nSent">0</b><span id="lSent"></span></div>
+  <div class="stat" id="waitBox"><b id="nWait">0</b><span id="lWait"></span></div></div>
+ <div class="card" id="handCard"><span class="lbl" id="lHand"></span>
+  <div class="mrow"><button class="ghost" id="giveBtn" type="button"></button><button class="ghost" id="takeBtn" type="button"></button></div>
+  <div class="handInfo" id="handInfo"></div></div>
+ <span class="lbl" id="lRecent"></span><div id="list" class="grid"></div>
+</section>
+</main>
+<footer class="shutterbar hide" id="bar"><div class="last" id="last"></div>
+ <button id="shot" class="shutter" type="button" disabled><span class="ring"></span><span class="core"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h1a2 2 0 0 0 2-2a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1a2 2 0 0 0 2 2h1a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2"/><circle cx="12" cy="13" r="3"/></svg></span></button>
+ <div class="hint" id="shotHint"></div></footer>
+<input id="file" type="file" accept="image/*" capture="environment" class="hide">
+<div class="sheet hide" id="sheet"><div class="panel"><div class="grab"></div><div class="lbl" id="lLang"></div><div id="langs"></div></div></div>
+<div class="sheet hide" id="scanSheet"><div class="panel"><div class="grab"></div>
+ <div class="scan" id="scanBox"><video id="scanVideo" playsinline muted></video><i></i></div>
+ <div class="lbl" id="lPick"></div><input type="text" class="in" id="roomFind" autocomplete="off">
+ <div class="rooms" id="roomList"></div></div></div>
+<div class="sheet hide" id="handSheet"><div class="panel"><div class="grab"></div>
+ <div class="handStep" id="handStep" aria-live="polite"></div><canvas id="handQr" class="hide"></canvas>
+ <div class="scan hide" id="handScan"><video id="handVideo" playsinline muted></video><i></i></div>
+ <button type="button" id="handCancel"></button></div></div>
+<div class="toast" id="toast"></div>
+<script>
+let ALL={"ar": {"arrived": "✓ وصلت للكمبيوتر ({n})", "averaged": "متوسط {n} قراءة، تشتت ± {s} م - هيتاخد للصورة الجاية", "averaging": "جارٍ حساب المتوسط… {n} قراءة - أبقِ الهاتف ثابتًا", "avg": "متوسط هنا (20 ث)", "bad": "هذه القيمة غير صحيحة.", "blocked": "تم إيقاف هذا الهاتف من الحاسوب.", "connected": "متوصل بالكمبيوتر", "connecting": "جارٍ الاتصال بالكمبيوتر… الصور الملتقطة الآن تُحفظ وتُرسل.", "denied": "لم يُسمح بالموقع.", "direction": "الاتجاه", "driveAuth": "انتهت صلاحية الربط مع Google Drive. انقر للربط مجددًا.", "driveDenied": "لم يُسمح باستخدام Google Drive.", "driveErr": "تعذر ربط Google Drive.", "driveFolder": "المجلد:", "driveFree": "إخلاء المساحة في Google Drive ({n})", "driveFull": "مساحة Google Drive لديك ممتلئة. تنتظر الصور على هذا الهاتف حتى يصبح الكمبيوتر في النطاق.", "driveGone": "لم يعد بالإمكان الوصول إلى مجلد المكتب. اطلب من المكتب مشاركته مجددًا، ثم اختره.", "driveIdle": "تم الربط. تنتقل كل صورة إلى مجلد Google Drive الخاص بالمكتب. وعندما يكون الكمبيوتر في النطاق، يعرض نسخة صغيرة فورًا.", "driveIn": "في Google Drive:", "driveInApp": "لاستخدام Google Drive، افتح هذه الصفحة في Chrome أو Safari.", "driveLink": "ربط Google Drive", "driveMode": "لا يمكن الوصول إلى الكمبيوتر - تنتقل الصور إلى مجلد Google Drive الخاص بالمكتب.", "driveOpen": "فتح رابط Google Drive", "driveOwn": "في Google Drive الخاص بك. إذا كان المكتب يستخدم حسابًا آخر، فاختر المجلد الذي شاركه.", "drivePick": "اختيار مجلد المكتب", "drivePickAgain": "اختيار مجلد آخر", "drivePickHint": "شارك المكتب مجلدًا باسم {name} مع حساب Google الخاص بك. اختره مرة واحدة.", "drivePickRO": "المجلد مشارك للعرض فقط. اطلب من المكتب منحك صلاحية «محرر».", "drivePickWrong": "هذا ليس مجلد المكتب. اختر المجلد المسمى {name}.", "drivePopupBlocked": "حظر المتصفح نافذة Google Drive. اسمح بالنوافذ المنبثقة لهذه الصفحة.", "drivePreview": "{n} معروضة على الكمبيوتر، والأصلية تنتقل إلى Google Drive", "driveRelink": "ربط Google Drive مجددًا", "driveSend": "إرسال الصور ({n})", "driveTitle": "Google Drive", "driveUnlinked": "اربط Google Drive وستنتقل كل صورة إلى مجلد Google Drive الخاص بالمكتب، مقفلةً بحيث لا يتمكن من فتحها إلا كمبيوتر المكتب.", "driveUp": "جارٍ الإرسال إلى Google Drive…", "driveWait": "Google Drive مشغول - ستتم المحاولة مجددًا قريبًا.", "findRoom": "رقم الغرفة أو اسمها", "guide": "توجيه من الكمبيوتر", "hand": "من غير إنترنت", "handBad": "هذا ليس رمز تسليم.", "handCancel": "إلغاء", "handCarry": "يحمل {n} من الصور للزملاء.", "handFail": "تعذّر ربط الهاتفين. ضعهما على شبكة Wi-Fi واحدة أو على نقطة اتصال أحدهما، ولا حاجة إلى الإنترنت.", "handGave": "سُلّمت {n} من الصور. تبقى على هذا الهاتف أيضًا حتى يصل أحدكما إلى الحاسوب.", "handGive1": "اجعل زميلك يمسح هذا الرمز، ثم امسح الرمز الذي يظهر على هاتفه.", "handGiveBtn": "أعطِ صوري لزميل", "handLinking": "جارٍ ربط الهاتفين…", "handNoKey": "لم يتصل هذا الهاتف بالحاسوب بعد، لذا لا يستطيع ختم صوره له.", "handNoScan": "هذا المتصفح لا يقرأ الرموز. استخدم Chrome على أندرويد.", "handNone": "لا توجد صور تنتظر التسليم.", "handSending": "جارٍ تسليم {n} من {k}…", "handTake1": "امسح الرمز الظاهر على هاتف زميلك.", "handTake2": "الآن اجعل زميلك يمسح هذا الرمز.", "handTakeBtn": "خذ صور زميل", "handTaking": "استُلمت {n} من الصور…", "handTook": "استُلمت {n} من الصور. تذهب إلى الحاسوب مع صورك؛ وهي مختومة له، فلا يستطيع هذا الهاتف فتحها.", "handWait": "جارٍ التجهيز…", "hero": "صور ميدانية", "incognito": "التصفح الخفي مفعّل: إغلاق هذه الصفحة سيمحو الصور المنتظرة. افتح الرابط في لسان تصفح عادي.", "insecure": "يمنع هذا المتصفح الموقع هنا. استخدم Chrome أو Safari واقبل تحذير الشهادة.", "inside": "داخل - {d} من الحد", "intro": "اسمح بالوصول إلى الموقع عند طلبه. تظهر كل صورة على خريطة الكمبيوتر فورًا وتُحفظ عليه. أبقِ هذه الصفحة مفتوحة.", "kept": "حُفظت على الهاتف - جارٍ الإرسال…", "kind": "النوع (اختياري)", "language": "اللغة", "leaveRoom": "برة الغرفة", "level": "الدور {n}", "linking": "بيتوصل…", "lost": "تعذّر الوصول إلى الحاسوب - الصور محفوظة على الهاتف وستُرسل لاحقًا.", "me": "اسمك على خريطة الكمبيوتر", "near": "{d} من الخط", "need": "املأ الأسئلة المعلّمة الأول.", "needName": "اكتب اسمك أوّلًا لتُسجَّل صورك باسمك.", "no": "لا", "noCamera": "لا تستطيع الكاميرا قراءة الرموز هنا - اختر الغرفة.", "noRoom": "هذا الرمز غير موجود في الخريطة الداخلية التي أرسلها الحاسوب.", "nokey": "افتح هذه الصفحة بمسح الرمز في Biruni GIS (الصور الميدانية).", "none": "ستظهر صورك هنا.", "note": "ملاحظة (اختيارية)", "offline": "غير متصل", "online": "متوصل", "outside": "برة - {d} للحد", "p2pfail": "لا تسمح هذه الشبكة بالاتصال المباشر بالحاسوب. الصور محفوظة على الهاتف؛ جرّب شبكة أخرى أو Wi-Fi.", "pcoff": "الحاسوب لا يستجيب. هل Biruni مفتوح والصور الميدانية قيد التشغيل؟ الصور محفوظة على الهاتف.", "pickRoom": "أو اختر الغرفة", "point": "النقطة", "position": "الموقع", "previewSent": "{n} وصلت مصغّرة، الأصل بانتظار الواي فاي", "queued": "مستنية تتبعت:", "recent": "آخر الصور", "relayMode": "الشبكة تمنع الاتصال المباشر - تُرسل نسخ مصغّرة مشفّرة عبر المرحّلات، وتبقى الصور الأصلية بانتظار الواي فاي.", "required": "إلزامي", "scanRoom": "امسح كود الغرفة", "sent": "وصل للكمبيوتر:", "share": "ورّيني على خريطة الكمبيوتر", "shoot": "صوّر", "start": "ابدأ", "stop": "إيقاف", "tapRoom": "انقر على مكانك في الغرفة", "target": "{d} لحد {name}", "title": "Biruni GIS - صور ميدانية", "via": "متصل عبر هاتف زميل.", "waiting": "مستني الموقع…", "waitingPhotos": "{n} صور مستنية", "yes": "نعم"}, "en": {"arrived": "✓ Arrived on the computer ({n})", "averaged": "Averaged from {n} readings, spread ± {s} m - used for the next photo", "averaging": "Averaging… {n} readings - keep the phone still", "avg": "Average here (20 s)", "bad": "This value is not right.", "blocked": "This phone has been blocked by the computer.", "connected": "Connected to the computer", "connecting": "Connecting to the computer… photos taken now are kept and sent.", "denied": "Location not allowed.", "direction": "Direction", "driveAuth": "The link to Google Drive has ended. Tap to link again.", "driveDenied": "Google Drive was not allowed.", "driveErr": "Google Drive could not be linked.", "driveFolder": "Folder:", "driveFree": "Free space in Google Drive ({n})", "driveFull": "Your Google Drive is full. Photos wait on this phone until the computer is in reach.", "driveGone": "The office folder can no longer be reached. Ask the office to share it again, then choose it.", "driveIdle": "Linked. Every photo goes to the office's Google Drive folder. When the computer is in reach, it shows a small copy at once.", "driveIn": "In Google Drive:", "driveInApp": "To use Google Drive, open this page in Chrome or Safari.", "driveLink": "Link Google Drive", "driveMode": "The computer cannot be reached - photos are going to the office's Google Drive folder.", "driveOpen": "Open the Google Drive link", "driveOwn": "in your own Google Drive. If the office uses another account, choose the folder it shared.", "drivePick": "Choose the office folder", "drivePickAgain": "Choose another folder", "drivePickHint": "The office shared a folder named {name} with your Google account. Choose it once.", "drivePickRO": "The folder is shared for viewing only. Ask the office to make you an Editor.", "drivePickWrong": "That is not the office's folder. Choose the one named {name}.", "drivePopupBlocked": "The browser blocked the Google Drive window. Allow pop-ups for this page.", "drivePreview": "{n} shown on the computer, original going to Google Drive", "driveRelink": "Link Google Drive again", "driveSend": "Send photos ({n})", "driveTitle": "Google Drive", "driveUnlinked": "Link Google Drive and every photo goes to the office's Google Drive folder, locked so that only the office computer can open it.", "driveUp": "Sending to Google Drive…", "driveWait": "Google Drive is busy - trying again soon.", "findRoom": "Room number or name", "guide": "Guide from the computer", "hand": "Without internet", "handBad": "This is not a hand-over code.", "handCancel": "Cancel", "handCarry": "Carrying {n} photos for teammates.", "handFail": "The two phones could not link. Put both on the same Wi-Fi or on one phone's hotspot - no internet is needed.", "handGave": "{n} photos handed over. They stay on this phone too until one of you reaches the computer.", "handGive1": "Let your teammate scan this code, then scan the code that appears on their phone.", "handGiveBtn": "Give my photos to a teammate", "handLinking": "Linking the two phones…", "handNoKey": "This phone has not met the computer yet, so it cannot seal its photos for it.", "handNoScan": "This browser cannot read codes. Use Chrome on Android.", "handNone": "No photos are waiting to be handed over.", "handSending": "Handing over {n} of {k}…", "handTake1": "Scan the code on your teammate's phone.", "handTake2": "Now let your teammate scan this code.", "handTakeBtn": "Take a teammate's photos", "handTaking": "{n} photos taken…", "handTook": "{n} photos taken. They go to the computer with yours; they are sealed for it, so this phone cannot open them.", "handWait": "Getting ready…", "hero": "Field photos", "incognito": "Private browsing is on: closing this page will erase waiting photos. Open the link in a normal browser tab.", "insecure": "This browser blocks the location here. Use Chrome or Safari and accept the certificate warning.", "inside": "Inside - {d} from the edge", "intro": "Allow the location when asked. Each photo appears on the computer's map at once and is saved there. Keep this page open.", "kept": "Saved on the phone - sending…", "kind": "Kind (optional)", "language": "Language", "leaveRoom": "Outside the room", "level": "Level {n}", "linking": "Connecting…", "lost": "Not reaching the computer - photos are kept on the phone and sent later.", "me": "Your name on the computer's map", "near": "{d} from the line", "need": "Fill in the marked questions first.", "needName": "Write your name first so your photos carry it.", "no": "No", "noCamera": "The camera cannot read codes here - choose the room.", "noRoom": "This code is not in the indoor map the computer sent.", "nokey": "Open this page by scanning the code in Biruni GIS (Field photos).", "none": "Your photos will appear here.", "note": "Note (optional)", "offline": "Not connected", "online": "Connected", "outside": "Outside - {d} to the edge", "p2pfail": "This network does not allow a direct link to the computer. Photos are kept on the phone; try another network or Wi-Fi.", "pcoff": "The computer is not answering. Is Biruni open, with Field photos started? Photos are kept on the phone.", "pickRoom": "Or choose the room", "point": "the point", "position": "Position", "previewSent": "{n} arrived as preview, original waiting for Wi-Fi", "queued": "Waiting to send:", "recent": "Recent photos", "relayMode": "Direct link blocked by the mobile network - sending encrypted previews over the relays; full originals wait for Wi-Fi.", "required": "Required", "scanRoom": "Scan the room code", "sent": "On the computer:", "share": "Show me on the computer's map", "shoot": "Take a photo", "start": "Start", "stop": "Stop", "tapRoom": "Tap where you are in the room", "target": "{d} to {name}", "title": "Biruni GIS - field photos", "via": "Connected through a teammate's phone.", "waiting": "Waiting for the location…", "waitingPhotos": "{n} photos waiting", "yes": "Yes"}, "es": {"arrived": "✓ Llegó al ordenador ({n})", "averaged": "Promedio de {n} lecturas, dispersión ± {s} m - para la próxima foto", "averaging": "Promediando… {n} lecturas - mantenga el teléfono quieto", "avg": "Promediar aquí (20 s)", "bad": "Este valor no es correcto.", "blocked": "Este teléfono ha sido bloqueado por el ordenador.", "connected": "Conectado al ordenador", "connecting": "Conectando con el equipo… las fotos que tome ahora se guardan y se envían.", "denied": "Ubicación no permitida.", "direction": "Dirección", "driveAuth": "El vínculo con Google Drive ha finalizado. Toque para vincular de nuevo.", "driveDenied": "No se permitió el acceso a Google Drive.", "driveErr": "No se pudo vincular Google Drive.", "driveFolder": "Carpeta:", "driveFree": "Liberar espacio en Google Drive ({n})", "driveFull": "Su Google Drive está lleno. Las fotos esperan en este teléfono hasta que el equipo esté al alcance.", "driveGone": "Ya no se puede acceder a la carpeta de la oficina. Pida a la oficina que la comparta de nuevo y luego elíjala.", "driveIdle": "Vinculado. Cada foto va a la carpeta de Google Drive de la oficina. Cuando el equipo está al alcance, muestra una copia pequeña de inmediato.", "driveIn": "En Google Drive:", "driveInApp": "Para usar Google Drive, abra esta página en Chrome o Safari.", "driveLink": "Vincular Google Drive", "driveMode": "No se puede acceder al equipo - las fotos van a la carpeta de Google Drive de la oficina.", "driveOpen": "Abrir el enlace de Google Drive", "driveOwn": "en su propio Google Drive. Si la oficina usa otra cuenta, elija la carpeta que compartió.", "drivePick": "Elegir la carpeta de la oficina", "drivePickAgain": "Elegir otra carpeta", "drivePickHint": "La oficina compartió una carpeta llamada {name} con su cuenta de Google. Elíjala una sola vez.", "drivePickRO": "La carpeta está compartida solo para ver. Pida a la oficina que lo haga Editor.", "drivePickWrong": "Esa no es la carpeta de la oficina. Elija la que se llama {name}.", "drivePopupBlocked": "El navegador bloqueó la ventana de Google Drive. Permita las ventanas emergentes para esta página.", "drivePreview": "{n} mostradas en el equipo, el original va a Google Drive", "driveRelink": "Vincular Google Drive de nuevo", "driveSend": "Enviar fotos ({n})", "driveTitle": "Google Drive", "driveUnlinked": "Vincule Google Drive y cada foto irá a la carpeta de Google Drive de la oficina, bloqueada para que solo el equipo de la oficina pueda abrirla.", "driveUp": "Enviando a Google Drive…", "driveWait": "Google Drive está ocupado - se intentará de nuevo pronto.", "findRoom": "Número o nombre de la sala", "guide": "Guía del ordenador", "hand": "Sin internet", "handBad": "Este no es un código de entrega.", "handCancel": "Cancelar", "handCarry": "Lleva {n} fotos de compañeros.", "handFail": "Los dos teléfonos no pudieron enlazarse. Póngalos en la misma Wi-Fi o en el punto de acceso de uno de ellos; no hace falta internet.", "handGave": "{n} fotos entregadas. Se quedan también en este teléfono hasta que uno de los dos llegue al equipo.", "handGive1": "Deje que su compañero escanee este código y luego escanee el código que aparece en su teléfono.", "handGiveBtn": "Dar mis fotos a un compañero", "handLinking": "Enlazando los dos teléfonos…", "handNoKey": "Este teléfono aún no se ha conectado al equipo, así que no puede sellar sus fotos para él.", "handNoScan": "Este navegador no lee códigos. Use Chrome en Android.", "handNone": "No hay fotos esperando para entregar.", "handSending": "Entregando {n} de {k}…", "handTake1": "Escanee el código del teléfono de su compañero.", "handTake2": "Ahora deje que su compañero escanee este código.", "handTakeBtn": "Recibir las fotos de un compañero", "handTaking": "{n} fotos recibidas…", "handTook": "{n} fotos recibidas. Van al equipo con las suyas; están selladas para él, así que este teléfono no puede abrirlas.", "handWait": "Preparando…", "hero": "Fotos de campo", "incognito": "La navegación privada está activada: cerrar esta página borrará las fotos en espera. Abra el enlace en una pestaña normal.", "insecure": "Este navegador bloquea aquí la ubicación. Use Chrome o Safari y acepte el aviso del certificado.", "inside": "Dentro - a {d} del borde", "intro": "Permite la ubicación cuando se solicite. Cada foto aparece al instante en el mapa del ordenador y se guarda allí. Mantén esta página abierta.", "kept": "Guardada en el teléfono - enviando…", "kind": "Tipo (opcional)", "language": "Idioma", "leaveRoom": "Fuera de la sala", "level": "Planta {n}", "linking": "Conectando…", "lost": "No se alcanza el ordenador: las fotos se guardan en el teléfono y se envían más tarde.", "me": "Su nombre en el mapa del ordenador", "near": "a {d} de la línea", "need": "Primero rellene las preguntas marcadas.", "needName": "Escriba primero su nombre para que sus fotos lo lleven.", "no": "No", "noCamera": "La cámara no puede leer códigos aquí: elija la sala.", "noRoom": "Este código no está en el mapa de interiores que envió el ordenador.", "nokey": "Abra esta página escaneando el código en Biruni GIS (Fotos de campo).", "none": "Sus fotos aparecerán aquí.", "note": "Nota (opcional)", "offline": "No conectado", "online": "Conectado", "outside": "Fuera - a {d} del borde", "p2pfail": "Esta red no permite un enlace directo con el equipo. Las fotos se guardan en el teléfono; pruebe otra red o Wi-Fi.", "pcoff": "El equipo no responde. ¿Está Biruni abierto, con Fotos de campo iniciado? Las fotos se guardan en el teléfono.", "pickRoom": "O elija la sala", "point": "el punto", "position": "Posición", "previewSent": "{n} llegaron como vista previa, el original espera Wi-Fi", "queued": "Pendientes de enviar:", "recent": "Fotos recientes", "relayMode": "La red móvil bloqueó el enlace directo: se envían vistas previas cifradas por los repetidores; los originales esperan Wi-Fi.", "required": "Obligatorio", "scanRoom": "Escanear el código de la sala", "sent": "En el ordenador:", "share": "Mostrarme en el mapa del ordenador", "shoot": "Tomar una foto", "start": "Inicio", "stop": "Detener", "tapRoom": "Toque donde está en la sala", "target": "{d} hasta {name}", "title": "Biruni GIS - fotos de campo", "via": "Conectado a través del teléfono de un compañero.", "waiting": "Esperando la ubicación…", "waitingPhotos": "{n} fotos en espera", "yes": "Sí"}, "fa": {"arrived": "✓ به رایانه رسید ({n})", "averaged": "میانگین {n} خوانش، پراکندگی ± {s} متر - برای عکس بعدی", "averaging": "در حال میانگین‌گیری… {n} خوانش - تلفن را ثابت نگه دارید", "avg": "میانگین همین‌جا (۲۰ ث)", "bad": "این مقدار درست نیست.", "blocked": "این گوشی توسط رایانه مسدود شده است.", "connected": "به رایانه متصل است", "connecting": "در حال اتصال به رایانه… عکس‌هایی که اکنون می‌گیرید نگه داشته و فرستاده می‌شوند.", "denied": "دسترسی به مکان مجاز نیست.", "direction": "جهت", "driveAuth": "اتصال با Google Drive پایان یافته است. برای اتصال دوباره ضربه بزنید.", "driveDenied": "دسترسی به Google Drive مجاز نشد.", "driveErr": "اتصال Google Drive امکان‌پذیر نبود.", "driveFolder": "پوشه:", "driveFree": "آزادسازی فضا در Google Drive ({n})", "driveFull": "فضای Google Drive شما پر است. عکس‌ها در این گوشی منتظر می‌مانند تا رایانه در دسترس قرار گیرد.", "driveGone": "دیگر دسترسی به پوشه دفتر ممکن نیست. از دفتر بخواهید دوباره آن را هم‌رسانی کند، سپس آن را انتخاب کنید.", "driveIdle": "متصل شد. هر عکس به پوشه Google Drive دفتر می‌رود. وقتی رایانه در دسترس باشد، بلافاصله یک نسخه کوچک را نمایش می‌دهد.", "driveIn": "در Google Drive:", "driveInApp": "برای استفاده از Google Drive، این صفحه را در Chrome یا Safari باز کنید.", "driveLink": "اتصال Google Drive", "driveMode": "دسترسی به رایانه ممکن نیست - عکس‌ها به پوشه Google Drive دفتر می‌روند.", "driveOpen": "باز کردن پیوند Google Drive", "driveOwn": "در Google Drive خودتان. اگر دفتر از حساب دیگری استفاده می‌کند، پوشه‌ای را که هم‌رسانی کرده است انتخاب کنید.", "drivePick": "انتخاب پوشه دفتر", "drivePickAgain": "انتخاب پوشه دیگر", "drivePickHint": "دفتر پوشه‌ای با نام {name} را با حساب Google شما هم‌رسانی کرده است. یک بار آن را انتخاب کنید.", "drivePickRO": "این پوشه فقط برای مشاهده هم‌رسانی شده است. از دفتر بخواهید دسترسی شما را به ویرایشگر تغییر دهد.", "drivePickWrong": "این پوشه دفتر نیست. پوشه‌ای با نام {name} را انتخاب کنید.", "drivePopupBlocked": "مرورگر پنجره Google Drive را مسدود کرد. پنجره‌های بازشو را برای این صفحه مجاز کنید.", "drivePreview": "{n} مورد در رایانه نمایش داده شد، نسخه اصلی به Google Drive می‌رود", "driveRelink": "اتصال دوباره Google Drive", "driveSend": "ارسال عکس‌ها ({n})", "driveTitle": "Google Drive", "driveUnlinked": "Google Drive را متصل کنید تا هر عکس به پوشه Google Drive دفتر برود، در حالی که قفل شده تا فقط رایانه دفتر بتواند آن را باز کند.", "driveUp": "در حال ارسال به Google Drive…", "driveWait": "Google Drive مشغول است - به زودی دوباره تلاش می‌شود.", "findRoom": "شماره یا نام اتاق", "guide": "راهنما از رایانه", "hand": "بدون اینترنت", "handBad": "این کد تحویل نیست.", "handCancel": "لغو", "handCarry": "{n} عکس برای هم‌تیمی‌ها همراه دارد.", "handFail": "دو تلفن به هم وصل نشدند. هر دو را روی یک Wi-Fi یا روی هات‌اسپات یکی از آن‌ها بگذارید؛ اینترنت لازم نیست.", "handGave": "{n} عکس تحویل داده شد. تا وقتی یکی از شما به رایانه برسد، روی این تلفن هم می‌مانند.", "handGive1": "بگذارید هم‌تیمی‌تان این کد را اسکن کند، سپس کدی را که روی تلفن او ظاهر می‌شود اسکن کنید.", "handGiveBtn": "دادن عکس‌هایم به یک هم‌تیمی", "handLinking": "در حال پیوند دو تلفن…", "handNoKey": "این تلفن هنوز به رایانه وصل نشده است، پس نمی‌تواند عکس‌هایش را برای آن مهر کند.", "handNoScan": "این مرورگر کد نمی‌خواند. از Chrome روی اندروید استفاده کنید.", "handNone": "عکسی در انتظار تحویل نیست.", "handSending": "تحویل {n} از {k}…", "handTake1": "کد روی تلفن هم‌تیمی‌تان را اسکن کنید.", "handTake2": "حالا بگذارید هم‌تیمی‌تان این کد را اسکن کند.", "handTakeBtn": "گرفتن عکس‌های یک هم‌تیمی", "handTaking": "{n} عکس گرفته شد…", "handTook": "{n} عکس گرفته شد. همراه عکس‌های شما به رایانه می‌روند؛ برای آن مهر شده‌اند، پس این تلفن نمی‌تواند بازشان کند.", "handWait": "در حال آماده‌سازی…", "hero": "عکس‌های میدانی", "incognito": "مرور ناشناس فعال است: بستن این صفحه عکس‌های در انتظار را پاک می‌کند. پیوند را در یک زبانه عادی باز کنید.", "insecure": "این مرورگر اینجا مکان را مسدود می‌کند. از Chrome یا Safari استفاده کنید و هشدار گواهی را بپذیرید.", "inside": "داخل - {d} تا لبه", "intro": "هنگام درخواست، اجازهٔ موقعیت مکانی را بدهید. هر عکس بلافاصله روی نقشهٔ رایانه نمایش داده می‌شود و همان‌جا ذخیره می‌شود. این صفحه را باز نگه دارید.", "kept": "روی تلفن ذخیره شد - در حال ارسال…", "kind": "نوع (اختیاری)", "language": "زبان", "leaveRoom": "بیرون از اتاق", "level": "طبقهٔ {n}", "linking": "در حال اتصال…", "lost": "دسترسی به رایانه ممکن نیست؛ عکس‌ها روی تلفن نگه داشته می‌شوند و بعداً ارسال می‌شوند.", "me": "نام شما روی نقشهٔ رایانه", "near": "{d} تا خط", "need": "اول پرسش‌های علامت‌خورده را پر کنید.", "needName": "ابتدا نام خود را بنویسید تا عکس‌هایتان با نام شما ثبت شوند.", "no": "خیر", "noCamera": "دوربین اینجا نمی‌تواند کد بخواند - اتاق را انتخاب کنید.", "noRoom": "این کد در نقشهٔ داخلی‌ای که رایانه فرستاده نیست.", "nokey": "این صفحه را با اسکن کد در Biruni GIS (عکس‌های میدانی) باز کنید.", "none": "عکس‌هایتان اینجا نمایش داده می‌شوند.", "note": "یادداشت (اختیاری)", "offline": "متصل نیست", "online": "وصل است", "outside": "بیرون - {d} تا لبه", "p2pfail": "این شبکه اجازهٔ پیوند مستقیم با رایانه را نمی‌دهد. عکس‌ها روی تلفن نگه داشته می‌شوند؛ شبکهٔ دیگر یا Wi-Fi را امتحان کنید.", "pcoff": "رایانه پاسخ نمی‌دهد. آیا Biruni باز است و عکس‌های میدانی آغاز شده؟ عکس‌ها روی تلفن نگه داشته می‌شوند.", "pickRoom": "یا اتاق را انتخاب کنید", "point": "نقطه", "position": "موقعیت", "previewSent": "{n} به‌صورت پیش‌نمایش رسید، نسخه اصلی در انتظار وای‌فای است", "queued": "در انتظار ارسال:", "recent": "عکس‌های اخیر", "relayMode": "شبکه موبایل اتصال مستقیم را مسدود کرد - پیش‌نمایش‌های رمزگذاری‌شده از طریق رله‌ها ارسال می‌شوند؛ نسخه‌های اصلی در انتظار وای‌فای می‌مانند.", "required": "الزامی", "scanRoom": "کد اتاق را اسکن کنید", "sent": "روی رایانه:", "share": "مرا روی نقشهٔ رایانه نشان بده", "shoot": "گرفتن عکس", "start": "شروع", "stop": "توقف", "tapRoom": "جایی را که در اتاق هستید لمس کنید", "target": "{d} تا {name}", "title": "Biruni GIS - عکس‌های میدانی", "via": "از طریق تلفن یک هم‌تیمی متصل است.", "waiting": "در انتظار موقعیت مکانی…", "waitingPhotos": "{n} عکس در انتظار", "yes": "بله"}, "fr": {"arrived": "✓ Arrivée sur l'ordinateur ({n})", "averaged": "Moyenne de {n} mesures, dispersion ± {s} m - pour la prochaine photo", "averaging": "Moyenne en cours… {n} mesures - gardez le téléphone immobile", "avg": "Moyenne ici (20 s)", "bad": "Cette valeur n'est pas correcte.", "blocked": "Ce téléphone a été bloqué par l'ordinateur.", "connected": "Connecté à l'ordinateur", "connecting": "Connexion à l'ordinateur… les photos prises maintenant sont gardées et envoyées.", "denied": "Localisation non autorisée.", "direction": "Direction", "driveAuth": "Le lien avec Google Drive a pris fin. Appuyez pour lier à nouveau.", "driveDenied": "L'accès à Google Drive n'a pas été autorisé.", "driveErr": "Impossible de lier Google Drive.", "driveFolder": "Dossier :", "driveFree": "Libérer de l'espace dans Google Drive ({n})", "driveFull": "Votre Google Drive est plein. Les photos attendent sur ce téléphone que l'ordinateur soit à portée.", "driveGone": "Le dossier du bureau n'est plus accessible. Demandez au bureau de le partager à nouveau, puis choisissez-le.", "driveIdle": "Lié. Chaque photo va dans le dossier Google Drive du bureau. Lorsque l'ordinateur est à portée, il affiche aussitôt une petite copie.", "driveIn": "Dans Google Drive :", "driveInApp": "Pour utiliser Google Drive, ouvrez cette page dans Chrome ou Safari.", "driveLink": "Lier Google Drive", "driveMode": "L'ordinateur est inaccessible - les photos vont dans le dossier Google Drive du bureau.", "driveOpen": "Ouvrir le lien Google Drive", "driveOwn": "dans votre propre Google Drive. Si le bureau utilise un autre compte, choisissez le dossier qu'il a partagé.", "drivePick": "Choisir le dossier du bureau", "drivePickAgain": "Choisir un autre dossier", "drivePickHint": "Le bureau a partagé un dossier nommé {name} avec votre compte Google. Choisissez-le une fois.", "drivePickRO": "Le dossier est partagé en lecture seule. Demandez au bureau de vous donner le rôle d'Éditeur.", "drivePickWrong": "Ce n'est pas le dossier du bureau. Choisissez celui nommé {name}.", "drivePopupBlocked": "Le navigateur a bloqué la fenêtre Google Drive. Autorisez les fenêtres contextuelles pour cette page.", "drivePreview": "{n} affichées sur l'ordinateur, l'original va vers Google Drive", "driveRelink": "Lier Google Drive à nouveau", "driveSend": "Envoyer les photos ({n})", "driveTitle": "Google Drive", "driveUnlinked": "Liez Google Drive et chaque photo ira dans le dossier Google Drive du bureau, verrouillée afin que seul l'ordinateur du bureau puisse l'ouvrir.", "driveUp": "Envoi vers Google Drive…", "driveWait": "Google Drive est occupé - nouvelle tentative bientôt.", "findRoom": "Numéro ou nom de la pièce", "guide": "Guide de l'ordinateur", "hand": "Sans internet", "handBad": "Ce n'est pas un code de remise.", "handCancel": "Annuler", "handCarry": "Porte {n} photos pour des coéquipiers.", "handFail": "Les deux téléphones n'ont pas pu se relier. Mettez-les sur le même Wi-Fi ou sur le partage de connexion de l'un d'eux ; internet n'est pas nécessaire.", "handGave": "{n} photos remises. Elles restent aussi sur ce téléphone jusqu'à ce que l'un de vous atteigne l'ordinateur.", "handGive1": "Laissez votre coéquipier scanner ce code, puis scannez le code qui apparaît sur son téléphone.", "handGiveBtn": "Donner mes photos à un coéquipier", "handLinking": "Liaison des deux téléphones…", "handNoKey": "Ce téléphone ne s'est pas encore connecté à l'ordinateur ; il ne peut donc pas sceller ses photos pour lui.", "handNoScan": "Ce navigateur ne lit pas les codes. Utilisez Chrome sur Android.", "handNone": "Aucune photo n'attend d'être remise.", "handSending": "Remise de {n} sur {k}…", "handTake1": "Scannez le code sur le téléphone de votre coéquipier.", "handTake2": "Laissez maintenant votre coéquipier scanner ce code.", "handTakeBtn": "Recevoir les photos d'un coéquipier", "handTaking": "{n} photos reçues…", "handTook": "{n} photos reçues. Elles vont à l'ordinateur avec les vôtres ; scellées pour lui, ce téléphone ne peut pas les ouvrir.", "handWait": "Préparation…", "hero": "Photos de terrain", "incognito": "La navigation privée est activée : fermer cette page effacera les photos en attente. Ouvrez le lien dans un onglet normal.", "insecure": "Ce navigateur bloque la localisation ici. Utilisez Chrome ou Safari et acceptez l'avertissement de certificat.", "inside": "Dedans - à {d} du bord", "intro": "Autorisez la localisation lorsqu'elle est demandée. Chaque photo apparaît aussitôt sur la carte de l'ordinateur et y est enregistrée. Gardez cette page ouverte.", "kept": "Enregistrée sur le téléphone - envoi…", "kind": "Type (facultatif)", "language": "Langue", "leaveRoom": "Hors de la pièce", "level": "Niveau {n}", "linking": "Connexion…", "lost": "L'ordinateur est injoignable : les photos sont conservées sur le téléphone et envoyées plus tard.", "me": "Votre nom sur la carte de l'ordinateur", "near": "à {d} de la ligne", "need": "Remplissez d'abord les questions marquées.", "needName": "Écrivez d'abord votre nom pour que vos photos le portent.", "no": "Non", "noCamera": "L'appareil photo ne peut pas lire les codes ici : choisissez la pièce.", "noRoom": "Ce code n'est pas dans la carte intérieure envoyée par l'ordinateur.", "nokey": "Ouvrez cette page en scannant le code dans Biruni GIS (Photos de terrain).", "none": "Vos photos apparaîtront ici.", "note": "Note (facultatif)", "offline": "Non connecté", "online": "Connecté", "outside": "Dehors - à {d} du bord", "p2pfail": "Ce réseau ne permet pas de lien direct avec l'ordinateur. Les photos sont gardées sur le téléphone ; essayez un autre réseau ou le Wi-Fi.", "pcoff": "L'ordinateur ne répond pas. Biruni est-il ouvert, avec Photos de terrain démarré ? Les photos sont gardées sur le téléphone.", "pickRoom": "Ou choisissez la pièce", "point": "le point", "position": "Position", "previewSent": "{n} reçues en aperçu, l'original attend le Wi-Fi", "queued": "En attente d'envoi :", "recent": "Photos récentes", "relayMode": "Le réseau mobile bloque le lien direct : envoi d’aperçus chiffrés via les relais ; les originaux attendent le Wi-Fi.", "required": "Obligatoire", "scanRoom": "Scanner le code de la pièce", "sent": "Sur l'ordinateur :", "share": "Me montrer sur la carte de l'ordinateur", "shoot": "Prendre une photo", "start": "Début", "stop": "Arrêter", "tapRoom": "Touchez l'endroit où vous êtes dans la pièce", "target": "{d} jusqu'à {name}", "title": "Biruni GIS - photos de terrain", "via": "Connecté par le téléphone d'un coéquipier.", "waiting": "En attente de la position…", "waitingPhotos": "{n} photos en attente", "yes": "Oui"}, "pt_BR": {"arrived": "✓ Chegou ao computador ({n})", "averaged": "Média de {n} leituras, dispersão ± {s} m - usada na próxima foto", "averaging": "Calculando a média… {n} leituras - mantenha o telefone parado", "avg": "Média aqui (20 s)", "bad": "Este valor não está certo.", "blocked": "Este celular foi bloqueado pelo computador.", "connected": "Conectado ao computador", "connecting": "Conectando ao computador… as fotos tiradas agora são guardadas e enviadas.", "denied": "Localização não permitida.", "direction": "Direção", "driveAuth": "A vinculação com o Google Drive terminou. Toque para vincular novamente.", "driveDenied": "O acesso ao Google Drive não foi permitido.", "driveErr": "Não foi possível vincular o Google Drive.", "driveFolder": "Pasta:", "driveFree": "Liberar espaço no Google Drive ({n})", "driveFull": "Seu Google Drive está cheio. As fotos aguardam neste telefone até que o computador esteja ao alcance.", "driveGone": "Não é mais possível acessar a pasta do escritório. Peça ao escritório para compartilhá-la novamente e depois escolha-a.", "driveIdle": "Vinculado. Cada foto vai para a pasta do Google Drive do escritório. Quando o computador estiver ao alcance, ele mostra uma cópia pequena imediatamente.", "driveIn": "No Google Drive:", "driveInApp": "Para usar o Google Drive, abra esta página no Chrome ou no Safari.", "driveLink": "Vincular Google Drive", "driveMode": "Não é possível alcançar o computador - as fotos estão indo para a pasta do Google Drive do escritório.", "driveOpen": "Abrir o link do Google Drive", "driveOwn": "no seu próprio Google Drive. Se o escritório usar outra conta, escolha a pasta que ele compartilhou.", "drivePick": "Escolher a pasta do escritório", "drivePickAgain": "Escolher outra pasta", "drivePickHint": "O escritório compartilhou uma pasta chamada {name} com sua conta do Google. Escolha-a uma vez.", "drivePickRO": "A pasta está compartilhada apenas para visualização. Peça ao escritório para torná-lo Editor.", "drivePickWrong": "Essa não é a pasta do escritório. Escolha a que se chama {name}.", "drivePopupBlocked": "O navegador bloqueou a janela do Google Drive. Permita pop-ups para esta página.", "drivePreview": "{n} mostradas no computador, original indo para o Google Drive", "driveRelink": "Vincular Google Drive novamente", "driveSend": "Enviar fotos ({n})", "driveTitle": "Google Drive", "driveUnlinked": "Vincule o Google Drive e cada foto irá para a pasta do Google Drive do escritório, bloqueada para que apenas o computador do escritório possa abri-la.", "driveUp": "Enviando para o Google Drive…", "driveWait": "O Google Drive está ocupado - tentando novamente em breve.", "findRoom": "Número ou nome da sala", "guide": "Guia do computador", "hand": "Sem internet", "handBad": "Este não é um código de entrega.", "handCancel": "Cancelar", "handCarry": "Levando {n} fotos de colegas.", "handFail": "Os dois telefones não conseguiram se ligar. Coloque os dois no mesmo Wi-Fi ou no roteador de um deles; não é preciso internet.", "handGave": "{n} fotos entregues. Ficam neste telefone também até um de vocês chegar ao computador.", "handGive1": "Deixe seu colega ler este código e depois leia o código que aparece no telefone dele.", "handGiveBtn": "Dar minhas fotos a um colega", "handLinking": "Ligando os dois telefones…", "handNoKey": "Este telefone ainda não se conectou ao computador, então não pode selar as fotos para ele.", "handNoScan": "Este navegador não lê códigos. Use o Chrome no Android.", "handNone": "Não há fotos esperando para entregar.", "handSending": "Entregando {n} de {k}…", "handTake1": "Leia o código no telefone do seu colega.", "handTake2": "Agora deixe seu colega ler este código.", "handTakeBtn": "Receber as fotos de um colega", "handTaking": "{n} fotos recebidas…", "handTook": "{n} fotos recebidas. Vão para o computador com as suas; estão seladas para ele, então este telefone não pode abri-las.", "handWait": "Preparando…", "hero": "Fotos de campo", "incognito": "A navegação privada está ativada: fechar esta página apagará as fotos aguardando. Abra o link em uma aba normal.", "insecure": "Este navegador bloqueia a localização aqui. Use Chrome ou Safari e aceite o aviso do certificado.", "inside": "Dentro - a {d} da borda", "intro": "Permita a localização quando solicitado. Cada foto aparece na hora no mapa do computador e é salva lá. Mantenha esta página aberta.", "kept": "Salva no telefone - enviando…", "kind": "Tipo (opcional)", "language": "Idioma", "leaveRoom": "Fora da sala", "level": "Andar {n}", "linking": "Conectando…", "lost": "Sem conexão com o computador: as fotos ficam no celular e são enviadas depois.", "me": "Seu nome no mapa do computador", "near": "a {d} da linha", "need": "Primeiro preencha as perguntas marcadas.", "needName": "Escreva seu nome primeiro para que suas fotos o levem.", "no": "Não", "noCamera": "A câmera não consegue ler códigos aqui: escolha a sala.", "noRoom": "Este código não está no mapa interno que o computador enviou.", "nokey": "Abra esta página lendo o código no Biruni GIS (Fotos de campo).", "none": "Suas fotos aparecerão aqui.", "note": "Nota (opcional)", "offline": "Não conectado", "online": "Conectado", "outside": "Fora - a {d} da borda", "p2pfail": "Esta rede não permite uma ligação direta com o computador. As fotos ficam no telefone; tente outra rede ou Wi-Fi.", "pcoff": "O computador não responde. O Biruni está aberto, com Fotos de campo iniciado? As fotos ficam guardadas no telefone.", "pickRoom": "Ou escolha a sala", "point": "o ponto", "position": "Posição", "previewSent": "{n} chegaram como prévia, o original aguarda Wi-Fi", "queued": "Aguardando envio:", "recent": "Fotos recentes", "relayMode": "A rede móvel bloqueou a conexão direta: enviando prévias criptografadas pelos retransmissores; os originais aguardam Wi-Fi.", "required": "Obrigatório", "scanRoom": "Ler o código da sala", "sent": "No computador:", "share": "Mostrar-me no mapa do computador", "shoot": "Tirar uma foto", "start": "Início", "stop": "Parar", "tapRoom": "Toque onde você está na sala", "target": "{d} até {name}", "title": "Biruni GIS - fotos de campo", "via": "Conectado pelo telefone de um colega.", "waiting": "Aguardando a localização…", "waitingPhotos": "{n} fotos aguardando", "yes": "Sim"}, "tr": {"arrived": "✓ Bilgisayara ulaştı ({n})", "averaged": "{n} okumanın ortalaması, dağılım ± {s} m - sonraki fotoğrafta kullanılır", "averaging": "Ortalanıyor… {n} okuma - telefonu sabit tutun", "avg": "Burada ortala (20 sn)", "bad": "Bu değer doğru değil.", "blocked": "Bu telefon bilgisayar tarafından engellendi.", "connected": "Bilgisayara bağlı", "connecting": "Bilgisayara bağlanılıyor… şimdi çekilen fotoğraflar saklanır ve gönderilir.", "denied": "Konuma izin verilmedi.", "direction": "Yön", "driveAuth": "Google Drive bağlantısı sona erdi. Yeniden bağlamak için dokunun.", "driveDenied": "Google Drive'a izin verilmedi.", "driveErr": "Google Drive bağlanamadı.", "driveFolder": "Klasör:", "driveFree": "Google Drive'da yer aç ({n})", "driveFull": "Google Drive'ınız dolu. Bilgisayar erişilebilir olana kadar fotoğraflar bu telefonda bekler.", "driveGone": "Ofis klasörüne artık ulaşılamıyor. Ofisten yeniden paylaşmasını isteyin, ardından klasörü seçin.", "driveIdle": "Bağlandı. Her fotoğraf ofisin Google Drive klasörüne gider. Bilgisayar erişilebilir olduğunda hemen küçük bir kopyasını gösterir.", "driveIn": "Google Drive'da:", "driveInApp": "Google Drive'ı kullanmak için bu sayfayı Chrome veya Safari'de açın.", "driveLink": "Google Drive'ı bağla", "driveMode": "Bilgisayara ulaşılamıyor - fotoğraflar ofisin Google Drive klasörüne gidiyor.", "driveOpen": "Google Drive bağlantısını aç", "driveOwn": "kendi Google Drive'ınızda. Ofis başka bir hesap kullanıyorsa, paylaştığı klasörü seçin.", "drivePick": "Ofis klasörünü seç", "drivePickAgain": "Başka bir klasör seç", "drivePickHint": "Ofis, Google hesabınızla {name} adlı bir klasör paylaştı. Bir kez seçin.", "drivePickRO": "Klasör yalnızca görüntüleme için paylaşılmış. Ofisten sizi Düzenleyici yapmasını isteyin.", "drivePickWrong": "Bu ofisin klasörü değil. Adı {name} olanı seçin.", "drivePopupBlocked": "Tarayıcı Google Drive penceresini engelledi. Bu sayfa için açılır pencerelere izin verin.", "drivePreview": "{n} tanesi bilgisayarda gösteriliyor, aslı Google Drive'a gidiyor", "driveRelink": "Google Drive'ı yeniden bağla", "driveSend": "Fotoğrafları gönder ({n})", "driveTitle": "Google Drive", "driveUnlinked": "Google Drive'ı bağlayın; her fotoğraf, yalnızca ofis bilgisayarının açabileceği şekilde kilitlenerek ofisin Google Drive klasörüne gider.", "driveUp": "Google Drive'a gönderiliyor…", "driveWait": "Google Drive meşgul - yakında tekrar denenecek.", "findRoom": "Oda numarası veya adı", "guide": "Bilgisayardan yönlendirme", "hand": "İnternetsiz", "handBad": "Bu bir teslim kodu değil.", "handCancel": "İptal", "handCarry": "Ekip arkadaşları için {n} fotoğraf taşıyor.", "handFail": "İki telefon bağlanamadı. İkisini aynı Wi-Fi'ye ya da birinin hotspot'una bağlayın; internet gerekmez.", "handGave": "{n} fotoğraf teslim edildi. Biriniz bilgisayara ulaşana kadar bu telefonda da kalırlar.", "handGive1": "Ekip arkadaşınız bu kodu okutsun, sonra onun telefonunda çıkan kodu okutun.", "handGiveBtn": "Fotoğraflarımı bir ekip arkadaşına ver", "handLinking": "İki telefon bağlanıyor…", "handNoKey": "Bu telefon henüz bilgisayara bağlanmadı; bu yüzden fotoğraflarını onun için mühürleyemez.", "handNoScan": "Bu tarayıcı kod okuyamıyor. Android'de Chrome kullanın.", "handNone": "Teslim edilmeyi bekleyen fotoğraf yok.", "handSending": "{k} fotoğraftan {n} tanesi teslim ediliyor…", "handTake1": "Ekip arkadaşınızın telefonundaki kodu okutun.", "handTake2": "Şimdi ekip arkadaşınız bu kodu okutsun.", "handTakeBtn": "Bir ekip arkadaşının fotoğraflarını al", "handTaking": "{n} fotoğraf alındı…", "handTook": "{n} fotoğraf alındı. Sizinkilerle birlikte bilgisayara gider; ona mühürlü oldukları için bu telefon onları açamaz.", "handWait": "Hazırlanıyor…", "hero": "Saha fotoğrafları", "incognito": "Gizli gezinme açık: bu sayfayı kapatmak bekleyen fotoğrafları siler. Bağlantıyı normal bir sekmede açın.", "insecure": "Bu tarayıcı burada konumu engelliyor. Chrome veya Safari kullanın ve sertifika uyarısını kabul edin.", "inside": "İçeride - kenara {d}", "intro": "İstendiğinde konuma izin verin. Her fotoğraf anında bilgisayarın haritasında görünür ve orada kaydedilir. Bu sayfayı açık tutun.", "kept": "Telefona kaydedildi - gönderiliyor…", "kind": "Tür (isteğe bağlı)", "language": "Dil", "leaveRoom": "Odanın dışında", "level": "Kat {n}", "linking": "Bağlanıyor…", "lost": "Bilgisayara ulaşılamıyor: fotoğraflar telefonda tutulur ve daha sonra gönderilir.", "me": "Bilgisayarın haritasındaki adınız", "near": "çizgiye {d}", "need": "Önce işaretli soruları doldurun.", "needName": "Fotoğraflarınızda yer alması için önce adınızı yazın.", "no": "Hayır", "noCamera": "Kamera burada kod okuyamıyor - odayı seçin.", "noRoom": "Bu kod bilgisayarın gönderdiği iç mekân haritasında yok.", "nokey": "Bu sayfayı Biruni GIS'teki (Saha fotoğrafları) kodu okutarak açın.", "none": "Fotoğraflarınız burada görünecek.", "note": "Not (isteğe bağlı)", "offline": "Bağlı değil", "online": "Bağlı", "outside": "Dışarıda - kenara {d}", "p2pfail": "Bu ağ bilgisayara doğrudan bağlantıya izin vermiyor. Fotoğraflar telefonda saklanıyor; başka bir ağ veya Wi-Fi deneyin.", "pcoff": "Bilgisayar yanıt vermiyor. Biruni açık ve Saha fotoğrafları başlatılmış mı? Fotoğraflar telefonda saklanıyor.", "pickRoom": "Ya da odayı seçin", "point": "nokta", "position": "Konum", "previewSent": "{n} önizleme olarak ulaştı, aslı Wi-Fi bekliyor", "queued": "Gönderilmeyi bekleyen:", "recent": "Son fotoğraflar", "relayMode": "Mobil ağ doğrudan bağlantıyı engelledi: röleler üzerinden şifreli önizlemeler gönderiliyor; asıllar Wi-Fi bekliyor.", "required": "Zorunlu", "scanRoom": "Oda kodunu tarayın", "sent": "Bilgisayarda:", "share": "Beni bilgisayarın haritasında göster", "shoot": "Fotoğraf çek", "start": "Başlangıç", "stop": "Durdur", "tapRoom": "Odada bulunduğunuz yere dokunun", "target": "{name} noktasına {d}", "title": "Biruni GIS - saha fotoğrafları", "via": "Bir ekip arkadaşının telefonu üzerinden bağlı.", "waiting": "Konum bekleniyor…", "waitingPhotos": "{n} fotoğraf bekliyor", "yes": "Evet"}},KINDS=[],FORM=[],ROOM='',HASHL=null,GPSMODE=false,T={},LANG='en',PCKEY='';const DEF='',$=i=>document.getElementById(i);
+const NAMES={en:'English',ar:'العربية',es:'Español',pt_BR:'Português',fr:'Français',tr:'Türkçe',fa:'فارسی'};
+function pick(l){if(!l)return null;l=String(l).replace('-','_');if(ALL[l])return l;const b=l.split('_')[0].toLowerCase();
+ return Object.keys(ALL).find(k=>k.split('_')[0].toLowerCase()===b)||null}
+function keep(k,v){try{if(v==null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(e){}}
+function kept(k){try{return localStorage.getItem(k)}catch(e){return null}}
+
+const HP=new URLSearchParams(location.hash.slice(1)),KEYB=HP.get('k')||'';HASHL=HP.get('l');ROOM=KEYB.slice(0,12);
+GPSMODE=HP.get('m')==='gps';const VIAONLY=HP.get('v')==='1';
+/* d=1&pk=: this project takes photos through Google Drive; pk is the computer's key, so photos are sealed for it
+   before the phone ever reaches the computer (drive_page.py) */
+const DPK=HP.get('pk')||'',DRIVE_ON=HP.get('d')==='1'&&/^[\w-]{81,99}$/.test(DPK)&&!GPSMODE;if(DRIVE_ON)PCKEY=DPK;
+if('serviceWorker' in navigator&&location.protocol==='https:'&&/(^|\.)biruni-gis\.com$|\.github\.io$/.test(location.hostname))
+ navigator.serviceWorker.register('sw.js').catch(()=>{});   /* opens again in the field without internet *//* v=1: never direct, always through a teammate (to try it) */
+try{const c=JSON.parse(kept('biruni-hello-'+ROOM)||'null');if(c&&Array.isArray(c.kinds))KINDS=c.kinds;
+ if(c&&Array.isArray(c.form))FORM=c.form}catch(e){}
+
+const _HP=new URLSearchParams(typeof location!=='undefined'?location.hash.slice(1):'');
+const _SK=_HP.get('sk')||'',_SN=_HP.get('sn')||'';
+if(_SK){keep('biruni-sk-'+ROOM,_SK);if(_SN){keep('biruni-sn-'+ROOM,_SN);keep('biruni-me',_SN)}}
+else if(_HP.get('k')||_HP.get('shared')){keep('biruni-sk-'+ROOM,null);keep('biruni-sn-'+ROOM,null)}
+const SURVKEY=_SK||kept('biruni-sk-'+ROOM)||'',SURVNAME=_SN||kept('biruni-sn-'+ROOM)||'';
+if(!PCKEY||PCKEY.charAt(0)==='_')PCKEY=kept('biruni-pckey-'+ROOM)||'';else keep('biruni-pckey-'+ROOM,PCKEY);
+let fix=null,compass=null,kind='',sent=0,db=null,mem=[],busy=false,pending=null,lastSt=null,started=false,privMode=false;
+const dev=((navigator.userAgentData&&navigator.userAgentData.platform)||navigator.platform||'').slice(0,40);
+const bare=s=>String(s||'').replace(/\s*[:：]\s*$/,'');
+function label(){document.title=T.title;$('hero').textContent=T.hero;$('introText').textContent=T.intro;
+ $('go').textContent=T.start;$('note').placeholder=T.note;$('lPos').textContent=T.position;$('lDir').textContent=T.direction;
+ $('lKind').textContent=T.kind;$('lRecent').textContent=T.recent;$('lLang').textContent=T.language;
+ $('lGuide').textContent=T.guide;$('lMe').textContent=T.me;
+ {const r=document.createElement('span');r.className='req';r.textContent='*';r.title=T.required||'';$('lMe').appendChild(r)}
+ $('share').setAttribute('aria-label',T.share);
+ $('me').placeholder=T.me;$('roomBtn').textContent=T.scanRoom;$('roomOff').setAttribute('aria-label',T.leaveRoom);if(room)$('roomHint').textContent=T.tapRoom;if(!avg)$('avgBtn').textContent=T.avg;
+ $('lHand').textContent=T.hand;$('giveBtn').textContent=T.handGiveBtn;$('takeBtn').textContent=T.handTakeBtn;
+ $('handCancel').textContent=T.handCancel;$('lSent').textContent=bare(T.sent);$('lWait').textContent=bare(T.queued);$('shotHint').textContent=fix?T.shoot:T.waiting;
+ $('shot').setAttribute('aria-label',T.shoot);$('langBtn').setAttribute('aria-label',T.language);
+ $('langCode').textContent=LANG.split('_')[0].toUpperCase();const e=$('list').querySelector('.empty');if(e)e.textContent=T.none;
+ if(privMode&&$('privWarn'))$('privWarn').textContent=T.incognito||'';if(typeof count==='function')count();
+ if(typeof driveLabel==='function')driveLabel()}
+function setLang(l){LANG=l;T=Object.assign({},ALL.en||{},ALL[l]||{});const h=document.documentElement;
+ h.lang=l.replace('_','-');h.dir=(l==='ar'||l==='fa')?'rtl':'ltr';label();drawKinds();drawForm();
+ if(lastSt)status(lastSt[0],lastSt[1]);else chip('wait')}
+function uid(){const r=crypto.randomUUID?crypto.randomUUID():Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);
+ return r.replace(/[^A-Za-z0-9-]/g,'')}
+function drawKinds(){$('kinds').textContent='';KINDS.forEach(k=>{const b=document.createElement('button');b.type='button';
+ b.textContent=k;b.classList.toggle('sel',k===kind);b.onclick=()=>{kind=kind===k?'':k;
+ [...$('kinds').children].forEach(x=>x.classList.toggle('sel',x.textContent===kind))};$('kinds').appendChild(b)});
+ $('kinds').classList.toggle('hide',!KINDS.length);$('lKind').classList.toggle('hide',!KINDS.length)}
+/* the form designed on the PC: the answers go with the photo; kept ones stay for the next photo */
+let vals={};try{vals=JSON.parse(kept('biruni-vals-'+ROOM)||'{}')||{}}catch(e){}
+const saveVals=()=>keep('biruni-vals-'+ROOM,JSON.stringify(vals));
+const digits=s=>String(s).replace(/[٠-٩]/g,d=>d.charCodeAt(0)-1632).replace(/[۰-۹]/g,d=>d.charCodeAt(0)-1776)
+ .replace(/[٫,]/g,'.').replace(/[−–]/g,'-').trim();
+function chips(f,box){const multi=f.type==='multi',opts=f.type==='yesno'?[[true,T.yes],[false,T.no]]:f.choices.map(c=>[c,c]);
+ const on=v=>multi?(vals[f.name]||[]).includes(v):vals[f.name]===v;
+ opts.forEach(([v,t])=>{const b=document.createElement('button');b.type='button';b.textContent=t;b.classList.toggle('sel',on(v));
+  b.onclick=()=>{if(multi){const a=(vals[f.name]||[]).filter(x=>x!==v);if(!on(v))a.push(v);vals[f.name]=a}
+   else vals[f.name]=on(v)?undefined:v;if(vals[f.name]===undefined||(multi&&!vals[f.name].length))delete vals[f.name];
+   [...box.children].forEach((x,i)=>x.classList.toggle('sel',on(opts[i][0])));box.parentNode.classList.remove('bad');saveVals()};
+  box.appendChild(b)})}
+function drawForm(){const box=$('form');box.textContent='';FORM.forEach(f=>{const d=document.createElement('div');d.className='fld';
+ d.dataset.name=f.name;const l=document.createElement('span');l.className='lbl';l.textContent=f.label;
+ if(f.req){const r=document.createElement('span');r.className='req';r.textContent='*';r.title=T.required;l.appendChild(r)}d.appendChild(l);
+ if(['choice','multi','yesno'].includes(f.type)){const c=document.createElement('div');c.className='kinds';chips(f,c);d.appendChild(c)}
+ else{const i=document.createElement('input');i.className='in';i.autocomplete='off';i.enterKeyHint='next';
+  i.type=f.type==='date'?'date':'text';if(f.type==='number')i.inputMode='decimal';if(f.type==='integer')i.inputMode='numeric';if(f.type!=='text')i.dir='ltr';
+  if(f.type==='text')i.maxLength=250;
+  if(f.min!=null||f.max!=null)i.placeholder=(f.min!=null?f.min:'')+' – '+(f.max!=null?f.max:'');
+  i.value=vals[f.name]!=null?vals[f.name]:'';i.oninput=()=>{if(i.value==='')delete vals[f.name];else vals[f.name]=i.value;
+   d.classList.remove('bad');saveVals()};d.appendChild(i)}
+ box.appendChild(d)})}
+/* checked before the camera opens: null and the field marked when something is missing or wrong */
+function answers(){const out={};let first=null,why='';
+ for(const f of FORM){let v=vals[f.name],ok=true;
+  if(v==null||v===''||(Array.isArray(v)&&!v.length)){if(f.req){ok=false;why=why||'need'}}
+  else if(f.type==='number'||f.type==='integer'){const n=Number(digits(v));
+   if(digits(v)===''||!isFinite(n)||(f.type==='integer'&&!Number.isInteger(n))||(f.min!=null&&n<f.min)||(f.max!=null&&n>f.max)){
+    ok=false;why=why||'bad'}else out[f.name]=n}
+  else if(f.type==='text')out[f.name]=String(v).trim().slice(0,250);
+  else out[f.name]=v;
+  const e=document.querySelector('.fld[data-name="'+f.name+'"]');
+  if(e){e.classList.remove('bad');if(!ok){void e.offsetWidth;e.classList.add('bad');first=first||e}}}
+ if(first){first.scrollIntoView({behavior:'smooth',block:'center'});toast(T[why]);if(navigator.vibrate)navigator.vibrate([40,60,40]);return null}
+ return out}
+function afterShot(){FORM.forEach(f=>{if(!f.keep)delete vals[f.name]});saveVals();drawForm()}
+/* distances on the ground: a flat local frame in metres around (lat0, lon0) is exact enough for a few km */
+function proj(lat0,lon0){const k=Math.cos(lat0*Math.PI/180);return (lon,lat)=>[(lon-lon0)*k*111320,(lat-lat0)*110540]}
+function meters(a,b){const P=proj(a.lat,a.lon),v=P(b.lon,b.lat);return Math.hypot(v[0],v[1])}
+/* a distance stays left to right inside Arabic text (LRI ... PDI) */
+function fmtD(m){return '\u2066'+(m<1000?(m<10?m.toFixed(1):Math.round(m))+' m':(m/1000).toFixed(2)+' km')+'\u2069'}
+/* the team: this phone's position goes to the PC's map, with the name written here (it can be turned off) */
+const DEVID=kept('biruni-dev')||(()=>{const d=uid().replace(/-/g,'').slice(0,16);keep('biruni-dev',d);return d})();
+let lastPos=null;
+/* GPSMODE (opened from the PC's GPS panel): every new position goes at once, at most once a second */
+async function tellPos(force){const f=room&&indoorFix?indoorFix:fix;if(!f||(!GPSMODE&&!$('share').checked))return;
+ const now=Date.now();
+ if(!force&&lastPos&&(GPSMODE?now-lastPos.at<1000:now-lastPos.at<15000&&meters(lastPos,f)<10))return;
+ lastPos={lat:f.lat,lon:f.lon,at:now};
+ try{await sendPos(Object.assign({id:DEVID,name:(SURVNAME||$('me').value).trim().slice(0,40),sk:SURVKEY||undefined,lat:f.lat,lon:f.lon,acc:f.acc,alt:f.alt,
+  speed:f.speed,heading:compass!=null?compass:f.heading,t:f.t,level:f.level,unit:f.unit},netInfo()))}catch(e){}}
+/* for the computer's list of the team: Wi-Fi or mobile data (Android tells it, iPhone does not), the battery, and
+   how long the last message took to reach the computer and come back (the browser gives no signal bars) */
+let PING=null,BAT=null;
+function netInfo(){const c=navigator.connection||{};return {net:c.type||'',eff:c.effectiveType||'',down:c.downlink,
+ crtt:c.rtt,ping:PING,bat:BAT?BAT.l:null,chg:BAT?BAT.c:null}}
+try{navigator.getBattery().then(b=>{const u=()=>{BAT={l:b.level,c:b.charging}};u();b.onlevelchange=u;
+ b.onchargingchange=()=>{u();tellPos(true)}}).catch(()=>{})}catch(e){}
+try{navigator.connection.addEventListener('change',()=>tellPos(true))}catch(e){}
+/* the guide: points to reach, lines and boundaries to walk, sent by the PC */
+let GUIDE={v:0,items:[]};
+function setGuide(g){if(!g||!Array.isArray(g.items))return;GUIDE=g;INDOOR=g.indoor&&Array.isArray(g.indoor.units)?g.indoor:null;
+ showIndoor();if(room){const u=unitOf(room.id);if(u)room=u;else setRoom(null)}roomFromStore();
+ try{const j=JSON.stringify(g);if(j.length<250000)keep('biruni-guide-'+ROOM,j)}catch(e){}
+ $('guideCard').classList.toggle('hide',!g.items.length);drawGuide();if(room)drawRoom()}
+function segDist(p,a,b){const dx=b[0]-a[0],dy=b[1]-a[1],l=dx*dx+dy*dy;let t=l?((p[0]-a[0])*dx+(p[1]-a[1])*dy)/l:0;
+ t=Math.max(0,Math.min(1,t));const x=a[0]+t*dx,y=a[1]+t*dy;return [Math.hypot(p[0]-x,p[1]-y),x,y]}
+function inRing(p,r){let c=false;for(let i=0,j=r.length-1;i<r.length;j=i++){const a=r[i],b=r[j];
+ if((a[1]>p[1])!==(b[1]>p[1])&&p[0]<(b[0]-a[0])*(p[1]-a[1])/(b[1]-a[1])+a[0])c=!c}return c}
+/* the nearest thing to the phone: {d metres, x/y of the nearest place, item, inside} */
+function nearest(P){let best=null;const me=[0,0];
+ for(const it of GUIDE.items){let d=Infinity,x=0,y=0,ins=false;
+  if(it.k==='pt'){[x,y]=P(it.c[0],it.c[1]);d=Math.hypot(x,y)}
+  else{const parts=it.c.map(part=>part.map(c=>P(c[0],c[1])));
+   for(const part of parts){const n=part.length,closed=it.k==='poly';
+    for(let i=0;i<n-1+(closed?1:0);i++){const r=segDist(me,part[i],part[(i+1)%n]);if(r[0]<d)[d,x,y]=r}}
+   if(it.k==='poly')ins=parts.reduce((c,r)=>c!==inRing(me,r),false)}
+  const rank=ins?-1e9+d:d;if(!best||rank<best.rank)best={d:d,x:x,y:y,it:it,inside:ins,rank:rank}}
+ return best}
+function drawGuide(){const cv=$('gmap');if($('guideCard').classList.contains('hide'))return;
+ const W=cv.clientWidth||300,H=cv.clientHeight||190,dpr=window.devicePixelRatio||1;
+ if(cv.width!==Math.round(W*dpr)){cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr)}
+ const g=cv.getContext('2d'),css=getComputedStyle(document.documentElement),col=n=>css.getPropertyValue(n).trim();
+ g.setTransform(dpr,0,0,dpr,0,0);g.clearRect(0,0,W,H);
+ const c0=fix||(()=>{const it=GUIDE.items[0],c=it.k==='pt'?it.c:it.c[0][0];return {lat:c[1],lon:c[0]}})();
+ const P=proj(c0.lat,c0.lon),shapes=GUIDE.items.map(it=>({it:it,xy:it.k==='pt'?[[P(it.c[0],it.c[1])]]:
+  it.c.map(part=>part.map(c=>P(c[0],c[1])))}));
+ let x0=0,y0=0,x1=0,y1=0;shapes.forEach(s=>s.xy.forEach(part=>part.forEach(([x,y])=>{x0=Math.min(x0,x);x1=Math.max(x1,x);
+  y0=Math.min(y0,y);y1=Math.max(y1,y)})));
+ if(!fix){x0=x1=y0=y1=NaN;shapes.forEach(s=>s.xy.forEach(part=>part.forEach(([x,y])=>{x0=isNaN(x0)?x:Math.min(x0,x);
+  x1=isNaN(x1)?x:Math.max(x1,x);y0=isNaN(y0)?y:Math.min(y0,y);y1=isNaN(y1)?y:Math.max(y1,y)})))}
+ const pad=18,span=Math.max(x1-x0,y1-y0,20),k=Math.min((W-2*pad)/Math.max(x1-x0,span*.2),(H-2*pad)/Math.max(y1-y0,span*.2));
+ const ox=W/2-k*(x0+x1)/2,oy=H/2+k*(y0+y1)/2,S=([x,y])=>[ox+k*x,oy-k*y];
+ const acc=col('--accent');g.lineJoin='round';g.lineCap='round';
+ shapes.forEach(s=>{if(s.it.k==='poly'){g.beginPath();s.xy.forEach(r=>r.forEach((p,i)=>{const[a,b]=S(p);i?g.lineTo(a,b):g.moveTo(a,b)}));
+   g.closePath();g.globalAlpha=.16;g.fillStyle=acc;g.fill('evenodd');g.globalAlpha=1;g.strokeStyle=acc;g.lineWidth=2;g.stroke()}
+  else if(s.it.k==='line'){g.strokeStyle=acc;g.lineWidth=3;s.xy.forEach(part=>{g.beginPath();
+   part.forEach((p,i)=>{const[a,b]=S(p);i?g.lineTo(a,b):g.moveTo(a,b)});g.stroke()})}
+  else{const[a,b]=S(s.xy[0][0]);g.fillStyle=acc;g.beginPath();g.arc(a,b,6,0,7);g.fill();
+   if(s.it.n){g.fillStyle=col('--text');g.font='600 12px system-ui,sans-serif';g.textAlign='center';g.fillText(s.it.n,a,b-10)}}});
+ const t=$('gtext');if(!fix){t.textContent=T.waiting;t.className='gtext';return}
+ const n=nearest(P);if(!n){t.textContent='—';return}
+ const[mx,my]=S([0,0]),[nx,ny]=S([n.x,n.y]);g.setLineDash([5,5]);g.strokeStyle=col('--dim');g.lineWidth=1.5;g.beginPath();
+ g.moveTo(mx,my);g.lineTo(nx,ny);g.stroke();g.setLineDash([]);
+ g.fillStyle='rgba(43,127,255,.18)';g.beginPath();g.arc(mx,my,Math.max(8,Math.min(60,k*(fix.acc||0))),0,7);g.fill();
+ g.fillStyle='#2B7FFF';g.strokeStyle='#fff';g.lineWidth=3;g.beginPath();g.arc(mx,my,7,0,7);g.fill();g.stroke();
+ const name=n.it.n||T.point,d=fmtD(n.d);
+ t.textContent=n.it.k==='poly'?(n.it.n?n.it.n+': ':'')+(n.inside?T.inside:T.outside).replace('{d}',d):
+  n.it.k==='line'?(n.it.n?n.it.n+': ':'')+T.near.replace('{d}',d):T.target.replace('{d}',d).replace('{name}',name);
+ t.className='gtext'+(n.it.k==='poly'?(n.inside?' in':' out'):'');
+ const brg=Math.atan2(n.x,n.y)*180/Math.PI,heading=compass!=null?compass:0;
+ $('garrow').style.transform='rotate('+Math.round(brg-heading)+'deg)';$('garrow').parentNode.classList.toggle('hide',n.d<1)}
+window.addEventListener('resize',()=>drawGuide());
+/* inside a building the GPS cannot help: the code on the room's door says where the phone is,
+   and a tap on the room's plan says where in the room */
+let INDOOR=null,room=null,indoorFix=null,scanStream=null,scanTimer=null,rplan=null;
+const unitOf=id=>INDOOR&&INDOOR.units.find(u=>u.id===id);
+function levelName(lv){const l=INDOOR&&INDOOR.levels.find(x=>x.id===lv);return l&&l.name?l.name:T.level.replace('{n}',lv)}
+function roomLabel(u){return [u.num,u.n].filter(Boolean).join(' · ')||u.id}
+function showIndoor(){const on=!!(INDOOR&&INDOOR.units.length);$('roomRow').classList.toggle('hide',!on);
+ if(!on&&room)setRoom(null);$('roomBtn').textContent=T.scanRoom}
+function setRoom(u){room=u||null;$('roomOff').classList.toggle('hide',!room);$('roomPlan').classList.toggle('hide',!room);
+ if(!room){indoorFix=null;$('roomName').textContent='';if(!fix){$('shot').disabled=true;$('shotHint').textContent=T.waiting;
+  $('pos').classList.remove('inroom');$('pos').textContent='—';$('acc').textContent=''}
+  else showFix();return}
+ indoorFix={lat:u.p[1],lon:u.p[0],acc:u.r,alt:null,heading:null,t:Date.now(),level:u.lv,unit:u.id};
+ $('roomName').textContent=roomLabel(u)+' · '+levelName(u.lv);$('roomHint').textContent=T.tapRoom;
+ $('pos').textContent=roomLabel(u)+' · '+levelName(u.lv);$('pos').classList.add('inroom');$('acc').textContent='± '+Math.round(u.r)+' m';
+ $('shot').disabled=false;$('shotHint').textContent=T.shoot;keep('biruni-room-'+ROOM,u.id);
+ if(navigator.vibrate)navigator.vibrate(20);drawRoom()}
+function roomFromText(t){t=String(t||'').trim();let id=t;const m=t.match(/[#&]u=([^&]+)/);if(m)id=decodeURIComponent(m[1]);
+ const u=unitOf(id);if(!u){toast(T.noRoom);return false}setRoom(u);return true}
+/* the room's plan: the room and its neighbours on its level; a tap moves the position inside it */
+function drawRoom(){if(!room)return;const cv=$('rmap'),W=cv.clientWidth||300,H=cv.clientHeight||220,dpr=window.devicePixelRatio||1;
+ if(cv.width!==Math.round(W*dpr)){cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr)}
+ const g=cv.getContext('2d'),css=getComputedStyle(document.documentElement),col=n=>css.getPropertyValue(n).trim();
+ g.setTransform(dpr,0,0,dpr,0,0);g.clearRect(0,0,W,H);const P=proj(room.p[1],room.p[0]);
+ const rr=room.c.map(r=>r.map(c=>P(c[0],c[1])));let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+ rr.forEach(r=>r.forEach(([x,y])=>{x0=Math.min(x0,x);x1=Math.max(x1,x);y0=Math.min(y0,y);y1=Math.max(y1,y)}));
+ const m=Math.max(x1-x0,y1-y0)*.35+2;x0-=m;x1+=m;y0-=m;y1+=m;
+ const k=Math.min(W/(x1-x0),H/(y1-y0)),ox=W/2-k*(x0+x1)/2,oy=H/2+k*(y0+y1)/2,S=([x,y])=>[ox+k*x,oy-k*y];
+ rplan={P:P,k:k,ox:ox,oy:oy,W:W,H:H};
+ const path=rings=>{g.beginPath();rings.forEach(r=>r.forEach((p,i)=>{const[a,b]=S(p);i?g.lineTo(a,b):g.moveTo(a,b)}));g.closePath()};
+ INDOOR.units.filter(u=>u.lv===room.lv&&u.id!==room.id).forEach(u=>{const rs=u.c.map(r=>r.map(c=>P(c[0],c[1])));
+  let a0=1e9,b0=1e9,a1=-1e9,b1=-1e9;rs[0].forEach(([x,y])=>{a0=Math.min(a0,x);a1=Math.max(a1,x);b0=Math.min(b0,y);b1=Math.max(b1,y)});
+  if(a1<x0||a0>x1||b1<y0||b0>y1)return;path(rs);g.strokeStyle=col('--line');g.lineWidth=1.5;g.stroke();
+  const[a,b]=S(P(u.p[0],u.p[1]));if(u.num){g.fillStyle=col('--dim');g.font='12px system-ui,sans-serif';g.textAlign='center';
+   g.fillText(u.num,a,b+4)}});
+ path(rr);g.globalAlpha=.18;g.fillStyle=col('--accent');g.fill('evenodd');g.globalAlpha=1;g.strokeStyle=col('--accent');
+ g.lineWidth=2.5;g.stroke();
+ const[mx,my]=S(P(indoorFix.lon,indoorFix.lat));g.fillStyle='#2B7FFF';g.strokeStyle='#fff';g.lineWidth=3;g.beginPath();
+ g.arc(mx,my,7,0,7);g.fill();g.stroke()}
+/* px, py: the tap on the drawn plan, in its own pixels */
+function tapRoom(px,py){if(!room||!rplan)return;const x=(px-rplan.ox)/rplan.k,y=(rplan.oy-py)/rplan.k;
+ const lat=room.p[1]+y/110540,lon=room.p[0]+x/(Math.cos(room.p[1]*Math.PI/180)*111320);
+ indoorFix=Object.assign({},indoorFix,{lat:lat,lon:lon,acc:1.5,t:Date.now()});$('acc').textContent='± 1.5 m';drawRoom()}
+$('rmap').addEventListener('click',e=>{if(!rplan)return;const b=$('rmap').getBoundingClientRect();if(!b.width)return;
+ tapRoom((e.clientX-b.left)*rplan.W/b.width,(e.clientY-b.top)*rplan.H/b.height)});
+/* the scanner: the phone's own code reader where the browser has one, the list everywhere */
+function roomList(){const q=$('roomFind').value.trim().toLowerCase(),box=$('roomList');box.textContent='';
+ (INDOOR?INDOOR.units:[]).filter(u=>u.cat!=='corridor'&&(!q||(u.num+' '+u.n+' '+u.id).toLowerCase().includes(q)))
+  .slice(0,60).forEach(u=>{const b=document.createElement('button');b.type='button';
+   b.textContent=roomLabel(u)+' · '+levelName(u.lv);b.onclick=()=>{closeScan();setRoom(u)};box.appendChild(b)})}
+async function openScan(){$('lPick').textContent=T.pickRoom;$('roomFind').placeholder=T.findRoom;$('roomFind').value='';
+ roomList();$('scanSheet').classList.remove('hide');const can='BarcodeDetector' in window&&navigator.mediaDevices;
+ $('scanBox').classList.toggle('hide',!can);if(!can){toast(T.noCamera);return}
+ try{const det=new BarcodeDetector({formats:['qr_code']});
+  scanStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+  const v=$('scanVideo');v.srcObject=scanStream;await v.play();
+  scanTimer=setInterval(async()=>{try{const c=await det.detect(v);if(c.length&&roomFromText(c[0].rawValue))closeScan()}
+   catch(e){}},350)}catch(e){$('scanBox').classList.add('hide');toast(T.noCamera)}}
+function closeScan(){clearInterval(scanTimer);scanTimer=null;if(scanStream){scanStream.getTracks().forEach(t=>t.stop());
+ scanStream=null}$('scanSheet').classList.add('hide')}
+/* a room code read by the phone's camera app opens the room page (same site): it leaves the room here */
+function roomFromStore(){try{const r=JSON.parse(kept('biruni-room')||'null');
+ if(r&&r.u&&Date.now()-r.t<180000&&INDOOR){keep('biruni-room',null);roomFromText(r.u)}}catch(e){}}
+window.addEventListener('storage',e=>{if(e.key==='biruni-room')roomFromStore()});
+/* the averaged position: many readings while the phone stays still, odd ones left out */
+const AVG_MS=20000;let avg=null,avgFix=null;
+function average(pts){const accs=pts.map(p=>p.acc).sort((a,b)=>a-b),med=accs[accs.length>>1];
+ let use=pts.filter(p=>p.acc<=2*med);
+ const mean=a=>{let w=0,x=0,y=0;a.forEach(p=>{const k=1/Math.max(p.acc,1)**2;w+=k;x+=k*p.lon;y+=k*p.lat});return {lon:x/w,lat:y/w}};
+ let m=mean(use);const P=proj(m.lat,m.lon),d=use.map(p=>Math.hypot(...P(p.lon,p.lat)));
+ const rms=Math.sqrt(d.reduce((s,v)=>s+v*v,0)/d.length)||0,kept=use.filter((p,i)=>d[i]<=Math.max(2.5*rms,.5));
+ if(kept.length>=3){use=kept;m=mean(use)}
+ const P2=proj(m.lat,m.lon),sd=Math.sqrt(use.reduce((s,p)=>{const v=P2(p.lon,p.lat);return s+v[0]*v[0]+v[1]*v[1]},0)/use.length);
+ const ua=use.map(p=>p.acc).sort((a,b)=>a-b);
+ return {lat:m.lat,lon:m.lon,n:use.length,sd:sd,acc:ua[ua.length>>1]}}
+function tickAvg(){if(!avg)return;const n=avg.pts.length,f=Math.min(1,(Date.now()-avg.t0)/AVG_MS);
+ $('avgFill').style.width=Math.max(4,f*100)+'%';$('avgInfo').textContent=T.averaging.replace('{n}',n);
+ if(f>=1&&n>=3){const r=average(avg.pts);avg=null;$('avgBar').classList.add('hide');$('avgBtn').classList.remove('on');
+  $('avgBtn').textContent=T.avg;avgFix={lat:r.lat,lon:r.lon,acc:r.acc,alt:fix&&fix.alt,heading:fix&&fix.heading,
+   t:Date.now(),n:r.n,sd:r.sd};$('avgInfo').textContent=T.averaged.replace('{n}',r.n).replace('{s}','\u2066'+r.sd.toFixed(1)+'\u2069');
+  if(navigator.vibrate)navigator.vibrate([30,50,30])}}
+function toggleAvg(){if(avg){avg=null;$('avgBar').classList.add('hide');$('avgBtn').classList.remove('on');
+  $('avgBtn').textContent=T.avg;$('avgInfo').textContent='';return}
+ avg={pts:[],t0:Date.now()};avgFix=null;$('avgBar').classList.remove('hide');$('avgBtn').classList.add('on');
+ $('avgBtn').textContent=T.stop;tickAvg()}
+setInterval(tickAvg,500);
+/* the averaged position is used when it is recent and the phone has not moved away from it */
+function shotFix(){if(room&&indoorFix)return indoorFix;if(avgFix&&fix&&Date.now()-avgFix.t<120000&&meters(avgFix,fix)<Math.max(15,2*(fix.acc||0))){
+  const a=avgFix;avgFix=null;$('avgInfo').textContent='';return a}return fix}
+/* photos not yet on the PC wait in the phone's browser storage, sealed with the PC's key (ECDH P-256 + AES-GCM) */
+/* a photo is kept at 5 MB at most (Hatem's choice): one plain upload carries it to Drive and the line sends it in
+   one go; a bigger one is saved again as JPEG, first only a little more compressed, then smaller, until it fits.
+   PMAX leaves room for the seal around it. The browser canvas holds about 16 million pixels at most (iPhone) */
+const PMAX=5*1024*1024-65536,PPIX=16000000;
+/* the camera's EXIF block (make, model, exposure, lens...) is carried over to the photo saved again; its
+   Orientation is set to 1, the pixels being drawn upright already */
+function jpegExif(u){if(!u||u[0]!==0xff||u[1]!==0xd8)return null;let i=2;
+ while(i+10<=u.length&&u[i]===0xff){const m=u[i+1],n=(u[i+2]<<8)|u[i+3];if(m===0xda||m===0xd9)break;
+  if(m===0xe1&&u[i+4]===0x45&&u[i+5]===0x78&&u[i+6]===0x69&&u[i+7]===0x66&&u[i+8]===0&&u[i+9]===0)
+   return i+2+n<=u.length?u.slice(i,i+2+n):null;
+  i+=2+n}return null}
+function exifUpright(s){try{const t=10,le=s[t]===0x49,g16=o=>le?s[o]|(s[o+1]<<8):(s[o]<<8)|s[o+1],
+  g32=o=>(le?(s[o]|(s[o+1]<<8)|(s[o+2]<<16)|(s[o+3]<<24)):((s[o]<<24)|(s[o+1]<<16)|(s[o+2]<<8)|s[o+3]))>>>0,
+  ifd=t+g32(t+4);if(ifd+2>s.length)return s;const n=g16(ifd);
+ for(let k=0;k<n;k++){const e=ifd+2+k*12;if(e+12>s.length)break;
+  if(g16(e)===0x0112){if(le){s[e+8]=1;s[e+9]=0}else{s[e+8]=0;s[e+9]=1}}}}catch(e){}return s}
+async function withExif(b,ex){if(!ex)return b;const u=new Uint8Array(await b.arrayBuffer());if(u[0]!==0xff||u[1]!==0xd8)return b;
+ let at=2;if(u[2]===0xff&&u[3]===0xe0)at=4+((u[4]<<8)|u[5]);   /* after the JFIF block, which comes first */
+ return new Blob([u.subarray(0,at),ex,u.subarray(at)],{type:'image/jpeg'})}
+async function fitPhoto(blob){if(!blob||blob.size<=PMAX||typeof createImageBitmap!=='function')return blob;
+ let ex=null;try{ex=jpegExif(new Uint8Array(await blob.slice(0,262144).arrayBuffer()));if(ex)ex=exifUpright(ex)}catch(e){}
+ const room=PMAX-(ex?ex.length:0);
+ let bm;try{bm=await createImageBitmap(blob);const w=bm.width,h=bm.height,s0=Math.min(1,Math.sqrt(PPIX/Math.max(1,w*h)));
+  for(const [s,q] of [[1,.92],[1,.85],[.85,.85],[.7,.85],[.55,.82],[.4,.8],[.3,.75]]){
+   const c=document.createElement('canvas');c.width=Math.max(1,Math.round(w*s*s0));c.height=Math.max(1,Math.round(h*s*s0));
+   c.getContext('2d').drawImage(bm,0,0,c.width,c.height);
+   const b=await new Promise(r=>c.toBlob(r,'image/jpeg',q));c.width=c.height=0;
+   if(b&&b.size>0&&b.size<=room)return await withExif(b,ex)}}catch(e){}finally{if(bm&&bm.close)bm.close()}
+ return blob}
+async function makePreview(blob){
+ if(typeof createImageBitmap==='function'){
+  try{const bm=await createImageBitmap(blob),m=Math.max(bm.width,bm.height,1),s=m>720?720/m:1,
+    c=document.createElement('canvas');c.width=Math.max(1,Math.round(bm.width*s));c.height=Math.max(1,Math.round(bm.height*s));
+   c.getContext('2d').drawImage(bm,0,0,c.width,c.height);if(bm.close)bm.close();
+   const pb=await new Promise(r=>c.toBlob(r,'image/jpeg',0.65));if(pb&&pb.size>0&&pb.size<blob.size)return pb}catch(e){}}
+ const raw=new Uint8Array(await blob.arrayBuffer()),n=Math.min(raw.length,Math.max(512,raw.length>>2));
+ if(n>=raw.length)return blob;const out=raw.slice(0,n);
+ if(raw[0]===0xff&&raw[1]===0xd8){out[n-2]=0xff;out[n-1]=0xd9}
+ return new Blob([out],{type:blob.type||'image/jpeg'})}
+async function sealRecord(it){if(!PCKEY||!it||!it.meta||it.meta.sealed||!it.blob)return it;
+ try{const orig=await sealItem({meta:it.meta,blob:it.blob});let prev=null;
+  if(!it.carried&&!it.prevSent){const pb=await makePreview(it.blob);
+   prev=await sealItem({meta:Object.assign({},it.meta,{preview:true}),blob:pb})}
+  return {id:it.id,blob:orig,prev:prev,prevSent:!!it.prevSent,meta:{id:it.id,sealed:1,t:it.meta.t||Date.now()},
+   room:it.room||ROOM,carried:!!it.carried,pk:PCKEY}}catch(e){return it}}   /* pk: the key it is sealed for (.bfp kid) */
+function openDb(){return new Promise(r=>{try{const q=indexedDB.open('biruni-photos',1);
+ q.onupgradeneeded=()=>q.result.createObjectStore('q',{keyPath:'id'});q.onsuccess=()=>r(q.result);
+ q.onerror=()=>r(null)}catch(e){r(null)}})}
+function tx(mode,fn){return new Promise((res,rej)=>{const t=db.transaction('q',mode),q=fn(t.objectStore('q'));
+ t.oncomplete=()=>res(q&&q.result);t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error)})}
+async function put(it){
+ if(it&&it.meta&&!it.meta.sealed&&!it.carried){
+  if(!it.meta.device_id)it.meta.device_id=DEVID;
+  const nm=($('me')&&$('me').value||kept('biruni-me')||'').trim().slice(0,40);
+  if(!it.meta.by&&nm)it.meta.by=nm;
+  if(!it.meta.surveyor)it.meta.surveyor=it.meta.by||nm}
+ it=await sealRecord(it);if(db){try{await tx('readwrite',s=>s.put(it));return it}catch(e){}}
+ mem=mem.filter(x=>x.id!==it.id);mem.push(it);return it}
+async function all(){let a=[];if(db){try{a=await tx('readonly',s=>s.getAll())||[]}catch(e){}}
+ return a.concat(mem).filter(x=>(x.room||'')===ROOM)}
+async function sealWaiting(){if(!PCKEY)return;const a=await all();
+ for(const x of a)if(x.meta&&!x.meta.sealed)await put(x)}
+async function del(id){mem=mem.filter(x=>x.id!==id);if(db){try{await tx('readwrite',s=>s.delete(id))}catch(e){}}}
+/* the preview arrived: mark the photo, only if it is still waiting (Google Drive may have taken it meanwhile) */
+async function prevDone(id){if(db){try{const x=await tx('readonly',s=>s.get(id));
+   if(x){x.prevSent=true;x.prev=null;await tx('readwrite',s=>s.put(x));return true}}catch(e){}}
+ const m=mem.find(x=>x.id===id);if(m){m.prevSent=true;m.prev=null;return true}return false}
+function setPrivate(on){privMode=!!on;const b=$('privWarn');if(!b)return;
+ b.textContent=T.incognito||'Private browsing is on: closing this page will erase waiting photos. Open the link in a normal browser tab.';
+ b.classList.toggle('hide',!privMode)}
+async function checkPrivate(){if(window.BIRUNI_INCOGNITO!=null){setPrivate(!!window.BIRUNI_INCOGNITO);return privMode}
+ if(!db){setPrivate(true);return true}
+ try{localStorage.setItem('__bt','1');localStorage.removeItem('__bt')}catch(e){setPrivate(true);return true}
+ if(navigator.storage&&navigator.storage.estimate){
+  try{const e=await navigator.storage.estimate();if(e&&e.quota&&e.quota<120*1024*1024){setPrivate(true);return true}}
+  catch(e){setPrivate(true);return true}}
+ setPrivate(false);return false}
+function chip(state){$('dot').className='dot '+state;$('chipText').textContent=state==='on'?T.online:state==='wait'?T.linking:T.offline}
+function status(on,key){lastSt=[on,key];const b=$('st');chip(on?'on':key==='connecting'?'wait':'off');
+ if(on){b.classList.add('hide')}else{b.textContent=T[key]||key;b.classList.remove('hide')}}
+let tt=null;function toast(s){const t=$('toast');t.textContent=s;t.classList.add('show');clearTimeout(tt);
+ tt=setTimeout(()=>t.classList.remove('show'),2200)}
+function mark(id,s){const e=document.querySelector('[data-id="'+id+'"] .badge');if(!e)return;e.textContent=s;
+ e.className='badge'+(s==='✓'?' ok':s==='✗'?' bad':'')}
+async function count(){const a=await all(),n=a.length,p=a.filter(x=>x.prevSent).length,c=a.filter(x=>x.carried).length;
+ $('nSent').textContent=sent;$('nWait').textContent=n;
+ const wTxt=(T.waitingPhotos||'{n} photos waiting').replace('{n}',n-p),
+  pTxt=(T.previewSent||'{n} arrived as preview, original waiting for Wi-Fi').replace('{n}',p),
+  dTxt=(T.drivePreview||'').replace('{n}',p),
+  wt=p?(p===n?(typeof DRV==='object'&&DRV.on&&DRV.go()&&dTxt?dTxt:pTxt):wTxt+' · '+pTxt):(T.waitingPhotos||'{n} photos waiting').replace('{n}',n);
+ if($('waitPill')){$('waitPill').textContent=wt;$('waitPill').classList.toggle('hide',!n)}
+ $('lWait').textContent=n?wt:bare(T.queued);
+ $('handInfo').textContent=c?T.handCarry.replace('{n}',c):'';
+ $('waitBox').classList.toggle('warn',n>0)}
+
+/* ---- Biruni bridge core: shared by the phone page and the PC's hidden receiver ---- */
+const BR={relays:["wss://relay.damus.io", "wss://nos.lol", "wss://relay.primal.net", "wss://nostr.mom", "wss://relay.nostr.band"],ntfy:'https://ntfy.sh/',kind:25050,
+ ice:[{urls:['stun:stun.l.google.com:19302','stun:stun.cloudflare.com:3478']}]};
+const enc=new TextEncoder(),dec=new TextDecoder();
+const b64u={enc:b=>{let s='';const a=new Uint8Array(b);for(let i=0;i<a.length;i++)s+=String.fromCharCode(a[i]);
+  return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')},
+ dec:s=>Uint8Array.from(atob(s.replace(/-/g,'+').replace(/_/g,'/')+'==='.slice((s.length+3)%4)),c=>c.charCodeAt(0))};
+const hex=b=>[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('');
+const unhex=h=>Uint8Array.from(h.match(/../g),x=>parseInt(x,16));
+const cat=(...a)=>{const o=new Uint8Array(a.reduce((n,x)=>n+x.length,0));let i=0;for(const x of a){o.set(x,i);i+=x.length}return o};
+const sha=async b=>new Uint8Array(await crypto.subtle.digest('SHA-256',b));
+const rid=()=>b64u.enc(crypto.getRandomValues(new Uint8Array(9)));
+/* the PC's identity (see bridge.py): the receiver signs with &s=, a phone checks against the pin &i= (kept per key,
+   so a page that rebuilds its address keeps it). No pin: no check (older QR codes). */
+const ID={sk:null,pub:null,pin:null};
+async function idInit(k){const h=new URLSearchParams(typeof location!=='undefined'?location.hash.slice(1):''),s=h.get('s'),i=h.get('i'),slot='biruni-pin-'+String(k).slice(0,16);
+ if(i&&/^[A-Za-z0-9_-]{22}$/.test(i)){ID.pin=i;try{localStorage.setItem(slot,i)}catch(e){}}
+ else{try{const v=localStorage.getItem(slot);if(v&&/^[A-Za-z0-9_-]{22}$/.test(v))ID.pin=v}catch(e){}}
+ if(s){try{ID.sk=await crypto.subtle.importKey('pkcs8',b64u.dec(s),{name:'ECDSA',namedCurve:'P-256'},true,['sign']);
+   const j=await crypto.subtle.exportKey('jwk',ID.sk);ID.pub=b64u.enc(cat(new Uint8Array([4]),b64u.dec(j.x),b64u.dec(j.y)))}
+  catch(e){ID.sk=null}}}
+async function IDSIGN(text){if(!ID.sk)return null;
+ return {pub:ID.pub,sig:b64u.enc(await crypto.subtle.sign({name:'ECDSA',hash:'SHA-256'},ID.sk,enc.encode(text)))}}
+async function IDOK(pub,sig,text){if(!ID.pin)return true;
+ try{if(typeof pub!=='string'||typeof sig!=='string')return false;const raw=b64u.dec(pub);
+  if(raw.length!==65||b64u.enc(await sha(raw)).slice(0,22)!==ID.pin)return false;
+  const k=await crypto.subtle.importKey('raw',raw,{name:'ECDSA',namedCurve:'P-256'},false,['verify']);
+  return await crypto.subtle.verify({name:'ECDSA',hash:'SHA-256'},k,b64u.dec(sig),enc.encode(text))}catch(e){return false}}
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+/* BIP340 Schnorr signatures on secp256k1 - Nostr relays only take signed events.
+   A new throwaway identity per page; the content is what the key protects. */
+const SP=0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2Fn,
+ SN=0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n,
+ SG=[0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798n,
+     0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8n];
+const md=(a,m=SP)=>{const r=a%m;return r<0n?r+m:r};
+function minv(a,m=SP){let r0=md(a,m),r1=m,s0=1n,s1=0n;while(r1){const q=r0/r1;[r0,r1]=[r1,r0-q*r1];[s0,s1]=[s1,s0-q*s1]}
+ return md(s0,m)}
+function padd(p,q){if(!p)return q;if(!q)return p;let l;
+ if(p[0]===q[0]){if(md(p[1]+q[1])===0n)return null;l=md(3n*p[0]*p[0]*minv(2n*p[1]))}
+ else l=md((q[1]-p[1])*minv(q[0]-p[0]));
+ const x=md(l*l-p[0]-q[0]);return [x,md(l*(p[0]-x)-p[1])]}
+function pmul(k,p=SG){let r=null;while(k>0n){if(k&1n)r=padd(r,p);p=padd(p,p);k>>=1n}return r}
+const big=b=>BigInt('0x'+(hex(b)||'0')),b32=n=>unhex(n.toString(16).padStart(64,'0'));
+async function thash(tag,...parts){const t=await sha(enc.encode(tag));return sha(cat(t,t,...parts))}
+async function schnorr(sk,msg,aux){const P=pmul(sk),d=(P[1]&1n)?SN-sk:sk;
+ const ah=await thash('BIP0340/aux',aux),db=b32(d),t=db.map((x,i)=>x^ah[i]);
+ const k0=md(big(await thash('BIP0340/nonce',t,b32(P[0]),msg)),SN);if(!k0)throw new Error('nonce');
+ const R=pmul(k0),k=(R[1]&1n)?SN-k0:k0;
+ const e=md(big(await thash('BIP0340/challenge',b32(R[0]),b32(P[0]),msg)),SN);
+ return cat(b32(R[0]),b32(md(k+e*d,SN)))}
+let NID=null;
+async function nostrEvent(content,topic){if(!NID){let sk=0n;
+  while(!sk||sk>=SN)sk=big(crypto.getRandomValues(new Uint8Array(32)));NID={sk:sk,pk:hex(b32(pmul(sk)[0]))}}
+ const ev={pubkey:NID.pk,created_at:Math.floor(Date.now()/1000),kind:BR.kind,tags:[['t',topic]],content:content};
+ const id=await sha(enc.encode(JSON.stringify([0,ev.pubkey,ev.created_at,ev.kind,ev.tags,ev.content])));
+ ev.id=hex(id);ev.sig=hex(await schnorr(NID.sk,id,crypto.getRandomValues(new Uint8Array(32))));return ev}
+/* the key: AES-GCM for every message, and the meeting name the relays see */
+let BK=null;
+async function bridgeKey(k){const raw=b64u.dec(k);
+ BK={k:await crypto.subtle.importKey('raw',raw,'AES-GCM',false,['encrypt','decrypt']),
+  topic:'biruni'+hex(await sha(cat(enc.encode('biruni-bridge-1:'),raw))).slice(0,40)};await idInit(k);return BK}
+const canZ=typeof CompressionStream!=='undefined'&&typeof DecompressionStream!=='undefined';
+async function zz(d,pack){const s=new Blob([d]).stream().pipeThrough(pack?new CompressionStream('deflate-raw'):
+ new DecompressionStream('deflate-raw'));return new Uint8Array(await new Response(s).arrayBuffer())}
+async function seal(obj,z){let d=enc.encode(JSON.stringify(obj)),f=0;
+ if(z&&canZ){const c=await zz(d,true);if(c.length<d.length){d=c;f=1}}
+ const iv=crypto.getRandomValues(new Uint8Array(12));
+ const ct=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv:iv},BK.k,cat(new Uint8Array([f]),d)));
+ return b64u.enc(cat(iv,ct))}
+async function unseal(s){try{const b=b64u.dec(s);
+  const p=new Uint8Array(await crypto.subtle.decrypt({name:'AES-GCM',iv:b.slice(0,12)},BK.k,b.slice(12)));
+  const d=p[0]===1?await zz(p.slice(1),false):p.slice(1);return JSON.parse(dec.decode(d))}catch(e){return null}}
+/* the relays: control messages go to all; preview chunks go to at most 2 healthy Nostr relays with rate limiting */
+class NostrRelay{constructor(url,sig){this.url=url;this.sig=sig;this.up=false;this.wait=3000;this.fails=0;
+  this.backoffUntil=0;this.oks=new Map();this.notices=[];this.open()}
+ open(){let ws;try{ws=new WebSocket(this.url)}catch(e){return this.later()}this.ws=ws;
+  ws.onopen=()=>{this.up=true;this.wait=3000;ws.send(JSON.stringify(['REQ','b'+rid(),
+   {kinds:[BR.kind],'#t':[BK.topic],since:Math.floor(Date.now()/1000)-60}]));this.sig.changed()};
+  ws.onmessage=e=>{try{const m=JSON.parse(e.data);
+   if(m[0]==='EVENT'&&m[2]&&typeof m[2].content==='string')this.sig.arrived(m[2].content);
+   else if(m[0]==='OK'&&typeof m[1]==='string'){const ok=!!m[2];
+    if(!ok){this.fails++;this.backoffUntil=Date.now()+Math.min(60000,4000*Math.pow(2,this.fails-1))}
+    else{this.fails=0;this.backoffUntil=0}
+    const cb=this.oks.get(m[1]);if(cb){this.oks.delete(m[1]);cb(ok)}}
+   else if(m[0]==='NOTICE'){const w=String(m[1]||'');this.notices.push(w);
+    if(/rate|limit|slow|quota|ban|block|too/i.test(w)){this.fails++;this.backoffUntil=Date.now()+15000}}}catch(x){}};
+  ws.onclose=()=>{const was=this.up;this.up=false;for(const [,cb] of this.oks)cb(false);this.oks.clear();
+   if(was)this.sig.changed();this.later()};ws.onerror=()=>{try{ws.close()}catch(x){}}}
+ later(){setTimeout(()=>this.open(),this.wait+Math.random()*1000);this.wait=Math.min(this.wait*2,60000)}
+ send(s,ev){if(this.up&&ev&&Date.now()>=this.backoffUntil)try{this.ws.send(JSON.stringify(['EVENT',ev]))}catch(e){}}
+ sendWait(ev,ms=3500){if(!this.up||!ev||Date.now()<this.backoffUntil)return Promise.resolve(false);
+  return new Promise(r=>{const t=setTimeout(()=>{if(this.oks.delete(ev.id))r(false)},ms);
+   this.oks.set(ev.id,ok=>{clearTimeout(t);r(ok)});
+   try{this.ws.send(JSON.stringify(['EVENT',ev]))}catch(e){clearTimeout(t);this.oks.delete(ev.id);r(false)}})}}
+class NtfyRelay{constructor(sig){this.sig=sig;this.up=false;this.wait=3000;this.open()}
+ open(){let ws;try{ws=new WebSocket(BR.ntfy.replace(/^http/,'ws')+BK.topic+'/ws')}catch(e){return this.later()}this.ws=ws;
+  ws.onopen=()=>{this.up=true;this.wait=3000;this.sig.changed()};
+  ws.onmessage=e=>{try{const m=JSON.parse(e.data);if(m.event==='message'){
+   if(m.attachment&&m.attachment.url)fetch(m.attachment.url).then(r=>r.ok?r.text():'').then(t=>{if(t)this.sig.arrived(t)}).catch(()=>{});
+   else if(m.message)this.sig.arrived(m.message)}}catch(x){}};
+  ws.onclose=()=>{const was=this.up;this.up=false;if(was)this.sig.changed();this.later()};ws.onerror=()=>{try{ws.close()}catch(x){}}}
+ later(){setTimeout(()=>this.open(),this.wait+Math.random()*1000);this.wait=Math.min(this.wait*2,60000)}
+ send(s){if(s.length<=4000)fetch(BR.ntfy+BK.topic+'?cache=no&firebase=no',{method:'POST',body:s}).catch(()=>{})}
+ async sendChunk(s){try{const u=BR.ntfy+BK.topic+(s.length<=4000?'?cache=no&firebase=no':'?firebase=no'),
+   h=s.length>4000?{'Filename':'p.bin'}:{};return (await fetch(u,{method:'POST',body:s,headers:h})).ok}catch(e){return false}}}
+const SIG={relays:[],seen:new Set(),loose:new Set(),on:null,onchange:null,_lastChunk:0,
+ start(onMsg,onChange){this.on=onMsg;this.onchange=onChange;
+  this.relays=BR.relays.map(u=>new NostrRelay(u,this)).concat([new NtfyRelay(this)])},
+ up(){return this.relays.filter(r=>r.up).length},
+ healthyNostr(){return this.relays.filter(r=>r instanceof NostrRelay&&r.up&&Date.now()>=r.backoffUntil).sort((a,b)=>a.fails-b.fails)},
+ changed(){if(this.onchange)this.onchange(this.up())},
+ async _sign(obj){
+  if(obj.t==='answer'&&ID.sk){const g=await IDSIGN('BRA1|'+obj.sid+'|'+obj.sdp);obj.ip=g.pub;obj.is=g.sig}
+  else if(obj.t==='rhello'&&ID.sk){const g=await IDSIGN('BRH0|'+obj.sid+'|'+(obj.pk||''));obj.ip=g.pub;obj.is=g.sig}
+  else if(obj.t==='rack'&&ID.sk){const g=await IDSIGN('BRAK1|'+obj.id+'|'+obj.kind+'|'+obj.nonce);obj.ip=g.pub;obj.is=g.sig}},
+ async send(obj,z){obj.n=rid();obj.ts=Date.now();this.seen.add(obj.n);await this._sign(obj);
+  const s=await seal(obj,z);let ev=null;
+  try{ev=await nostrEvent(s,BK.topic)}catch(e){}for(const r of this.relays)r.send(s,ev)},
+ async sendChunk(obj){
+  const pace=BR.paceMs!=null?BR.paceMs:180,wait=Math.max(0,this._lastChunk+pace-Date.now());
+  if(wait)await sleep(wait);this._lastChunk=Date.now();
+  obj.n=rid();obj.ts=Date.now();this.seen.add(obj.n);const s=await seal(obj,true);
+  let ev=null;try{ev=await nostrEvent(s,BK.topic)}catch(e){}
+  const tried=new Set();
+  while(ev){const pair=this.healthyNostr().filter(r=>!tried.has(r)).slice(0,2);if(!pair.length)break;
+   pair.forEach(r=>tried.add(r));const res=await Promise.all(pair.map(r=>r.sendWait(ev)));
+   if(res.some(Boolean))return true}
+  const nr=this.relays.find(r=>r instanceof NtfyRelay);return nr?await nr.sendChunk(s):false},
+ async arrived(s){const o=await unseal(s);if(!o||!o.n||this.seen.has(o.n))return;this.seen.add(o.n);
+  if(Math.abs(Date.now()-(o.ts||0))>15*60000)return;
+  /* answers and receipts to this phone must come from the PC (signed) */
+  if(o.t==='answer'&&ID.pin&&!this.loose.has(o.sid)&&!await IDOK(o.ip,o.is,'BRA1|'+o.sid+'|'+o.sdp)){
+   this.refused=(this.refused||0)+1;return}
+  if(o.t==='rhello'&&ID.pin&&!await IDOK(o.ip,o.is,'BRH0|'+o.sid+'|'+(o.pk||''))){
+   this.refused=(this.refused||0)+1;return}
+  if(o.t==='rack'&&ID.pin&&!await IDOK(o.ip,o.is,'BRAK1|'+o.id+'|'+o.kind+'|'+o.nonce)){
+   this.refused=(this.refused||0)+1;return}
+  if(this.on)this.on(o)}};
+/* a private line through a teammate's phone: the phone and the PC agree on a key of their own (ECDH on P-256),
+   so the phone that carries the messages cannot read them. Every frame after the first is sealed; its first
+   byte says what it is (0 a message, 1 a piece of a photo). */
+const E2E={async pair(){const kp=await crypto.subtle.generateKey({name:'ECDH',namedCurve:'P-256'},false,['deriveBits']);
+  return {kp:kp,pub:b64u.enc(await crypto.subtle.exportKey('raw',kp.publicKey))}},
+ async key(kp,pub){const pk=await crypto.subtle.importKey('raw',b64u.dec(pub),{name:'ECDH',namedCurve:'P-256'},false,[]);
+  const bits=await crypto.subtle.deriveBits({name:'ECDH',public:pk},kp.privateKey,256);
+  return crypto.subtle.importKey('raw',await sha(new Uint8Array(bits)),'AES-GCM',false,['encrypt','decrypt'])},
+ async seal(k,kind,bytes){const iv=crypto.getRandomValues(new Uint8Array(12));
+  return cat(iv,new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv:iv},k,cat(new Uint8Array([kind]),bytes))))},
+ async open(k,bytes){const b=new Uint8Array(bytes);
+  return new Uint8Array(await crypto.subtle.decrypt({name:'AES-GCM',iv:b.slice(0,12)},k,b.slice(12)))}};
+function gathered(pc,ms){return new Promise(r=>{if(pc.iceGatheringState==='complete')return r();
+ const t=setTimeout(r,ms);pc.addEventListener('icegatheringstatechange',()=>{if(pc.iceGatheringState==='complete'){
+ clearTimeout(t);r()}})})}
+
+/* .bfp: one photo sealed for the PC, in the user's own Drive (field_photos/drive.py says the format) */
+const BFP={
+ sha:async b=>hex(await crypto.subtle.digest('SHA-256',b)),
+ tag:async k=>(await BFP.sha(enc.encode('biruni-drive-room-1:'+k))).slice(0,16),
+ kid:async pk=>(await BFP.sha(enc.encode('biruni-drive-kid-1:'+pk))).slice(0,16),
+ cert:async(k,sk,pub,dev)=>{const ka=await crypto.subtle.digest('SHA-256',enc.encode('biruni-drive-auth-1:'+k+(sk||'')));
+  const key=await crypto.subtle.importKey('raw',ka,{name:'HMAC',hash:'SHA-256'},false,['sign']);
+  return b64u.enc(await crypto.subtle.sign('HMAC',key,enc.encode('BFP-CERT1|'+pub+'|'+dev)))},
+ /* h: {room,dev,kid,id,n,t,pub,cert}; body: the sealed photo (Uint8Array); key: the phone's ECDSA P-256 key */
+ pack:async(h,body,key)=>{h=Object.assign({},h,{v:1,size:body.length,sha:await BFP.sha(body)});
+  const hb=enc.encode(JSON.stringify(h));if(hb.length>4096)throw new Error('bfp header');
+  const pre=cat(enc.encode('BFP1'),new Uint8Array([hb.length>>8,hb.length&255]),hb);
+  const sig=new Uint8Array(await crypto.subtle.sign({name:'ECDSA',hash:'SHA-256'},key,pre));
+  return {bytes:cat(pre,sig,body),head:cat(pre,sig),name:String(h.n).padStart(6,'0')+'-'+h.sha.slice(0,12)+'.bfp',sha:h.sha}}};
+
+/* ---- Google Drive: the card, the link (a frame or a window of the link page), the token in memory only ---- */
+const DRV={on:false,tok:'',exp:0,state:'',nonce:'',frame:null,win:null,card:null,ready:false,n:0,tag:'',fold:null,bad:0,
+ HELPER:'https://drive.biruni-gis.com',API:'https://www.googleapis.com',HOLD:new Map(),
+ ok(){return !!this.tok&&Date.now()<this.exp-300000},
+ go(){return this.ok()&&!!this.fold},
+ fname(){return 'biruni-photos-'+this.tag},
+ holds(id){return this.HOLD.get(id)==='drive'}};
+DRV.ORIGIN=(()=>{try{return new URL(DRV.HELPER).origin}catch(e){return ''}})();
+function driveUA(){const u=navigator.userAgent||'';
+ return {inapp:/; wv\)|FBAN|FBAV|Instagram|Line\/|TikTok|musical_ly|Snapchat|LinkedInApp|MicroMessenger|GSA\//.test(u)
+   ||(/iPad|iPhone|iPod/.test(u)&&/AppleWebKit/.test(u)&&!/Safari\//.test(u)),
+  ios:/iPad|iPhone|iPod/.test(u)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1)}}
+function driveEl(tag,cls,txt){const e=document.createElement(tag);if(cls)e.className=cls;if(txt!=null)e.textContent=txt;return e}
+function driveSay(state){DRV.state=state;const c=DRV.card;if(!c)return;
+ const S={unlinked:T.driveUnlinked,auth:T.driveAuth,idle:T.driveIdle,up:T.driveUp,wait:T.driveWait,full:T.driveFull,
+  err:T.driveErr,denied:T.driveDenied,inapp:T.driveInApp,blocked:T.drivePopupBlocked,pick:T.drivePickHint,
+  ro:T.drivePickRO,gone:T.driveGone}[state]||'';
+ c.querySelector('.dstate').textContent=String(S||'').replace('{name}',DRV.fname());
+ const linked=DRV.ok();c.querySelector('.dcount').classList.toggle('hide',!linked&&!DRV.n);
+ c.querySelector('.dcount').textContent=(T.driveIn||'')+' '+DRV.n;
+ const f=DRV.fold,pk=c.querySelector('.dpick'),fo=c.querySelector('.dfold');
+ pk.textContent=(f?T.drivePickAgain:T.drivePick)||'';
+ pk.classList.toggle('hide',!(linked&&DRV.tag&&(!f||f.own||state==='pick'||state==='gone'||state==='ro')));
+ fo.textContent=f?((T.driveFolder||'')+' '+DRV.fname()+(f.own?' · '+(T.driveOwn||''):'')):'';
+ fo.classList.toggle('hide',!f);
+ const pop=c.querySelector('.dpop');pop.textContent=(state==='auth'&&dsendLabel())||T.driveOpen||'';
+ if(typeof dshowFree==='function'&&!DFREEING)dshowFree()}
+function dcache(){try{const c=JSON.parse(kept('biruni-drive-f-'+ROOM)||'null');
+  if(c&&c.k===1&&c.t===DRV.tag&&typeof c.r==='string'&&typeof c.p==='string')return c}catch(e){}return null}
+function driveHello(){const w=DRV.win&&!DRV.win.closed?DRV.win:null,t=w||(DRV.frame&&DRV.frame.contentWindow);if(!t)return;
+ let label=DRV.ok()?T.driveRelink:(DRV.state==='auth'?dsendLabel()||T.driveRelink:T.driveLink);DRV.label=label;
+ const m={v:1,type:'biruni-drive-hello',nonce:DRV.nonce,dir:document.documentElement.dir==='rtl'?'rtl':'ltr'};
+ /* the window (never the frame) is where the office's folder is chosen; it gets the token so no second sign-in */
+ if(w&&DRV.tag&&(!DRV.fold||DRV.wantPick)){label=T.drivePick;const n=DRV.fname();
+  m.pick={name:n,token:DRV.ok()?DRV.tok:'',exp:DRV.ok()?DRV.exp:0,
+   hint:String(T.drivePickHint||'').replace('{name}',n),wrong:String(T.drivePickWrong||'').replace('{name}',n)}}
+ m.label=String(label||'Google Drive').slice(0,80);
+ try{t.postMessage(m,DRV.ORIGIN)}catch(e){}}
+/* once the token's hour ended a new one needs a tap (a window may only open on one): the button counts the photos */
+function dsendLabel(){return DRV.w>0&&T.driveSend?String(T.driveSend).replace('{n}',DRV.w):''}
+function driveLabel(){if(!DRV.card)return;DRV.card.querySelector('.dtitle').textContent=T.driveTitle||'Google Drive';
+ DRV.card.querySelector('.dpop').textContent=T.driveOpen||'';driveSay(DRV.state);if(DRV.ready)driveHello()}
+function driveFrame(){if(DRV.frame||!DRV.card)return;const f=document.createElement('iframe');f.className='dframe';
+ f.title='Google Drive';f.src=DRV.HELPER+'/link/';DRV.frame=f;DRV.card.querySelector('.dlink').appendChild(f);
+ setTimeout(()=>{if(!DRV.ready)drivePopupButton()},8000)}
+function drivePopupButton(){if(DRV.card)DRV.card.querySelector('.dpop').classList.remove('hide')}
+function driveOpenWindow(){const w=window.open(DRV.HELPER+'/link/','biruni-drive','popup,width=480,height=640');
+ if(!w){driveSay('blocked');return}DRV.win=w}
+function driveOpenPick(){DRV.wantPick=true;driveOpenWindow()}
+function driveToken(m){if(typeof m.token!=='string'||!m.token||m.token.length>4096||!(+m.exp>Date.now()))return;
+ DRV.tok=m.token;DRV.exp=+m.exp;DRV.bad=0;dsoon();driveSay(DRV.fold?'idle':'pick');driveHello();if(typeof drivePump==='function')drivePump()}
+async function drivePicked(m){const id=String(m.id||'');
+ if(!DRV.tag||!DRV.ok()||!/^[\w-]{10,128}$/.test(id)||m.name!==DRV.fname())return;
+ try{const v=await dverify(id);if(v==='ro'){driveSay('ro');return}
+  const p=await dfolder('p-'+DEVID,id,'biruniDev',DEVID);
+  const c={t:DRV.tag,r:id,p:p,k:1,own:v==='own',v:Date.now()};keep('biruni-drive-f-'+ROOM,JSON.stringify(c));
+  DRV.fold=c;DRV.wantPick=false;DRV.bad=0;dsoon();driveSay('idle');drivePump()}
+ catch(e){if(e instanceof DriveStop)return;driveSay(e.status===403||e.status===404||e.perm?'gone':'err')}}
+function driveDead(){DRV.tok='';DRV.exp=0;driveSay('auth');driveHello()}
+window.addEventListener('message',e=>{
+ if(!DRV.on||e.origin!==DRV.ORIGIN)return;
+ const fromFrame=DRV.frame&&e.source===DRV.frame.contentWindow,fromWin=DRV.win&&e.source===DRV.win;
+ if(!fromFrame&&!fromWin)return;const m=e.data;if(!m||m.v!==1||typeof m.type!=='string')return;
+ if(m.type==='biruni-drive-ready'){DRV.ready=true;driveHello();return}
+ if(m.nonce!==DRV.nonce)return;
+ if(m.type==='biruni-drive-token')driveToken(m);
+ else if(m.type==='biruni-drive-folder'){if(fromWin)drivePicked(m)}
+ else if(m.type==='biruni-drive-error'){const c=String(m.code||'');
+  if(c==='pick_cancel'){if(!DRV.fold)driveSay('pick')}
+  else if(c==='gsi'||c==='popup_blocked'){drivePopupButton();driveSay(c==='popup_blocked'?'blocked':'err')}
+  else if(c==='denied'||c==='scope')driveSay('denied');else if(c!=='closed')driveSay('err')}});
+function driveStart(){if(DRV.on||typeof DRIVE_ON==='undefined'||!DRIVE_ON||!DRV.ORIGIN)return;DRV.on=true;
+ DRV.nonce=rid();DRV.n=+kept('biruni-drive-c-'+ROOM)||0;const ua=driveUA();
+ const c=driveEl('div','card dcard');c.id='driveCard';
+ const r=driveEl('div','row');r.appendChild(driveEl('span','lbl dtitle'));r.appendChild(driveEl('span','dcount hide'));c.appendChild(r);
+ c.appendChild(driveEl('div','dstate'));c.appendChild(driveEl('div','dfold hide'));c.appendChild(driveEl('div','dlink'));
+ const kb=driveEl('button','dpick hide');kb.type='button';kb.onclick=driveOpenPick;c.appendChild(kb);
+ const pb=driveEl('button','ghost dpop hide');pb.type='button';pb.onclick=driveOpenWindow;c.appendChild(pb);
+ const fb=driveEl('button','ghost dfree hide');fb.type='button';fb.onclick=()=>dfree();c.appendChild(fb);
+ DRV.clean=kept('biruni-drive-clean-'+ROOM)||'keep';
+ const w=$('work');w.insertBefore(c,w.firstChild);DRV.card=c;driveLabel();
+ BFP.tag(KEYB).then(t=>{DRV.tag=t;DRV.fold=dcache();driveSay(DRV.ok()&&!DRV.fold?'pick':DRV.state);drivePump()},()=>{});
+ if(ua.inapp){driveSay('inapp');return}
+ driveSay('unlinked');if(ua.ios)drivePopupButton();else driveFrame();
+ window.addEventListener('online',()=>{if(!DRV.ready&&DRV.frame){DRV.frame.src=DRV.HELPER+'/link/'}dsoon();drivePump()});
+ setInterval(drivePump,15000);setInterval(dreceipts,120000);dshowFree()}
+
+/* ---- the upload: one photo at a time, as one .bfp file (drive.py) in biruni-photos-<tag>/p-<device>/ ----
+   Once linked with the office folder chosen, Google Drive carries EVERY original, even with the line to the computer
+   open; the line then sends only the small preview, at once (bridge.js sendItem). The line carries the original only
+   when Drive cannot (driveFirst false: not linked, no folder, full, too big, or failing for DFALL since the line
+   opened). DRV.HOLD says which way has an original ('drive' or 'line'), so it never goes both. The phone's own key (ECDSA P-256, not extractable), the numbering and the
+   files' header bytes are kept in the database biruni-drive, so a retry uploads the very same bytes. */
+const DMAX=5*1024*1024;   /* the phone keeps every photo under 5 MB (fitPhoto), so one plain upload carries it */
+let DDB=null,DKEY=null,DBUSY=false;const DSKIP=new Set();
+function ddb(){return DDB||(DDB=new Promise(r=>{try{const q=indexedDB.open('biruni-drive',1);
+ q.onupgradeneeded=()=>q.result.createObjectStore('d',{keyPath:'id'});q.onsuccess=()=>r(q.result);q.onerror=()=>r(null);
+ q.onblocked=()=>setTimeout(()=>r(null),4000)}catch(e){r(null)}}))}
+async function dget(id){const d=await ddb();if(!d)return null;return new Promise(r=>{try{const g=d.transaction('d').objectStore('d').get(id);
+ g.onsuccess=()=>r(g.result||null);g.onerror=()=>r(null)}catch(e){r(null)}})}
+async function dput(rec){const d=await ddb();if(!d)return;return new Promise(r=>{try{const t=d.transaction('d','readwrite');
+ t.objectStore('d').put(rec);t.oncomplete=()=>r();t.onerror=()=>r();t.onabort=()=>r()}catch(e){r()}})}
+async function dkey(){if(DKEY)return DKEY;let k=await dget('#key');
+ if(!k||!k.kp||!k.pub){const kp=await crypto.subtle.generateKey({name:'ECDSA',namedCurve:'P-256'},false,['sign','verify']);
+  k={id:'#key',kp:kp,pub:b64u.enc(await crypto.subtle.exportKey('raw',kp.publicKey))};await dput(k)}
+ return DKEY=k}
+function dnext(){const n=(+kept('biruni-drive-n')||0)+1;keep('biruni-drive-n',String(n));return n}
+async function dapi(path,opt){opt=opt||{};const ac=new AbortController(),tm=setTimeout(()=>ac.abort(),opt.ms||60000);
+ opt.headers=Object.assign({Authorization:'Bearer '+DRV.tok},opt.headers||{});opt.signal=ac.signal;
+ try{return await fetch(DRV.API+path,opt)}finally{clearTimeout(tm)}}
+class DriveStop extends Error{constructor(state){super(state);this.state=state}}
+async function dcheck(r){if(r.ok)return r;if(r.status===401){driveDead();throw new DriveStop('auth')}
+ let j=null;try{j=await r.clone().json()}catch(e){}
+ const why=j&&j.error&&((j.error.errors||[])[0]||{}).reason||'';
+ if(r.status===403&&/storageQuotaExceeded|quotaExceeded/.test(why)){driveSay('full');throw new DriveStop('full')}
+ const e=new Error('drive '+r.status+' '+why);e.status=r.status;
+ e.perm=r.status===403&&/insufficientFilePermissions|insufficientPermissions|forbidden|appNotAuthorizedToFile/.test(why);
+ e.rate=r.status===403&&/rateLimitExceeded|userRateLimitExceeded/.test(why);e.ra=r.headers.get('Retry-After');throw e}
+/* a failed try waits 2, 4, 8 ... 64 s (a little random, so many phones do not come back together); Google's
+   Retry-After wins when longer (up to 10 minutes). Success, the network coming back, a new token or folder start over */
+DRV.BACK=2000;DRV.fails=0;DRV.until=0;DRV.tm=0;
+function ddelay(n,ra){let ms=Math.min(64000,DRV.BACK*Math.pow(2,Math.max(0,n-1)))+Math.floor(Math.random()*Math.min(1000,DRV.BACK/2));
+ if(ra){let s=+ra;if(!isFinite(s)){const t=Date.parse(ra);s=isFinite(t)?(t-Date.now())/1000:0}
+  if(s>0)ms=Math.max(ms,Math.min(600000,s*1000))}return ms}
+function dlater(ms){clearTimeout(DRV.tm);   /* the wait is over: a pump still busy is waited for, the time is not lost */
+ DRV.tm=setTimeout(()=>{DRV.tm=0;if(DBUSY){dlater(250);return}DRV.until=0;drivePump()},ms)}
+function dsoon(){DRV.fails=0;DRV.until=0;clearTimeout(DRV.tm);DRV.tm=0}
+const DFOLDER='application/vnd.google-apps.folder';
+const dq=s=>"'"+String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'")+"'";
+async function dfind(q){const r=await dcheck(await dapi('/drive/v3/files?spaces=drive&orderBy=createdTime&pageSize=10'
+ +'&supportsAllDrives=true&includeItemsFromAllDrives=true&fields='
+ +encodeURIComponent('files(id,name,size,createdTime)')+'&q='+encodeURIComponent(q)));return (await r.json()).files||[]}
+async function dmkdir(name,parent,props){const m={name:name,mimeType:DFOLDER,appProperties:props};if(parent)m.parents=[parent];
+ const r=await dcheck(await dapi('/drive/v3/files?supportsAllDrives=true&fields=id',{method:'POST',headers:{'Content-Type':'application/json'},
+  body:JSON.stringify(m)}));return (await r.json()).id}
+async function dfolder(name,parent,key,val){
+ const q="name="+dq(name)+" and mimeType="+dq(DFOLDER)+" and trashed=false and appProperties has { key="+dq(key)
+  +" and value="+dq(val)+" }"+(parent?" and "+dq(parent)+" in parents":"");
+ let f=await dfind(q);if(f.length)return f[0].id;
+ const mine=await dmkdir(name,parent,{[key]:val});f=await dfind(q);
+ /* two phones made it at the same moment: keep the oldest (Drive for desktop would show the other as "(1)") */
+ if(f.length&&f[0].id!==mine){try{await dapi('/drive/v3/files/'+mine,{method:'DELETE'})}catch(e){}return f[0].id}
+ return mine}
+/* the office's folder biruni-photos-<tag> is made by Biruni on the office computer and shared with the surveyor;
+   the phone never makes it: it is chosen once in Google Picker (drivePicked), then kept per room */
+async function dfolders(tag){const c=DRV.fold;if(c&&c.t===tag)return c;driveSay('pick');throw new DriveStop('pick')}
+async function dverify(id){const r=await dapi('/drive/v3/files/'+encodeURIComponent(id)+'?supportsAllDrives=true&fields='
+ +encodeURIComponent('id,name,mimeType,trashed,ownedByMe,capabilities(canAddChildren)'));
+ if(r.status===404)return 'ok';   /* the write that follows is the real test */
+ await dcheck(r);const j=await r.json();
+ if(j.name!==DRV.fname()||j.mimeType!==DFOLDER||j.trashed){const e=new Error('not the folder');e.status=404;throw e}
+ if(j.capabilities&&j.capabilities.canAddChildren===false)return 'ro';return j.ownedByMe?'own':'ok'}
+/* Drive takes uploads into a folder in the bin without a word, and Drive for desktop never shows them: look at the
+   office folder again every 5 minutes; in the bin, deleted or no longer shared, it is gone (the line takes the
+   originals until it is chosen again) */
+const DCHECK=300000;
+async function dfresh(){const c=DRV.fold,ck='biruni-drive-f-'+ROOM;if(!c||Date.now()-(+c.v||0)<DCHECK)return;
+ let v;try{v=await dverify(c.r)}catch(e){if(e instanceof DriveStop)throw e;
+  if(e.status===403||e.status===404||e.perm){keep(ck,null);DRV.fold=null;driveSay('gone');throw new DriveStop('gone')}
+  throw e}
+ if(v==='ro'){keep(ck,null);DRV.fold=null;driveSay('ro');throw new DriveStop('ro')}
+ c.v=Date.now();keep(ck,JSON.stringify(c))}
+async function dlost(){const c=DRV.fold,ck='biruni-drive-f-'+ROOM;if(!c)throw new DriveStop('pick');
+ try{const v=await dverify(c.r);if(v==='ro'){const e=new Error('ro');e.perm=true;e.ro=true;throw e}
+  c.p=await dfolder('p-'+DEVID,c.r,'biruniDev',DEVID);keep(ck,JSON.stringify(c))}
+ catch(e){if(e instanceof DriveStop)throw e;
+  if(e.status===403||e.status===404||e.perm){keep(ck,null);DRV.fold=null;driveSay(e.ro?'ro':'gone');throw new DriveStop('gone')}
+  throw e}}
+const DFALL=120000;   /* Drive failing this long while the line is open: the line takes the originals */
+function dfits(it){return !!(it&&it.meta&&it.meta.sealed&&!it.carried&&it.blob&&it.blob.size<=DMAX&&!DSKIP.has(it.id))}
+function deligible(it){return dfits(it)&&!DRV.HOLD.has(it.id)}
+function driveFirst(it){return DRV.on&&DRV.go()&&!(DRV.bad&&(DRV.bad===1||Date.now()-DRV.bad>DFALL))&&dfits(it)}
+async function dstill(id){return (await all()).some(x=>x.id===id)}
+async function dupload(it){const tag=await BFP.tag(KEYB),k=await dkey();let rec=await dget(it.id);
+ if(rec&&rec.room===tag&&rec.st==='done')return rec;   /* sent before; only leaving the queue was missed */
+ if(!rec||rec.room!==tag||!rec.head){const body=new Uint8Array(await it.blob.arrayBuffer()),n=dnext();
+  const h={room:tag,dev:DEVID,kid:await BFP.kid(it.pk||PCKEY),id:it.id,n:n,t:+it.meta.t||Date.now(),pub:k.pub,
+   cert:await BFP.cert(KEYB,SURVKEY,k.pub,DEVID)};
+  const f=await BFP.pack(h,body,k.kp.privateKey);
+  rec={id:it.id,room:tag,n:n,name:f.name,head:f.head,size:f.bytes.length,fsha:await BFP.sha(f.bytes),st:'q',tries:0,at:Date.now()};
+  await dput(rec)}
+ const fo=await dfolders(tag);await dfresh();let j;
+ try{
+  if(rec.tries>0){   /* the last try may have arrived without its answer: look before sending again */
+   const got=await dfind("appProperties has { key='bfp' and value="+dq(it.id)+" } and "+dq(fo.p)+" in parents and trashed=false");
+   const g=got.find(g=>+g.size===rec.size);if(g){rec.fid=g.id;return rec}}
+  rec.tries++;await dput(rec);
+  const b='bfp'+rid().replace(/[^A-Za-z0-9]/g,''),meta={name:rec.name,parents:[fo.p],appProperties:{bfp:it.id}};
+  const body=new Blob(['--'+b+'\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'+JSON.stringify(meta)+'\r\n--'+b
+   +'\r\nContent-Type: application/octet-stream\r\n\r\n',rec.head,it.blob,'\r\n--'+b+'--\r\n']);
+  let r;try{r=await dapi('/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&fields='
+   +encodeURIComponent('id,size,sha256Checksum'),
+   {method:'POST',headers:{'Content-Type':'multipart/related; boundary='+b},body:body,ms:180000})}
+  catch(e){throw new Error('network')}
+  await dcheck(r);j=await r.json()}
+ catch(e){if(e.status===404||e.perm)await dlost();   /* the share was taken back (stops), or only p-<device> went */
+  throw e}
+ if(+j.size!==rec.size||(j.sha256Checksum&&j.sha256Checksum!==rec.fsha)){
+  try{await dapi('/drive/v3/files/'+encodeURIComponent(j.id)+'?supportsAllDrives=true',{method:'DELETE'})}catch(e){}
+  throw new Error('drive copy differs')}
+ rec.fid=j.id;return rec}
+async function drivePump(){if(!DRV.on)return;
+ if(DBUSY){DRV.again=true;return}   /* asked while busy (a new token, folder or photo): runs again right after */
+ DBUSY=true;   /* before any await: never two pumps at once */
+ try{try{const w=(await all()).filter(dfits).length;if(w!==DRV.w){DRV.w=w;if(DRV.state==='auth'){driveSay('auth');driveHello()}}}
+  catch(e){}
+  if(DRV.tok&&!DRV.ok()){driveDead();return}   /* the hour ended: say so, the line takes the originals meanwhile */
+  if(Date.now()<DRV.until||!DRV.go())return;
+  const items=(await all()).filter(deligible).sort((a,b)=>a.meta.t-b.meta.t);
+  for(const it of items){if(!DRV.go())break;
+   if(DRV.HOLD.has(it.id)||!await dstill(it.id))continue;   /* the line took it meanwhile */
+   DRV.HOLD.set(it.id,'drive');driveSay('up');
+   try{const rec=await dupload(it),fresh=rec.st!=='done';rec.st='done';rec.head=null;rec.at=Date.now();await dput(rec);
+    await del(it.id);if(fresh){DRV.n++;keep('biruni-drive-c-'+ROOM,String(DRV.n))}DRV.bad=0;DRV.fails=0;DRV.until=0;mark(it.id,'✓');count();
+    clearTimeout(DRV.rt);DRV.rt=setTimeout(dreceipts,60000);   /* by then the PC has it from Drive for desktop */
+    driveSay('idle')}
+   catch(e){if(e instanceof DriveStop){if(e.state==='full')DRV.bad=1;break}
+    if(e.status===400||e.status===413){DSKIP.add(it.id)}   /* Drive will never take it: it stays for the bridge */
+    else{if(!DRV.bad)DRV.bad=Date.now();DRV.fails++;const ms=ddelay(DRV.fails,e.ra);DRV.until=Date.now()+ms;dlater(ms)}
+    driveSay('wait');break}
+   finally{DRV.HOLD.delete(it.id)}}}
+ catch(e){}finally{DBUSY=false;if(DRV.again){DRV.again=false;setTimeout(drivePump,50)}}}
+
+/* ---- freeing the surveyor's Drive (step 10). The files are the surveyor's (drive.file), so only this phone can delete
+   them, and only those the PC says it holds as full originals: a receipt over the line, signed with the PC's identity
+   key (no pin, no receipts). The office chooses: auto (at once), manual (a button here), keep. A file goes for good,
+   not to the bin, which would still count against the surveyor's storage. The small record of it goes 30 days later */
+async function dall(){const d=await ddb();if(!d)return [];return new Promise(r=>{try{const g=d.transaction('d').objectStore('d').getAll();
+ g.onsuccess=()=>r((g.result||[]).filter(x=>x&&x.id&&x.id[0]!=='#'));g.onerror=()=>r([])}catch(e){r([])}})}
+async function ddrop(id){const d=await ddb();if(!d)return;return new Promise(r=>{try{const t=d.transaction('d','readwrite');
+ t.objectStore('d').delete(id);t.oncomplete=()=>r();t.onerror=()=>r();t.onabort=()=>r()}catch(e){r()}})}
+async function dreceipts(){if(!DRV.on||typeof lineOpen!=='function'||!lineOpen()||!ID.pin)return;
+ const now=Date.now(),a=await dall();
+ for(const r of a)if(r.st==='freed'&&now-(+r.at||0)>2592000000)await ddrop(r.id);
+ const ids=a.filter(r=>r.st==='done'&&r.fid).map(r=>r.id).slice(0,100);
+ if(!ids.length){dshowFree();return}
+ const nonce=rid();DRV.rq={nonce:nonce,ids:new Set(ids)};
+ try{lineText(JSON.stringify({t:'dhave',nonce:nonce,ids:ids}))}catch(e){}}
+async function driveGot(m){const q=DRV.rq;if(!q||!ID.pin||!m||m.nonce!==q.nonce||!Array.isArray(m.ids))return;
+ const cl=String(m.clean||''),ids=m.ids.map(String);
+ if(!['auto','manual','keep'].includes(cl)||!await IDOK(m.ip,m.is,'BRDG1|'+m.nonce+'|'+cl+'|'+ids.join(','))){
+  SIG.refused=(SIG.refused||0)+1;return}
+ DRV.rq=null;DRV.clean=cl;keep('biruni-drive-clean-'+ROOM,cl);
+ for(const id of ids){if(!q.ids.has(id))continue;const r=await dget(id);if(r&&r.st==='done'){r.st='got';await dput(r)}}
+ await dshowFree();if(cl==='auto')dfree();
+ else if(q.ids.size>=100&&ids.length)setTimeout(dreceipts,2000)}   /* more than one batch waits */
+async function dshowFree(){const c=DRV.card;if(!c)return;const n=(await dall()).filter(r=>r.st==='got').length;DRV.free=n;
+ const b=c.querySelector('.dfree');b.textContent=String(T.driveFree||'').replace('{n}',n);
+ b.classList.toggle('hide',!(n>0&&DRV.clean==='manual'&&DRV.ok()))}
+var DFREEING=false;   /* var: driveSay may look at it before this line has run */
+async function dfree(){if(DFREEING||!DRV.ok())return;DFREEING=true;
+ try{for(const r of await dall()){if(r.st!=='got'||!r.fid)continue;let res;
+   try{res=await dapi('/drive/v3/files/'+encodeURIComponent(r.fid)+'?supportsAllDrives=true',{method:'DELETE'})}catch(e){break}
+   if(res.status===204||res.status===200||res.status===404){r.st='freed';r.at=Date.now();await dput(r)}
+   else if(res.status===401){driveDead();break}
+   else if(res.status===403)continue;   /* not ours to delete (the office took it over): left there */
+   else break}}
+ finally{DFREEING=false;await dshowFree();driveSay(DRV.state)}}
+
+/* the phone sends over the bridge: relays to meet, then a direct channel to the PC - or, where the network
+   allows none, a channel to a teammate's phone that carries the messages to the PC */
+let pc=null,dc=null,sid=null,linking=false,retry=null,backoff=4000,lastState='',acks=new Map();
+let VIA=null,RELAY=false,rsid=rid();   /* VIA: through a teammate; RELAY: encrypted previews over relays when P2P blocked */
+const carried=new Map();      /* teammates this phone carries to the PC: their request's id -> their channel */
+function say(on,key){lastState=key;status(on,key)}
+const direct=()=>!!(dc&&dc.readyState==='open');
+const lineOpen=()=>direct()||!!(VIA&&VIA.ready);
+const relayOnly=()=>!lineOpen()&&RELAY;
+function lineText(s){if(direct())return dc.send(s);const v=VIA;if(!v||!v.ready)throw new Error('closed');
+ v.q=v.q.then(async()=>v.ch.send(await E2E.seal(v.key,0,enc.encode(s)))).catch(()=>{})}
+function lineBin(u8){if(direct())return dc.send(u8);const v=VIA;if(!v||!v.ready)throw new Error('closed');
+ v.pend+=u8.length;v.q=v.q.then(async()=>{v.ch.send(await E2E.seal(v.key,1,u8));v.pend-=u8.length}).catch(()=>{})}
+const lineBuffered=()=>direct()?dc.bufferedAmount:VIA?VIA.ch.bufferedAmount+VIA.pend:0;
+async function sendPos(p){if(lineOpen())lineText(JSON.stringify({t:'pos',p:p}));
+ else if(RELAY&&SIG.up())SIG.send({t:'rpos',p:p},true)}
+function pollGuide(){}
+function hello(m){if(Array.isArray(m.kinds))KINDS=m.kinds.map(String).slice(0,24);drawKinds();
+ if(typeof m.pk==='string'&&m.pk.length>80&&m.pk.length<100){PCKEY=m.pk;keep('biruni-pckey-'+ROOM,m.pk);sealWaiting()}
+ if(Array.isArray(m.form)){FORM=m.form.filter(f=>f&&f.name&&f.label).slice(0,30);drawForm()}
+ if(!kept('biruni-lang')&&!HASHL&&pick(m.lang))setLang(pick(m.lang));keep('biruni-hello-'+ROOM,JSON.stringify({kinds:KINDS,form:FORM}))}
+async function handleAck(m){const f=acks.get(m.id);if(!f)return;
+ if(m.status===200){const k=m.kind||'original',n=m.nonce||'';
+  if(k!==f.kind||n!==f.nonce||!await IDOK(m.ip,m.is,'BRAK1|'+m.id+'|'+k+'|'+n)){
+   SIG.refused=(SIG.refused||0)+1;return}}
+ acks.delete(m.id);f.resolve(m.status===200&&f.kind==='preview'?202:m.status)}
+/* what the PC says, however it comes */
+function fromPc(m){if(m.t==='hello')hello(m);else if(m.t==='guide')setGuide(m.g);
+ else if(m.t==='ack')handleAck(m);else if(m.t==='dgot'&&typeof driveGot==='function')driveGot(m)}
+function failAcks(){for(const [id,f] of acks)if(f.kind==='original'||f.line){acks.delete(id);f.reject(new Error('closed'))}}
+function drop(){const p=pc;pc=null;dc=null;linking=false;if(p)try{p.close()}catch(e){}
+ for(const [k,c] of carried){try{if(c)c.close()}catch(e){}}carried.clear();if(!lineOpen())failAcks()}
+function dropVia(){const v=VIA;VIA=null;if(v&&v.pc)try{v.pc.close()}catch(e){}if(!lineOpen())failAcks()}
+function later(){clearTimeout(retry);retry=setTimeout(connect,backoff);backoff=Math.min(backoff*2,60000)}
+function startRelay(){if(lineOpen()||!SIG.up())return;SIG.send({t:'rhi',sid:rsid,ua:dev},true)}
+async function connect(){if(!BK||linking||lineOpen())return;
+ if(!SIG.up()){say(false,'connecting');return later()}
+ if(VIAONLY){say(false,'connecting');help();return later()}
+ linking=true;if(!RELAY)say(false,'connecting');const my=sid=rid();
+ try{pc=new RTCPeerConnection({iceServers:BR.ice});const ch=dc=pc.createDataChannel('photos',{ordered:true});
+  ch.binaryType='arraybuffer';const me=pc;
+  ch.onopen=()=>{linking=false;RELAY=false;backoff=4000;dropVia();ch.send(JSON.stringify({t:'hi',ua:dev}));say(true,'connected');
+   lineFresh();flush();if(typeof drivePump==='function')drivePump();tellPos(true)};
+  ch.onclose=()=>{if(pc===me){drop();say(false,RELAY?'relayMode':'lost');later()}};
+  ch.onmessage=e=>{if(typeof e.data!=='string')return;let m;try{m=JSON.parse(e.data)}catch(x){return}
+   if(m.t==='fwd'&&m.to){const c=carried.get(m.to);   /* the PC answers a teammate this phone carries */
+    if(c&&c.readyState==='open')try{c.send(m.b?b64u.dec(m.b):m.m)}catch(x){}}
+   else fromPc(m)};
+  pc.oniceconnectionstatechange=()=>{if(pc!==me)return;const s=me.iceConnectionState;
+   if(s==='failed'||s==='disconnected'){drop();say(false,RELAY?'relayMode':'p2pfail');startRelay();help();later()}};
+  await me.setLocalDescription(await me.createOffer());await gathered(me,3000);
+  if(pc!==me)return;
+  await SIG.send({t:'offer',sid:my,sdp:me.localDescription.sdp,z:canZ},true);
+  await sleep(BR.directMs||10000);
+  if(pc===me&&!direct()){const gotAns=me.signalingState!=='have-local-offer';drop();
+   if(gotAns){say(false,'relayMode');startRelay();help()}
+   else{say(false,RELAY?'relayMode':'pcoff');startRelay()}
+   later()}
+ }catch(e){drop();say(false,RELAY?'relayMode':'lost');startRelay();later()}}
+/* no direct channel to the PC: ask the team. A teammate's phone that reaches the PC answers and carries. */
+async function help(){if(VIA||direct()||!SIG.up())return;
+ const v=VIA={ready:false,q:Promise.resolve(),rq:Promise.resolve(),sid:rid(),pend:0,key:null};SIG.loose.add(v.sid);
+ try{v.kp=await E2E.pair();v.pc=new RTCPeerConnection({iceServers:BR.ice});
+  const ch=v.ch=v.pc.createDataChannel('via',{ordered:true});ch.binaryType='arraybuffer';
+  ch.onopen=()=>ch.send(JSON.stringify({t:'hi',ua:dev,e:v.kp.pub}));   /* the one clear message: the public key */
+  ch.onclose=()=>{if(VIA===v){dropVia();if(!direct()){say(false,'lost');later()}}};
+  ch.onmessage=e=>{v.rq=v.rq.then(async()=>{
+    if(typeof e.data==='string'){let m;try{m=JSON.parse(e.data)}catch(x){return}
+     if(m.t==='hello'&&m.e&&!v.key){if(!await IDOK(m.ip,m.is,'BRH1|'+v.kp.pub+'|'+m.e)){SIG.refused=(SIG.refused||0)+1;
+       if(VIA===v)dropVia();return}   /* the teammate swapped the PC's key: refused */
+      v.key=await E2E.key(v.kp.kp,m.e);v.ready=true;backoff=4000;hello(m);
+      say(true,'connected');if(T.via)toast(T.via);lineFresh();flush();if(typeof drivePump==='function')drivePump();
+      tellPos(true)}return}
+    if(!v.key)return;const p=await E2E.open(v.key,e.data);if(p[0]===0)fromPc(JSON.parse(dec.decode(p.slice(1))))}).catch(()=>{})};
+  v.pc.oniceconnectionstatechange=()=>{if(VIA===v&&v.pc.iceConnectionState==='failed')dropVia()};
+  await v.pc.setLocalDescription(await v.pc.createOffer());await gathered(v.pc,3000);
+  if(VIA!==v)return;
+  await SIG.send({t:'help',sid:v.sid,sdp:v.pc.localDescription.sdp,z:canZ},true);
+  await sleep(30000);if(VIA===v&&!v.ready)dropVia()
+ }catch(e){if(VIA===v)dropVia()}}
+/* a teammate asks: this phone reaches the PC, so it carries. What it carries is sealed for the PC alone. */
+async function carry(o){if(!o.sid||carried.has(o.sid)||!direct()||carried.size>=4||(VIA&&VIA.sid===o.sid))return;
+ const p=new RTCPeerConnection({iceServers:BR.ice});carried.set(o.sid,null);
+ const end=()=>{if(!carried.has(o.sid))return;carried.delete(o.sid);try{p.close()}catch(e){}
+  if(direct())try{dc.send(JSON.stringify({t:'fwdx',from:o.sid}))}catch(e){}};
+ p.ondatachannel=e=>{const ch=e.channel;ch.binaryType='arraybuffer';carried.set(o.sid,ch);
+  ch.onmessage=m=>{if(!direct())return end();
+   if(typeof m.data==='string')dc.send(JSON.stringify({t:'fwd',from:o.sid,m:m.data}));
+   else{dc.send(JSON.stringify({t:'fwdb',from:o.sid}));dc.send(m.data)}};   /* the two together: nothing between */
+  ch.onclose=end};
+ p.oniceconnectionstatechange=()=>{const s=p.iceConnectionState;if(s==='failed'||s==='closed')end()};
+ setTimeout(()=>{if(carried.has(o.sid)&&!carried.get(o.sid))end()},45000);
+ try{await p.setRemoteDescription({type:'offer',sdp:o.sdp});await p.setLocalDescription(await p.createAnswer());
+  await gathered(p,3000);await SIG.send({t:'answer',sid:o.sid,sdp:p.localDescription.sdp},!!o.z)}catch(e){end()}}
+async function onSignal(o){
+ if(o.t==='answer'&&o.sid===sid&&pc&&pc.signalingState==='have-local-offer'){
+  try{await pc.setRemoteDescription({type:'answer',sdp:o.sdp})}catch(e){drop();later()}}
+ else if(o.t==='answer'&&VIA&&o.sid===VIA.sid&&VIA.pc&&VIA.pc.signalingState==='have-local-offer'){
+  try{await VIA.pc.setRemoteDescription({type:'answer',sdp:o.sdp})}catch(e){dropVia()}}   /* the first teammate to answer */
+ else if(o.t==='help')carry(o);
+ else if(o.t==='rhello'&&(!o.sid||o.sid===rsid)){hello(o);if(!lineOpen()){RELAY=true;say(false,'relayMode');flush();tellPos(true)}}
+ else if(o.t==='rguide')setGuide(o.g);
+ else if(o.t==='rack')handleAck(o)}
+async function sendRelayPreview(it){
+ if(!PCKEY)throw new Error('nokey');
+ if(!it.prev&&it.meta&&!it.meta.sealed)it=await put(it);
+ const pblob=it.prev||it.blob;if(!pblob)throw new Error('noprev');
+ const buf=new Uint8Array(await pblob.arrayBuffer()),cs=BR.chunkSize||24576,k=Math.max(1,Math.ceil(buf.length/cs)),nonce=rid();
+ const pmeta=Object.assign({},it.meta,{preview:true});
+ const done=new Promise((resolve,reject)=>{acks.set(it.id,{kind:'preview',nonce:nonce,resolve:resolve,reject:reject});
+  setTimeout(()=>{const f=acks.get(it.id);if(f&&f.nonce===nonce){acks.delete(it.id);reject(new Error('timeout'))}},60000)});
+ for(let i=0;i<k;i++){const slice=buf.slice(i*cs,(i+1)*cs);
+  const ok=await SIG.sendChunk({t:'rchunk',id:it.id,nonce:nonce,i:i,k:k,meta:pmeta,d:b64u.enc(slice)});
+  if(!ok){acks.delete(it.id);throw new Error('relay-down')}}
+ return await done}
+/* With Google Drive linked and the office folder chosen, Drive carries every original: the line sends only the
+   small preview, so the photo shows on the computer at once (202, then Drive's copy replaces it). Otherwise the line
+   sends the original, unless Drive is sending it (0: skipped); one this line is sending is held from Drive. */
+const NOPREV=new Set();
+function lineFresh(){if(typeof DRV==='object')DRV.bad=0;NOPREV.clear();
+ if(typeof dreceipts==='function')setTimeout(dreceipts,3000)}
+async function sendItem(it){
+ if(lineOpen()&&typeof driveFirst==='function'&&driveFirst(it)){
+  if(it.prevSent||!it.prev||NOPREV.has(it.id))return 0;
+  let st=0;try{st=await sendLine(it,it.prev,'preview')}catch(e){if(!lineOpen())throw e}
+  if(st===202)return 202;NOPREV.add(it.id);return 0}   /* a refused preview never deletes the photo Drive will carry */
+ if(DRV.holds(it.id))return 0;const own=lineOpen()&&!DRV.HOLD.has(it.id);
+ if(own)DRV.HOLD.set(it.id,'line');try{return await sendItem1(it)}finally{if(own)DRV.HOLD.delete(it.id)}}
+async function sendLine(it,blob,kind){
+ const buf=new Uint8Array(await blob.arrayBuffer()),nonce=rid(),meta=kind==='preview'?Object.assign({},it.meta,{preview:true}):it.meta;
+ const done=new Promise((resolve,reject)=>{acks.set(it.id,{kind:kind,nonce:nonce,line:true,resolve:resolve,reject:reject});
+  setTimeout(()=>{const f=acks.get(it.id);if(f&&f.nonce===nonce){acks.delete(it.id);reject(new Error('timeout'))}},
+   kind==='preview'?60000:180000)});
+ lineText(JSON.stringify({t:'photo',id:it.id,kind:kind,nonce:nonce,meta:meta,size:buf.length,type:blob.type||'image/jpeg'}));
+ for(let o=0;o<buf.length;o+=16384){while(lineBuffered()>1048576){if(!lineOpen())throw new Error('closed');
+   await sleep(25)}lineBin(buf.slice(o,o+16384))}
+ lineText(JSON.stringify({t:'end',id:it.id}));return await done}
+async function sendItem1(it){
+ if(lineOpen())return await sendLine(it,it.blob,'original');
+ if(RELAY&&SIG.up())return await sendRelayPreview(it);
+ throw new Error('closed')}
+async function alive(){if(lineOpen())return true;if(RELAY&&SIG.up())return true;connect();return false}
+function offline(){if(lineOpen())return;drivePump();
+ if(DRV.on&&DRV.go()){say(false,'driveMode');connect();return}
+ if(RELAY&&SIG.up()){say(false,'relayMode');return}
+ if(lastState==='connected'||!lastState||lastState==='driveMode')say(false,'connecting');else say(false,lastState);connect()}
+(async()=>{if(!KEYB||KEYB.length!==43||!window.isSecureContext||!window.RTCPeerConnection){
+  $('go').disabled=true;status(false,!KEYB?'nokey':'insecure');return}
+ await bridgeKey(KEYB);SIG.start(onSignal,n=>{if(n&&!linking&&!lineOpen()){backoff=4000;connect()}});
+ window.addEventListener('online',()=>{backoff=4000;connect()})})();
+
+/*HAND{*/
+/* ---- without internet: hand the waiting photos to a teammate's phone --------------------------------------------
+   Two phones on one Wi-Fi or hotspot (no internet needed) link directly after showing each other a QR code each.
+   Every photo is sealed for the computer (ECDH P-256 + AES-GCM to its key): the teammate carries it and cannot open
+   it; whichever phone reaches the computer first delivers it, and the computer keeps one copy. */
+const H64={enc:b=>{let s='';const a=new Uint8Array(b);for(let i=0;i<a.length;i++)s+=String.fromCharCode(a[i]);
+  return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')},
+ dec:s=>{s=String(s||'');return Uint8Array.from(atob(s.replace(/-/g,'+').replace(/_/g,'/')+'==='.slice((s.length+3)%4)),c=>c.charCodeAt(0))}};
+const hcat=(...a)=>{const o=new Uint8Array(a.reduce((n,x)=>n+x.length,0));let i=0;for(const x of a){o.set(x,i);i+=x.length}return o};
+const sleepH=ms=>new Promise(r=>setTimeout(r,ms));
+async function sealFor(pub,bytes){const pk=await crypto.subtle.importKey('raw',H64.dec(pub),{name:'ECDH',namedCurve:'P-256'},false,[]);
+ const eph=await crypto.subtle.generateKey({name:'ECDH',namedCurve:'P-256'},true,['deriveBits']);
+ const bits=await crypto.subtle.deriveBits({name:'ECDH',public:pk},eph.privateKey,256);
+ const key=await crypto.subtle.importKey('raw',await crypto.subtle.digest('SHA-256',bits),'AES-GCM',false,['encrypt']);
+ const iv=crypto.getRandomValues(new Uint8Array(12)),raw=new Uint8Array(await crypto.subtle.exportKey('raw',eph.publicKey));
+ return hcat(new Uint8Array([1]),raw,iv,new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv:iv},key,bytes)))}
+async function sealItem(it){if(it.meta&&it.meta.sealed)return it.blob;   /* already sealed for the PC: kept as it is */
+ const m=new TextEncoder().encode(JSON.stringify(it.meta)),img=new Uint8Array(await it.blob.arrayBuffer()),n=new Uint8Array(4);
+ new DataView(n.buffer).setUint32(0,m.length);return new Blob([await sealFor(PCKEY,hcat(n,m,img))],{type:'application/octet-stream'})}
+/* the link's offer and answer, short enough for a QR code: only what a direct link on one network needs */
+function sdpCode(sdp,kind){const g=r=>(sdp.match(r)||[])[1]||'',fp=g(/a=fingerprint:sha-256 ([0-9A-Fa-f:]+)/);
+ const c=[...sdp.matchAll(/a=candidate:\S+ 1 udp \d+ (\S+) (\d+) typ host/gi)].map(x=>x[1]+'_'+x[2]).filter(x=>!x.includes(':')).slice(0,4);
+ return 'B1'+kind+'|'+g(/a=ice-ufrag:(\S+)/)+'|'+g(/a=ice-pwd:(\S+)/)+'|'+H64.enc(Uint8Array.from(fp.split(':'),h=>parseInt(h,16)))+'|'+c.join(',')}
+function codeSdp(code){const p=String(code||'').split('|');if(p.length!==5||!/^B1[oa]$/.test(p[0])||!p[1]||!p[2])return null;
+ let fp;try{fp=[...H64.dec(p[3])].map(b=>b.toString(16).padStart(2,'0').toUpperCase()).join(':')}catch(e){return null}
+ const offer=p[0]==='B1o';
+ let s='v=0\r\no=- 1 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0\r\nm=application 9 UDP/DTLS/SCTP webrtc-datachannel\r\n'+
+  'c=IN IP4 0.0.0.0\r\na=ice-ufrag:'+p[1]+'\r\na=ice-pwd:'+p[2]+'\r\na=fingerprint:sha-256 '+fp+'\r\na=setup:'+(offer?'actpass':'active')+
+  '\r\na=mid:0\r\na=sctp-port:5000\r\na=max-message-size:262144\r\n';
+ (p[4]?p[4].split(','):[]).forEach((c,i)=>{const j=c.lastIndexOf('_');if(j>0)s+='a=candidate:'+(i+1)+' 1 udp '+(2122260223-i)+' '+
+  c.slice(0,j)+' '+c.slice(j+1)+' typ host generation 0\r\n'});
+ return {type:offer?'offer':'answer',sdp:s+'a=end-of-candidates\r\n'}}
+/*QR{*/
+/* QR codes drawn on the phone itself (byte mode, error correction M, versions 1-20): no library, no internet */
+const QRM=(()=>{
+ const ECC=[0,10,16,26,18,24,16,18,22,22,26,30,22,22,24,24,28,28,26,26,26],BLK=[0,1,1,1,2,2,4,4,4,5,5,5,8,9,9,10,10,11,13,14,16];
+ const raw=v=>{let r=(16*v+128)*v+64;if(v>=2){const n=Math.floor(v/7)+2;r-=(25*n-10)*n-55;if(v>=7)r-=36}return r};
+ const dataCw=v=>Math.floor(raw(v)/8)-ECC[v]*BLK[v];
+ const mul=(x,y)=>{let z=0;for(let i=7;i>=0;i--){z=((z<<1)^((z>>>7)*0x11D))&255;z^=((y>>>i)&1)*x}return z};
+ function rsDiv(d){const r=new Array(d).fill(0);r[d-1]=1;let root=1;
+  for(let i=0;i<d;i++){for(let j=0;j<d;j++){r[j]=mul(r[j],root);if(j+1<d)r[j]^=r[j+1]}root=mul(root,2)}return r}
+ function rsRem(data,div){const r=new Array(div.length).fill(0);
+  for(const b of data){const f=b^r.shift();r.push(0);div.forEach((c,i)=>{r[i]^=mul(c,f)})}return r}
+ function align(v){if(v===1)return [];const n=Math.floor(v/7)+2,step=Math.ceil((v*4+4)/(n*2-2))*2,out=[6];
+  for(let p=v*4+10;out.length<n;p-=step)out.splice(1,0,p);return out}
+ const MASK=[(x,y)=>(x+y)%2===0,(x,y)=>y%2===0,(x,y)=>x%3===0,(x,y)=>(x+y)%3===0,(x,y)=>(Math.floor(x/3)+Math.floor(y/2))%2===0,
+  (x,y)=>x*y%2+x*y%3===0,(x,y)=>(x*y%2+x*y%3)%2===0,(x,y)=>((x+y)%2+x*y%3)%2===0];
+ function penalty(m,n){let p=0;
+  for(let a=0;a<2;a++)for(let i=0;i<n;i++){let run=1;for(let j=1;j<=n;j++){
+   const same=j<n&&(a?m[j][i]===m[j-1][i]:m[i][j]===m[i][j-1]);if(same)run++;else{if(run>=5)p+=run-2;run=1}}}
+  for(let y=0;y<n-1;y++)for(let x=0;x<n-1;x++){const c=m[y][x];if(c===m[y][x+1]&&c===m[y+1][x]&&c===m[y+1][x+1])p+=3}
+  let dark=0;m.forEach(r=>r.forEach(c=>{dark+=c?1:0}));return p+Math.max(0,Math.ceil(Math.abs(dark*20-n*n*10)/(n*n))-1)*10}
+ return (text,force)=>{const bytes=[...new TextEncoder().encode(text)];let v=1;
+  for(;v<=20;v++)if(4+(v<10?8:16)+bytes.length*8<=dataCw(v)*8)break;
+  if(v>20)throw new Error('too long for a code');
+  const bits=[],put=(val,n)=>{for(let i=n-1;i>=0;i--)bits.push((val>>>i)&1)};
+  put(4,4);put(bytes.length,v<10?8:16);bytes.forEach(b=>put(b,8));
+  const cap=dataCw(v)*8;put(0,Math.min(4,cap-bits.length));put(0,(8-bits.length%8)%8);
+  for(let p=0xEC;bits.length<cap;p^=0xEC^0x11)put(p,8);
+  const data=[];for(let i=0;i<bits.length;i+=8){let b=0;for(let j=0;j<8;j++)b=(b<<1)|bits[i+j];data.push(b)}
+  const nb=BLK[v],ec=ECC[v],rawCw=Math.floor(raw(v)/8),nShort=nb-rawCw%nb,shortLen=Math.floor(rawCw/nb),div=rsDiv(ec),blocks=[];
+  for(let i=0,k=0;i<nb;i++){const dat=data.slice(k,k+shortLen-ec+(i<nShort?0:1));k+=dat.length;const e=rsRem(dat,div);
+   if(i<nShort)dat.push(0);blocks.push(dat.concat(e))}
+  const cw=[];for(let i=0;i<blocks[0].length;i++)blocks.forEach((b,j)=>{if(i!==shortLen-ec||j>=nShort)cw.push(b[i])});
+  const n=v*4+17,m=[...Array(n)].map(()=>new Array(n).fill(false)),fn=[...Array(n)].map(()=>new Array(n).fill(false));
+  const set=(x,y,d)=>{m[y][x]=d;fn[y][x]=true};
+  for(let i=0;i<n;i++){set(6,i,i%2===0);set(i,6,i%2===0)}
+  const finder=(x,y)=>{for(let dy=-4;dy<=4;dy++)for(let dx=-4;dx<=4;dx++){const d=Math.max(Math.abs(dx),Math.abs(dy)),xx=x+dx,yy=y+dy;
+   if(xx>=0&&xx<n&&yy>=0&&yy<n)set(xx,yy,d!==2&&d!==4)}};
+  finder(3,3);finder(n-4,3);finder(3,n-4);
+  const al=align(v),last=al.length-1;
+  al.forEach((a,i)=>al.forEach((b,j)=>{if((i===0&&j===0)||(i===0&&j===last)||(i===last&&j===0))return;
+   for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++)set(a+dx,b+dy,Math.max(Math.abs(dx),Math.abs(dy))!==1)}));
+  const format=mask=>{const d=mask;let r=d;for(let i=0;i<10;i++)r=(r<<1)^((r>>>9)*0x537);
+   const f=((d<<10)|r)^0x5412,g=i=>((f>>>i)&1)===1;
+   for(let i=0;i<=5;i++)set(8,i,g(i));set(8,7,g(6));set(8,8,g(7));set(7,8,g(8));for(let i=9;i<15;i++)set(14-i,8,g(i));
+   for(let i=0;i<8;i++)set(n-1-i,8,g(i));for(let i=8;i<15;i++)set(8,n-15+i,g(i));set(8,n-8,true)};
+  format(0);
+  if(v>=7){let r=v;for(let i=0;i<12;i++)r=(r<<1)^((r>>>11)*0x1F25);const f=(v<<12)|r;
+   for(let i=0;i<18;i++){const d=((f>>>i)&1)===1,a=n-11+i%3,c=Math.floor(i/3);set(a,c,d);set(c,a,d)}}
+  let i=0;for(let right=n-1;right>=1;right-=2){if(right===6)right=5;
+   for(let vert=0;vert<n;vert++)for(let j=0;j<2;j++){const x=right-j,y=((right+1)&2)===0?n-1-vert:vert;
+    if(!fn[y][x]&&i<cw.length*8){m[y][x]=((cw[i>>>3]>>>(7-(i&7)))&1)===1;i++}}}
+  const apply=k=>{for(let y=0;y<n;y++)for(let x=0;x<n;x++)if(!fn[y][x]&&MASK[k](x,y))m[y][x]=!m[y][x]};
+  let best=force;
+  if(best==null){let low=Infinity;for(let k=0;k<8;k++){apply(k);format(k);const p=penalty(m,n);if(p<low){low=p;best=k}apply(k)}}
+  apply(best);format(best);return m}})();
+/*}QR*/
+function drawQr(c,text){const m=QRM(text),n=m.length,q=4,s=Math.max(2,Math.floor(640/(n+2*q)));
+ c.width=c.height=(n+2*q)*s;const g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height);g.fillStyle='#000';
+ m.forEach((r,y)=>r.forEach((d,x)=>{if(d)g.fillRect((x+q)*s,(y+q)*s,s,s)}))}
+let HAND=null;   /* {role,pc,ch,stream,timer,onRead,deadline,done,n,got} */
+function handText(s){$('handStep').textContent=s}
+function handOpen(){$('handSheet').classList.remove('hide');$('handQr').classList.add('hide');$('handScan').classList.add('hide')}
+async function handCamera(){if(window.HAND_TEST)return true;
+ if(!('BarcodeDetector' in window)||!navigator.mediaDevices)return false;
+ /* the camera also lets the link use the phone's own address on the hotspot (not a hidden .local name) */
+ try{HAND.stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});return true}catch(e){return false}}
+async function handScan(onRead){const h=HAND;h.onRead=onRead;if(window.HAND_TEST||!h.stream)return;
+ $('handScan').classList.remove('hide');const v=$('handVideo');v.srcObject=h.stream;try{await v.play()}catch(e){}
+ const det=new BarcodeDetector({formats:['qr_code']});clearInterval(h.timer);
+ h.timer=setInterval(async()=>{try{const c=await det.detect(v);if(c.length)handRead(c[0].rawValue)}catch(e){}},300)}
+async function handRead(text){const h=HAND;if(!h||!h.onRead||h.reading)return false;h.reading=true;let ok=false;
+ try{ok=await h.onRead(String(text||''))}catch(e){}h.reading=false;
+ if(ok){h.onRead=null;clearInterval(h.timer);$('handScan').classList.add('hide')}
+ else if(!h.warned){h.warned=true;toast(T.handBad)}return ok}
+function handShow(code){window._handCode=code;const c=$('handQr');drawQr(c,code);c.classList.remove('hide')}
+function handClose(){const h=HAND;HAND=null;if(!h)return;clearInterval(h.timer);clearTimeout(h.deadline);
+ if(h.stream)h.stream.getTracks().forEach(t=>t.stop());try{if(h.pc)h.pc.close()}catch(e){}$('handSheet').classList.add('hide')}
+function handFail(){if(HAND&&!HAND.done){HAND.done=true;handClose();toast(T.handFail)}}
+function handGathered(pc){return new Promise(r=>{if(pc.iceGatheringState==='complete')return r();const t=setTimeout(r,2500);
+ pc.addEventListener('icegatheringstatechange',()=>{if(pc.iceGatheringState==='complete'){clearTimeout(t);r()}})})}
+async function handGive(){if(HAND)return;const items=await all();
+ if(!items.length){toast(T.handNone);return}
+ if(items.some(it=>!(it.meta&&it.meta.sealed))&&!PCKEY){toast(T.handNoKey);return}
+ const h=HAND={role:'give',got:new Set(),n:0};handOpen();handText(T.handWait);
+ if(!await handCamera()){handClose();toast(T.handNoScan);return}
+ if(HAND!==h)return;h.pc=new RTCPeerConnection({iceServers:[]});
+ const ch=h.ch=h.pc.createDataChannel('hand',{ordered:true});ch.binaryType='arraybuffer';
+ ch.onopen=()=>{$('handQr').classList.add('hide');handSend(h,ch)};
+ ch.onmessage=e=>{if(typeof e.data!=='string')return;let m;try{m=JSON.parse(e.data)}catch(x){return}if(m.t==='got')h.got.add(m.id)};
+ ch.onclose=()=>{if(HAND===h&&!h.done)handFail()};
+ await h.pc.setLocalDescription(await h.pc.createOffer());await handGathered(h.pc);if(HAND!==h)return;
+ handShow(sdpCode(h.pc.localDescription.sdp,'o'));handText(T.handGive1);h.deadline=setTimeout(handFail,180000);
+ handScan(async text=>{const d=codeSdp(text);if(!d||d.type!=='answer')return false;
+  await h.pc.setRemoteDescription(d);handText(T.handLinking);return true})}
+async function handSend(h,ch){const items=(await all()).filter(it=>it.meta&&(it.meta.sealed||PCKEY));
+ const say=()=>handText(T.handSending.replace('{n}',h.n).replace('{k}',items.length));say();
+ try{for(const it of items){const buf=new Uint8Array(await (await sealItem(it)).arrayBuffer());
+   ch.send(JSON.stringify({t:'item',id:it.id,at:it.meta.t||Date.now(),size:buf.length}));
+   for(let o=0;o<buf.length;o+=16384){while(ch.bufferedAmount>1048576){if(ch.readyState!=='open')throw new Error('closed');
+     await sleepH(25)}ch.send(buf.slice(o,o+16384))}
+   ch.send(JSON.stringify({t:'end',id:it.id}));const t0=Date.now();
+   while(!h.got.has(it.id)){if(ch.readyState!=='open'||Date.now()-t0>60000)throw new Error('lost');await sleepH(30)}
+   h.n++;say()}
+  ch.send(JSON.stringify({t:'done'}));h.done=true;await sleepH(400);handClose();toast(T.handGave.replace('{n}',h.n))}
+ catch(e){h.done=true;handClose();toast(h.n?T.handGave.replace('{n}',h.n):T.handFail)}}
+async function handTake(){if(HAND)return;const h=HAND={role:'take',n:0};handOpen();handText(T.handWait);
+ if(!await handCamera()){handClose();toast(T.handNoScan);return}
+ if(HAND!==h)return;handText(T.handTake1);
+ handScan(async text=>{const d=codeSdp(text);if(!d||d.type!=='offer')return false;
+  h.pc=new RTCPeerConnection({iceServers:[]});h.pc.ondatachannel=e=>handReceive(h,e.channel);
+  await h.pc.setRemoteDescription(d);await h.pc.setLocalDescription(await h.pc.createAnswer());await handGathered(h.pc);
+  if(HAND!==h)return true;handShow(sdpCode(h.pc.localDescription.sdp,'a'));handText(T.handTake2);
+  h.deadline=setTimeout(handFail,180000);return true})}
+function handReceive(h,ch){ch.binaryType='arraybuffer';let cur=null,q=Promise.resolve();
+ const said=()=>handText(T.handTaking.replace('{n}',h.n));
+ ch.onopen=()=>{$('handQr').classList.add('hide');said()};
+ ch.onmessage=e=>{const d=e.data;q=q.then(async()=>{
+  if(typeof d!=='string'){if(cur){cur.parts.push(d);cur.got+=d.byteLength;if(cur.got>cur.size)cur=null}return}
+  let m;try{m=JSON.parse(d)}catch(x){return}
+  if(m.t==='item'&&m.id&&+m.size>0&&+m.size<=41943040)cur={id:String(m.id).replace(/[^A-Za-z0-9-]/g,'').slice(0,80),
+   at:+m.at||Date.now(),size:+m.size,parts:[],got:0};
+  else if(m.t==='end'&&cur&&m.id&&cur.id===String(m.id).replace(/[^A-Za-z0-9-]/g,'').slice(0,80)){const c=cur;cur=null;
+   if(c.got!==c.size)return;
+   if(!(await all()).some(x=>x.id===c.id))await put({id:c.id,blob:new Blob(c.parts,{type:'application/octet-stream'}),
+    meta:{id:c.id,sealed:1,t:c.at},room:ROOM,carried:true});
+   h.n++;said();ch.send(JSON.stringify({t:'got',id:m.id}))}
+  else if(m.t==='done'){h.done=true;await sleepH(300);handClose();toast(T.handTook.replace('{n}',h.n));count();flush()}}).catch(()=>{})};
+ ch.onclose=()=>{if(HAND===h&&!h.done){h.done=true;handClose();toast(h.n?T.handTook.replace('{n}',h.n):T.handFail);count()}}}
+/*}HAND*/
+async function flush(){if(busy)return;busy=true;
+ let arrived=0;try{const allItems=(await all()).sort((a,b)=>a.meta.t-b.meta.t),
+   rOnly=typeof relayOnly==='function'&&relayOnly(),items=rOnly?allItems.filter(x=>!x.prevSent&&!x.carried):allItems;
+  let tried=0;for(const it of items){
+   const st=await sendItem(it);
+   if(!st)continue;   /* 0: another way (Google Drive) is sending this one */
+   tried++;
+   if(st===200){await del(it.id);sent++;arrived++;mark(it.id,'✓')}
+   else if(st===202){if(await prevDone(it.id))mark(it.id,'◐')}
+   else if(st===403){await del(it.id);mark(it.id,'✗');status(false,'blocked')}
+   else if(st===400||st===413){await del(it.id);mark(it.id,'✗')}
+   else throw new Error(st);count()}
+  const ok=tried?true:await alive();
+  if(ok&&!rOnly)status(true,'connected');else if(!ok)offline()}catch(e){offline()}
+ if(arrived){toast(T.arrived.replace('{n}',arrived));if(navigator.vibrate)navigator.vibrate([20,40,20])}
+ busy=false;count()}
+setInterval(flush,5000);window.addEventListener('online',flush);
+function thumb(it,s){const e=$('list').querySelector('.empty');if(e)e.remove();
+ const d=document.createElement('div'),i=document.createElement('img'),sp=document.createElement('span');
+ const u=URL.createObjectURL(it.blob);d.dataset.id=it.id;i.src=u;i.alt='';sp.className='badge';d.append(i,sp);
+ $('list').prepend(d);mark(it.id,s);while($('list').children.length>9)$('list').lastChild.remove();
+ const l=document.createElement('img');l.src=u;l.alt='';$('last').replaceChildren(l)}
+function onFix(p){const c=p.coords,first=!fix;fix={lat:c.latitude,lon:c.longitude,acc:c.accuracy,alt:c.altitude,
+ heading:c.heading,speed:c.speed,t:p.timestamp};if(!room)showFix();const a=Math.round(c.accuracy),q=a<=8?'good':a<=20?'fair':'poor';
+ if(avg)avg.pts.push({lat:c.latitude,lon:c.longitude,acc:c.accuracy});tellPos();drawGuide();
+ $('accBar').className=q;$('accBar').style.width=Math.max(6,Math.min(100,100-(a-3)*2.2))+'%';
+ if(compass==null&&c.heading!=null&&!isNaN(c.heading))showDir(c.heading);
+ $('shot').disabled=false;$('shotHint').textContent=T.shoot;if(first&&navigator.vibrate)navigator.vibrate(15)}
+let gdraw=0;function showFix(){if(!fix)return;const a=Math.round(fix.acc),q=a<=8?'good':a<=20?'fair':'poor';
+ $('pos').classList.remove('inroom');$('pos').textContent=fix.lat.toFixed(6)+', '+fix.lon.toFixed(6);$('acc').textContent='± '+a+' m';$('acc').className='acc '+q}
+function showDir(h){$('arrow').style.transform='rotate('+Math.round(h)+'deg)';$('deg').textContent=Math.round(h)%360+'°';
+ if(Date.now()-gdraw>250){gdraw=Date.now();drawGuide()}}
+function onCompass(e){let h=null;if(typeof e.webkitCompassHeading==='number')h=e.webkitCompassHeading;
+ else if(e.absolute&&e.alpha!=null)h=(360-e.alpha)%360;if(h!=null){compass=Math.round(h)%360;showDir(compass)}}
+async function wake(){try{await navigator.wakeLock.request('screen')}catch(e){}}
+async function start(){if(!window.isSecureContext||!navigator.geolocation){status(false,'insecure');return}
+ try{if(window.DeviceOrientationEvent&&DeviceOrientationEvent.requestPermission)await DeviceOrientationEvent.requestPermission()}catch(e){}
+ window.addEventListener('deviceorientationabsolute',onCompass);window.addEventListener('deviceorientation',onCompass);
+ navigator.geolocation.watchPosition(onFix,e=>status(false,T.denied+' ('+e.message+')'),
+  {enableHighAccuracy:true,maximumAge:0,timeout:30000});wake();started=true;document.body.classList.add('working');
+ $('intro').classList.add('hide');$('work').classList.remove('hide');$('bar').classList.remove('hide');flush();pollGuide();drawGuide()}
+setInterval(()=>tellPos(true),30000);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){if(started)wake();flush()}});
+$('go').onclick=start;$('giveBtn').onclick=handGive;$('takeBtn').onclick=handTake;
+$('handCancel').onclick=()=>{if(HAND)HAND.done=true;handClose()};if(!window.RTCPeerConnection)$('handCard').classList.add('hide');$('roomBtn').onclick=openScan;$('roomOff').onclick=()=>setRoom(null);
+$('roomFind').oninput=roomList;$('scanSheet').onclick=e=>{if(e.target===$('scanSheet'))closeScan()};
+window.addEventListener('resize',()=>drawRoom());$('avgBtn').onclick=toggleAvg;
+function requireName(){
+ if(SURVNAME){$('me').value=SURVNAME;$('me').readOnly=true;keep('biruni-me',SURVNAME);if($('meCard'))$('meCard').classList.remove('bad');return SURVNAME}
+ let v=($('me').value||'').trim();
+ if(!v){v=(kept('biruni-me')||'').trim();if(v)$('me').value=v}
+ if(v){keep('biruni-me',v);if($('meCard'))$('meCard').classList.remove('bad');return v}
+ const c=$('meCard');if(c){c.classList.remove('bad');void c.offsetWidth;c.classList.add('bad');
+  c.scrollIntoView({behavior:'smooth',block:'center'})}
+ $('me').focus();toast(T.needName||T.need||T.me);if(navigator.vibrate)navigator.vibrate([40,60,40]);return ''}
+$('me').value=SURVNAME||kept('biruni-me')||'';if(SURVNAME)$('me').readOnly=true;
+$('me').oninput=()=>{if($('me').value.trim()&&$('meCard'))$('meCard').classList.remove('bad');keep('biruni-me',$('me').value.trim())};
+$('me').onchange=()=>{keep('biruni-me',$('me').value.trim());if($('meCard'))$('meCard').classList.remove('bad');tellPos(true)};
+$('share').checked=kept('biruni-share')!=='0';$('share').onchange=()=>{keep('biruni-share',$('share').checked?'1':'0');tellPos(true)};
+$('shot').onclick=()=>{if(!fix&&!indoorFix)return;if(!requireName())return;const f=answers();if(!f)return;if(navigator.vibrate)navigator.vibrate(25);
+ pending={fix:shotFix(),compass:compass,at:Date.now(),f:f};$('file').click()};
+$('file').onchange=async()=>{const f=$('file').files[0];$('file').value='';if(!f||!pending)return;
+ const who=requireName();if(!who)return;
+ const p=pending.fix,blob=await fitPhoto(new Blob([await f.arrayBuffer()],{type:f.type||'image/jpeg'}));
+ const meta={id:uid(),lat:p.lat,lon:p.lon,acc:p.acc,alt:p.alt,heading:p.heading,compass:pending.compass,
+  t:pending.at,fix_age:Math.max(0,Math.round((pending.at-p.t)/1000)),kind:kind,note:$('note').value.trim(),device:dev,device_id:DEVID,surveyor:who.slice(0,40),by:who.slice(0,40),sk:SURVKEY||undefined,f:pending.f,avg_n:p.n,avg_sd:p.sd,level:p.level,unit:p.unit};
+ const it={id:meta.id,blob:blob,meta:meta,room:ROOM};pending=null;await put(it);thumb(it,'⏳');$('note').value='';afterShot();
+ toast(T.kept);count();flush();if(typeof drivePump==='function')drivePump()};
+$('langBtn').onclick=()=>{const box=$('langs');box.textContent='';Object.keys(ALL).forEach(k=>{const b=document.createElement('button');
+ b.type='button';b.textContent=NAMES[k]||k;b.lang=k.replace('_','-');b.classList.toggle('sel',k===LANG);
+ b.onclick=()=>{keep('biruni-lang',k);setLang(k);$('sheet').classList.add('hide')};box.appendChild(b)});
+ $('sheet').classList.remove('hide')};
+$('sheet').onclick=e=>{if(e.target===$('sheet'))$('sheet').classList.add('hide')};
+setLang(pick(kept('biruni-lang'))||pick(HASHL)||pick(DEF)||pick(navigator.language)||'en');
+try{const g=JSON.parse(kept('biruni-guide-'+ROOM)||'null');if(g)setGuide(g)}catch(e){}
+{const e=document.createElement('div');e.className='empty';e.textContent=T.none;$('list').appendChild(e)}
+(async()=>{db=await openDb();await checkPrivate();await sealWaiting();if(typeof driveStart==='function')driveStart();const w=await all();w.filter(it=>!it.carried).slice(-9).forEach(it=>thumb(it,it.prevSent?'◐':'⏳'));count();flush()})();
+</script></body></html>
