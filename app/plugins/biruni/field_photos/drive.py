@@ -197,6 +197,62 @@ def office_folders(roots, k):
     return out
 
 
+def _volumes():
+    """[(root, label)] of this PC's fixed drives (Drive for desktop shows as one, labelled "Google Drive")."""
+    if os.name != "nt":
+        return []
+    import ctypes
+
+    k32, out = ctypes.windll.kernel32, []
+    mask = k32.GetLogicalDrives()
+    for i in range(26):
+        if not mask & (1 << i):
+            continue
+        root = chr(65 + i) + ":\\"
+        if k32.GetDriveTypeW(root) != 3:
+            continue
+        buf = ctypes.create_unicode_buffer(261)
+        if k32.GetVolumeInformationW(root, buf, 261, None, None, None, None, 0):
+            out.append((root, buf.value))
+    return out
+
+
+def suggest_roots(volumes=None, home=None):
+    """Folders Google Drive for desktop syncs on this PC, to offer when Drive is turned on: the folders at the top
+    of a drive labelled "Google Drive" (its "My Drive" has a name in the user's language), then the mirror folders
+    in the user's home. Only suggestions: the user sees them and can remove them."""
+    out = []
+    for root, label in (_volumes() if volumes is None else volumes):
+        if "google drive" not in str(label or "").lower():
+            continue
+        try:
+            out += [e.path for e in os.scandir(root) if e.is_dir() and not e.name.startswith((".", "$"))]
+        except OSError:
+            pass
+    home = os.path.expanduser("~") if home is None else home
+    out += [p for p in (os.path.join(home, "My Drive"), os.path.join(home, "Google Drive")) if os.path.isdir(p)]
+    return list(dict.fromkeys(out))
+
+
+def forget_refused(folder):
+    """retry_refused for when the intake is not running: the refused files in ``folder``'s list are read again."""
+    path = os.path.join(folder, SEEN_NAME)
+    try:
+        with open(path, encoding="utf-8") as f:
+            d = json.load(f)
+        files = d["files"]
+        d["files"] = {key: v for key, v in files.items() if (v or [0, 0, 0])[2:] == [1]}
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return
+    tmp = path + ".tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(d, f, separators=(",", ":"))
+        os.replace(tmp, path)
+    except OSError:
+        pass
+
+
 class DriveIntake:
     """Every INTERVAL seconds, opens the new .bfp files in the office's Drive folders and saves each photo with the
     same PhotoStore the phone server uses (route "drive"). Events go to ``events`` like the server's own:
@@ -213,6 +269,7 @@ class DriveIntake:
         self.path = os.path.join(store.folder, SEEN_NAME)
         self.seen = self._load()
         self._stop = threading.Event()
+        self._lock = threading.Lock()     # self.seen and its file: the scan thread and the dock (retry_refused)
         self.thread = None
 
     def _load(self):
@@ -229,7 +286,7 @@ class DriveIntake:
         tmp = self.path + ".tmp"
         try:
             with open(tmp, "w", encoding="utf-8") as f:
-                json.dump({"room": self.room, "files": self.seen}, f, separators=(",", ":"))
+                json.dump({"room": self.room, "files": dict(self.seen)}, f, separators=(",", ":"))
             os.replace(tmp, self.path)
         except OSError:
             pass
@@ -239,9 +296,10 @@ class DriveIntake:
         from .server import BlockedDeviceError, read_surveyor_keys
 
         kas = auth_keys(self.k, read_surveyor_keys(self.store.folder))
-        out = {"seen": 0, "new": 0, "refused": []}
+        tops = office_folders(list(self.roots), self.k)
+        out = {"seen": 0, "new": 0, "refused": [], "folders": len(tops)}
         changed = False
-        for top in office_folders(self.roots, self.k):
+        for top in tops:
             try:
                 devs = [e for e in os.scandir(top) if e.is_dir() and e.name.startswith("p-")]
             except OSError:
@@ -279,10 +337,12 @@ class DriveIntake:
                         if new:
                             out["new"] += 1
                             self.events.put(("photo", rec))
-                    self.seen[key] = stamp + [ok]
+                    with self._lock:
+                        self.seen[key] = stamp + [ok]
                     changed = True
         if changed:
-            self._keep()
+            with self._lock:
+                self._keep()
         self.events.put(("drive", dict(out, at=time.time())))
         return out
 
@@ -303,8 +363,9 @@ class DriveIntake:
 
     def retry_refused(self):
         """Read the refused files again on the next pass (after a surveyor or phone is let back in)."""
-        self.seen = {key: v for key, v in self.seen.items() if (v or [0, 0, 0])[2:] == [1]}
-        self._keep()
+        with self._lock:
+            self.seen = {key: v for key, v in self.seen.items() if (v or [0, 0, 0])[2:] == [1]}
+            self._keep()
 
     def start(self):
         if self.thread is None:
