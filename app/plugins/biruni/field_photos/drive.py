@@ -404,5 +404,5 @@ const BFP={
   const hb=enc.encode(JSON.stringify(h));if(hb.length>4096)throw new Error('bfp header');
   const pre=cat(enc.encode('BFP1'),new Uint8Array([hb.length>>8,hb.length&255]),hb);
   const sig=new Uint8Array(await crypto.subtle.sign({name:'ECDSA',hash:'SHA-256'},key,pre));
-  return {bytes:cat(pre,sig,body),name:String(h.n).padStart(6,'0')+'-'+h.sha.slice(0,12)+'.bfp',sha:h.sha}}};
+  return {bytes:cat(pre,sig,body),head:cat(pre,sig),name:String(h.n).padStart(6,'0')+'-'+h.sha.slice(0,12)+'.bfp',sha:h.sha}}};
 """

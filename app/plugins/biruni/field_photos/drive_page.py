@@ -138,7 +138,7 @@ window.addEventListener('message',e=>{
   if(c==='gsi'||c==='popup_blocked'){drivePopupButton();driveSay(c==='popup_blocked'?'blocked':'err')}
   else if(c==='denied'||c==='scope')driveSay('denied');else if(c!=='closed')driveSay('err')}});
 function driveStart(){if(DRV.on||typeof DRIVE_ON==='undefined'||!DRIVE_ON||!DRV.ORIGIN)return;DRV.on=true;
- DRV.nonce=rid();const ua=driveUA();
+ DRV.nonce=rid();DRV.n=+kept('biruni-drive-c-'+ROOM)||0;const ua=driveUA();
  const c=driveEl('div','card dcard');c.id='driveCard';
  const r=driveEl('div','row');r.appendChild(driveEl('span','lbl dtitle'));r.appendChild(driveEl('span','dcount hide'));c.appendChild(r);
  c.appendChild(driveEl('div','dstate'));c.appendChild(driveEl('div','dlink'));
@@ -146,7 +146,91 @@ function driveStart(){if(DRV.on||typeof DRIVE_ON==='undefined'||!DRIVE_ON||!DRV.
  const w=$('work');w.insertBefore(c,w.firstChild);DRV.card=c;driveLabel();
  if(ua.inapp){driveSay('inapp');return}
  driveSay('unlinked');if(ua.ios)drivePopupButton();else driveFrame();
- window.addEventListener('online',()=>{if(!DRV.ready&&DRV.frame){DRV.frame.src=DRV.HELPER+'/link/'}})}
+ window.addEventListener('online',()=>{if(!DRV.ready&&DRV.frame){DRV.frame.src=DRV.HELPER+'/link/'}drivePump()});
+ setInterval(drivePump,15000)}
+
+/* ---- the upload: one photo at a time, as one .bfp file (drive.py) in biruni-photos-<tag>/p-<device>/ ----
+   A photo goes to Drive only while the line to the computer is closed (the bridge sends it otherwise), and never
+   both: DRV.HOLD says which way has it. The phone's own key (ECDSA P-256, not extractable), the numbering and the
+   files' header bytes are kept in the database biruni-drive, so a retry uploads the very same bytes. */
+const DMAX=5*1024*1024;   /* step 8 adds resumable uploads for larger photos */
+let DDB=null,DKEY=null,DBUSY=false;const DSKIP=new Set();
+function ddb(){return DDB||(DDB=new Promise(r=>{try{const q=indexedDB.open('biruni-drive',1);
+ q.onupgradeneeded=()=>q.result.createObjectStore('d',{keyPath:'id'});q.onsuccess=()=>r(q.result);q.onerror=()=>r(null);
+ q.onblocked=()=>setTimeout(()=>r(null),4000)}catch(e){r(null)}}))}
+async function dget(id){const d=await ddb();if(!d)return null;return new Promise(r=>{try{const g=d.transaction('d').objectStore('d').get(id);
+ g.onsuccess=()=>r(g.result||null);g.onerror=()=>r(null)}catch(e){r(null)}})}
+async function dput(rec){const d=await ddb();if(!d)return;return new Promise(r=>{try{const t=d.transaction('d','readwrite');
+ t.objectStore('d').put(rec);t.oncomplete=()=>r();t.onerror=()=>r();t.onabort=()=>r()}catch(e){r()}})}
+async function dkey(){if(DKEY)return DKEY;let k=await dget('#key');
+ if(!k||!k.kp||!k.pub){const kp=await crypto.subtle.generateKey({name:'ECDSA',namedCurve:'P-256'},false,['sign','verify']);
+  k={id:'#key',kp:kp,pub:b64u.enc(await crypto.subtle.exportKey('raw',kp.publicKey))};await dput(k)}
+ return DKEY=k}
+function dnext(){const n=(+kept('biruni-drive-n')||0)+1;keep('biruni-drive-n',String(n));return n}
+async function dapi(path,opt){opt=opt||{};const ac=new AbortController(),tm=setTimeout(()=>ac.abort(),opt.ms||60000);
+ opt.headers=Object.assign({Authorization:'Bearer '+DRV.tok},opt.headers||{});opt.signal=ac.signal;
+ try{return await fetch(DRV.API+path,opt)}finally{clearTimeout(tm)}}
+class DriveStop extends Error{constructor(state){super(state);this.state=state}}
+async function dcheck(r){if(r.ok)return r;if(r.status===401){driveDead();throw new DriveStop('auth')}
+ let j=null;try{j=await r.clone().json()}catch(e){}
+ const why=j&&j.error&&((j.error.errors||[])[0]||{}).reason||'';
+ if(r.status===403&&/storageQuotaExceeded|quotaExceeded/.test(why)){driveSay('full');throw new DriveStop('full')}
+ const e=new Error('drive '+r.status+' '+why);e.status=r.status;throw e}
+const DFOLDER='application/vnd.google-apps.folder';
+const dq=s=>"'"+String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'")+"'";
+async function dfind(q){const r=await dcheck(await dapi('/drive/v3/files?spaces=drive&orderBy=createdTime&pageSize=10&fields='
+ +encodeURIComponent('files(id,name,size,createdTime)')+'&q='+encodeURIComponent(q)));return (await r.json()).files||[]}
+async function dmkdir(name,parent,props){const m={name:name,mimeType:DFOLDER,appProperties:props};if(parent)m.parents=[parent];
+ const r=await dcheck(await dapi('/drive/v3/files?fields=id',{method:'POST',headers:{'Content-Type':'application/json'},
+  body:JSON.stringify(m)}));return (await r.json()).id}
+async function dfolder(name,parent,key,val){
+ const q="name="+dq(name)+" and mimeType="+dq(DFOLDER)+" and trashed=false and appProperties has { key="+dq(key)
+  +" and value="+dq(val)+" }"+(parent?" and "+dq(parent)+" in parents":"");
+ let f=await dfind(q);if(f.length)return f[0].id;
+ const mine=await dmkdir(name,parent,{[key]:val});f=await dfind(q);
+ /* two phones made it at the same moment: keep the oldest (Drive for desktop would show the other as "(1)") */
+ if(f.length&&f[0].id!==mine){try{await dapi('/drive/v3/files/'+mine,{method:'DELETE'})}catch(e){}return f[0].id}
+ return mine}
+async function dfolders(tag){const ck='biruni-drive-f-'+ROOM;try{const c=JSON.parse(kept(ck)||'null');
+  if(c&&c.r&&c.p&&c.t===tag)return c}catch(e){}
+ const r=await dfolder('biruni-photos-'+tag,'','biruniRoom',tag),p=await dfolder('p-'+DEVID,r,'biruniDev',DEVID);
+ const c={t:tag,r:r,p:p};keep(ck,JSON.stringify(c));return c}
+function deligible(it){return it&&it.meta&&it.meta.sealed&&!it.carried&&it.blob&&it.blob.size<=DMAX&&!DRV.HOLD.has(it.id)
+ &&!DSKIP.has(it.id)}
+async function dupload(it){const tag=await BFP.tag(KEYB),k=await dkey();let rec=await dget(it.id);
+ if(rec&&rec.room===tag&&rec.st==='done')return rec;   /* sent before; only leaving the queue was missed */
+ if(!rec||rec.room!==tag||!rec.head){const body=new Uint8Array(await it.blob.arrayBuffer()),n=dnext();
+  const h={room:tag,dev:DEVID,kid:await BFP.kid(it.pk||PCKEY),id:it.id,n:n,t:+it.meta.t||Date.now(),pub:k.pub,
+   cert:await BFP.cert(KEYB,SURVKEY,k.pub,DEVID)};
+  const f=await BFP.pack(h,body,k.kp.privateKey);
+  rec={id:it.id,room:tag,n:n,name:f.name,head:f.head,size:f.bytes.length,fsha:await BFP.sha(f.bytes),st:'q',tries:0,at:Date.now()};
+  await dput(rec)}
+ const fo=await dfolders(tag);
+ if(rec.tries>0){   /* the last try may have arrived without its answer: look before sending again */
+  const got=await dfind("appProperties has { key='bfp' and value="+dq(it.id)+" } and "+dq(fo.p)+" in parents and trashed=false");
+  if(got.some(g=>+g.size===rec.size))return rec}
+ rec.tries++;await dput(rec);
+ const b='bfp'+rid().replace(/[^A-Za-z0-9]/g,''),meta={name:rec.name,parents:[fo.p],appProperties:{bfp:it.id}};
+ const body=new Blob(['--'+b+'\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'+JSON.stringify(meta)+'\r\n--'+b
+  +'\r\nContent-Type: application/octet-stream\r\n\r\n',rec.head,it.blob,'\r\n--'+b+'--\r\n']);
+ let r;try{r=await dapi('/upload/drive/v3/files?uploadType=multipart&fields='+encodeURIComponent('id,size,sha256Checksum'),
+  {method:'POST',headers:{'Content-Type':'multipart/related; boundary='+b},body:body,ms:180000})}
+ catch(e){throw new Error('network')}
+ if(r.status===404){keep('biruni-drive-f-'+ROOM,null);throw new Error('folder gone')}
+ await dcheck(r);const j=await r.json();
+ if(+j.size!==rec.size||(j.sha256Checksum&&j.sha256Checksum!==rec.fsha))throw new Error('drive copy differs');
+ rec.fid=j.id;return rec}
+async function drivePump(){if(!DRV.on||DBUSY||!DRV.ok()||(typeof lineOpen==='function'&&lineOpen()))return;DBUSY=true;
+ try{const items=(await all()).filter(deligible).sort((a,b)=>a.meta.t-b.meta.t);
+  for(const it of items){if(!DRV.ok()||(typeof lineOpen==='function'&&lineOpen()))break;
+   DRV.HOLD.set(it.id,'drive');driveSay('up');
+   try{const rec=await dupload(it);rec.st='done';rec.head=null;rec.at=Date.now();await dput(rec);
+    await del(it.id);DRV.n++;keep('biruni-drive-c-'+ROOM,String(DRV.n));mark(it.id,'✓');count();driveSay('idle')}
+   catch(e){if(e instanceof DriveStop)break;
+    if(e.status===400||e.status===413){DSKIP.add(it.id)}   /* Drive will never take it: it stays for the bridge */
+    driveSay('wait');break}
+   finally{DRV.HOLD.delete(it.id)}}}
+ catch(e){}finally{DBUSY=false}}
 """
 
 

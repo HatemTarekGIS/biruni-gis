@@ -456,7 +456,10 @@ async function sendRelayPreview(it){
   const ok=await SIG.sendChunk({t:'rchunk',id:it.id,nonce:nonce,i:i,k:k,meta:pmeta,d:b64u.enc(slice)});
   if(!ok){acks.delete(it.id);throw new Error('relay-down')}}
  return await done}
-async function sendItem(it){
+/* a photo on its way to Google Drive is not sent here too (0: skipped); one this line is sending is held from Drive */
+async function sendItem(it){if(DRV.holds(it.id))return 0;const own=lineOpen()&&!DRV.HOLD.has(it.id);
+ if(own)DRV.HOLD.set(it.id,'line');try{return await sendItem1(it)}finally{if(own)DRV.HOLD.delete(it.id)}}
+async function sendItem1(it){
  if(lineOpen()){
   const buf=new Uint8Array(await it.blob.arrayBuffer()),nonce=rid();
   const done=new Promise((resolve,reject)=>{acks.set(it.id,{kind:'original',nonce:nonce,resolve:resolve,reject:reject});
@@ -468,8 +471,10 @@ async function sendItem(it){
  if(RELAY&&SIG.up())return await sendRelayPreview(it);
  throw new Error('closed')}
 async function alive(){if(lineOpen())return true;if(RELAY&&SIG.up())return true;connect();return false}
-function offline(){if(lineOpen())return;if(RELAY&&SIG.up()){say(false,'relayMode');return}
- if(lastState==='connected'||!lastState)say(false,'connecting');else say(false,lastState);connect()}
+function offline(){if(lineOpen())return;drivePump();
+ if(DRV.on&&DRV.ok()){say(false,'driveMode');connect();return}
+ if(RELAY&&SIG.up()){say(false,'relayMode');return}
+ if(lastState==='connected'||!lastState||lastState==='driveMode')say(false,'connecting');else say(false,lastState);connect()}
 (async()=>{if(!KEYB||KEYB.length!==43||!window.isSecureContext||!window.RTCPeerConnection){
   $('go').disabled=true;status(false,!KEYB?'nokey':'insecure');return}
  await bridgeKey(KEYB);SIG.start(onSignal,n=>{if(n&&!linking&&!lineOpen()){backoff=4000;connect()}});
