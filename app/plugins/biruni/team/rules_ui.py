@@ -1,11 +1,14 @@
 """The room's merge rules and number ranges, edited by the room's admin (rank 0, hosting) and shown read-only to
 everyone else (rules.py)."""
+from qgis.core import QgsApplication
+from qgis.PyQt.QtCore import Qt
+from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import (QAbstractItemView, QComboBox, QDialog, QDialogButtonBox, QHBoxLayout, QHeaderView,
-                                 QLabel, QMessageBox, QPushButton, QSpinBox, QTableWidget, QTableWidgetItem,
-                                 QVBoxLayout)
+                                 QLabel, QListWidget, QListWidgetItem, QMessageBox, QPushButton, QSpinBox,
+                                 QTableWidget, QTableWidgetItem, QVBoxLayout)
 
 from ..i18n import tr
-from . import rules
+from . import features, rules
 
 
 def _can_edit(node):
@@ -188,6 +191,96 @@ class NumbersDialog(QDialog):
         self._save([g for g in (self.node.store.get(rules.GKEY) or []) if g.get("doc") != gone])
 
 
+class LocksDialog(QDialog):
+    """Per layer: fields that only the room's owner may edit."""
+
+    def __init__(self, node, parent=None):
+        super().__init__(parent)
+        self.node = node
+        self.edit = _can_edit(node)
+        self._filling = False
+        self.setWindowTitle(tr("Locked Fields"))
+        lay = QVBoxLayout(self)
+        note = QLabel(tr("Ticked fields can only be changed by the room's owner. Members can still fill a new "
+                         "feature's numbering field from their granted range.")
+                      if self.edit else
+                      tr("Only the room's owner can lock fields, while hosting the room."))
+        note.setWordWrap(True)
+        lay.addWidget(note)
+        self.layer = QComboBox()
+        for key in sorted(node.layers):
+            self.layer.addItem(_layer_name(node, key), key)
+        lay.addWidget(self.layer)
+        self.list = QListWidget()
+        lay.addWidget(self.list)
+        self._initial = {k: set(rules.locked_fields(node.store, node.lookup_member, k)) for k in node.layers}
+        self.locks = {k: set(v) for k, v in self._initial.items()}
+        self.layer.currentIndexChanged.connect(self._fill)
+        self.list.itemChanged.connect(self._toggled)
+        bb = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Close
+                              if self.edit else QDialogButtonBox.StandardButton.Close)
+        bb.accepted.connect(self.save)
+        bb.rejected.connect(self.reject)
+        lay.addWidget(bb)
+        self._fill()
+        self.resize(460, 420)
+
+    def _fill(self):
+        self._filling = True
+        try:
+            self.list.clear()
+            key = self.layer.currentData()
+            lyr = self.node.layers.get(key)
+            if lyr is None:
+                return
+            skip = features.key_fields(lyr)
+            locked = self.locks.get(key, set())
+            icon = QgsApplication.getThemeIcon("/locked.svg")
+            for f in lyr.fields():
+                name = f.name()
+                if name in skip:
+                    continue
+                it = QListWidgetItem(name)
+                it.setData(Qt.ItemDataRole.UserRole, name)
+                if self.edit:
+                    it.setFlags(it.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+                else:
+                    it.setFlags(it.flags() & ~Qt.ItemFlag.ItemIsUserCheckable)
+                on = name in locked
+                it.setCheckState(Qt.CheckState.Checked if on else Qt.CheckState.Unchecked)
+                if on:
+                    it.setIcon(icon)
+                self.list.addItem(it)
+        finally:
+            self._filling = False
+
+    def _toggled(self, item):
+        if self._filling or not self.edit:
+            return
+        key = self.layer.currentData()
+        name = item.data(Qt.ItemDataRole.UserRole) or item.text()
+        on = item.checkState() == Qt.CheckState.Checked
+        self._filling = True
+        try:
+            if on:
+                self.locks.setdefault(key, set()).add(name)
+                item.setIcon(QgsApplication.getThemeIcon("/locked.svg"))
+            else:
+                self.locks.setdefault(key, set()).discard(name)
+                item.setIcon(QIcon())
+        finally:
+            self._filling = False
+
+    def save(self):
+        if not self.edit:
+            return
+        for key in sorted(self.node.layers):
+            cur = sorted(self.locks.get(key, set()))
+            if set(cur) != self._initial.get(key, set()):
+                self.node.set_locked_fields(key, cur)
+        self.accept()
+
+
 def open_rules(node, parent=None):
     if node is not None:
         RulesDialog(node, parent).exec()
@@ -196,3 +289,8 @@ def open_rules(node, parent=None):
 def open_numbers(node, parent=None):
     if node is not None:
         NumbersDialog(node, parent).exec()
+
+
+def open_locks(node, parent=None):
+    if node is not None:
+        LocksDialog(node, parent).exec()

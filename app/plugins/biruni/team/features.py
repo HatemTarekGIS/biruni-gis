@@ -52,6 +52,26 @@ def _geometry(hexwkb):
     return g
 
 
+def same_geometry(hex_a, hex_b):
+    """True when two WKB hex strings represent the exact same geometry (no added vertices)."""
+    if hex_a == hex_b or (not hex_a and not hex_b):
+        return True
+    ga, gb = _geometry(hex_a), _geometry(hex_b)
+    if (ga.isNull() or ga.isEmpty()) and (gb.isNull() or gb.isEmpty()):
+        return True
+    if ga.isNull() or gb.isNull() or ga.isEmpty() or gb.isEmpty():
+        return False
+    eq = getattr(ga, "isExactlyEqual", None) or ga.equals
+    if eq(gb):
+        return True
+    ca, cb = QgsGeometry(ga), QgsGeometry(gb)
+    ca.convertToMultiType()
+    cb.convertToMultiType()
+    ca.normalize()
+    cb.normalize()
+    return (getattr(ca, "isExactlyEqual", None) or ca.equals)(cb)
+
+
 def write_state(layer, fid, state):
     """Make feature fid be state in the file (added when missing). Returns True when written."""
     pr = layer.dataProvider()

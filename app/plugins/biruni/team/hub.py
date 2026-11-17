@@ -64,7 +64,8 @@ class _Job:
         self.done.set()
 
 
-ROOM_SETTINGS = ("approve", "default_rights", "external", "constitution", "number_grants", "host_grants")  # [I06] rules.py
+ROOM_SETTINGS = ("approve", "default_rights", "external", "constitution", "number_grants", "host_grants",
+                 "field_locks")  # [I06] rules.py
 
 
 def room_settings(store):
@@ -125,6 +126,7 @@ class Hub(QObject):
         self.refused_for = {}            # member id -> [uids] of held deletions the host refused (told at its pull)
         self._areas = area.Checker()     # members' areas of work, made ready once per layer
         self._rules = (None, {}, [])     # [I06] (settings seen, verified constitution layers, verified grants)
+        self._locks = (None, {})         # ((field_locks dump, roster_v), {layer_key: [field names]})
         self._nonce_lock = threading.Lock()
         self.layers = layers            # {room layer key: QgsVectorLayer}
         self.me = me                    # the host's own member dict
@@ -520,6 +522,25 @@ class Hub(QObject):
         ver = self.store.version(op["layer"], op["fid"]) + 1
         key, fid = op["layer"], int(op["fid"])
         lyr = self.layers.get(key)
+        if int(self.me.get("rank", 99)) != 0 and prev and state:
+            locked = self._locked(key)
+            if locked:
+                pa, sa = prev.get("a") or {}, state.get("a") or {}
+                bad = [f for f in locked if f in sa and sa[f] != pa.get(f)]
+                if bad:
+                    ca = dict(sa)
+                    for f in bad:
+                        if f in pa:
+                            ca[f] = pa[f]
+                        else:
+                            ca.pop(f, None)
+                    state = dict(state, a=ca)
+                    if lyr is not None:
+                        features.write_state(lyr, fid, state)
+                        lyr.triggerRepaint()
+                    self._log_error("locked field: " + ", ".join(bad))
+                    if state == prev:
+                        return None
         flags = []
         if lyr is not None and prev and state and prev.get("g") != state.get("g"):
             batch = _Batch(self)
@@ -639,15 +660,18 @@ class Hub(QObject):
         return next((m for m in self.store.members() if m["id"] == cid), None) if cid else None
 
     def _rights_refuse(self, member, key, op):
-        """Why ``member`` may not make ``op`` on layer ``key`` (or ""): "view only", or "cannot delete" for a member
-        who may edit but not delete."""
+        """Why ``member`` may not make ``op`` on layer ``key`` (or ""): "view only", "cannot delete", etc."""
         if member is self.me:
             return ""
+        if op.get("kind") == "field":
+            return "only the host changes fields"
         right = (member.get("rights") or {}).get(key, "edit")
         if right == "view":
             return "view only"
         if right == "nodelete" and op.get("kind") == "del":
             return "cannot delete"
+        if right == "data" and op.get("kind") == "del":
+            return "data entry only: cannot delete"
         return ""
 
     def _hold(self, op, member):
@@ -746,6 +770,9 @@ class Hub(QObject):
         refused = self._area_refuse(who, key, op, cur)
         if refused:
             return {"uid": uid, "status": "refused", "why": refused}
+        data_only = who is not self.me and (who.get("rights") or {}).get(key, "edit") == "data"
+        if data_only and cur is None:
+            return {"uid": uid, "status": "refused", "why": "data entry only: cannot add features"}
         conflicts = []
         if op.get("kind") == "del":
             if cur is None:
@@ -774,10 +801,17 @@ class Hub(QObject):
             result, conflicts = merge.merge_feature(op.get("base") or {}, state, cur, rules=lr.get(key),
                                                     mine_rank=int(who.get("rank", 99)), theirs_rank=theirs_rank)
             merged = True
+        if data_only:
+            if not features.same_geometry(result.get("g"), cur.get("g")):
+                return {"uid": uid, "status": "refused", "why": "data entry only: the shape cannot change"}
+            result = dict(result, g=cur.get("g"))
+        result, why = self._locked_check(who, key, cur, result)
+        if why:
+            return {"uid": uid, "status": "refused", "why": why}
         flags = self._number_flags(key, lyr, fid, who, cur, result)
         # [I06 second piece] shared-node geometry propagation to incident neighbours
         node_flags = []
-        if lyr is not None and result and state and (op.get("base") or cur):
+        if lyr is not None and result and state and (op.get("base") or cur) and not data_only:
             base_st = op.get("base") if op.get("base") and op.get("base").get("g") else cur
             result, node_flags = self._propagate_shared_nodes(key, lyr, fid, who, base_st, state, result, batch, op)
         flags.extend(node_flags)
@@ -954,6 +988,45 @@ class Hub(QObject):
 
 
     # ---- [I06] the merge constitution and escrowed numbers (rules.py) ----------------------------------
+    def _locked(self, key):
+        seen = (rules.dump(self.store.get(rules.FKEY)), self.roster_v)
+        if self._locks[0] != seen:
+            self._locks = (seen, {})
+        cache = self._locks[1]
+        if key not in cache:
+            cache[key] = rules.locked_fields(self.store, self._member, key)
+        return cache[key]
+
+    def _locked_check(self, who, key, cur, result):
+        """Enforce owner-locked fields: refuse changes to existing features; clear ungranted values on new ones."""
+        locked = self._locked(key)
+        if int(who.get("rank", 99)) == 0 or not locked:
+            return result, ""
+        ra = result.get("a") or {}
+        if cur is not None:
+            ca = cur.get("a") or {}
+            for f in locked:
+                if f in ra and ra[f] != ca.get(f):
+                    return result, "locked field: " + f
+            return result, ""
+        changed = None
+        grants = None
+        for f in locked:
+            if f not in ra:
+                continue
+            v = ra[f]
+            if v is None or v == "":
+                continue
+            if grants is None:
+                grants = [d for d in self._room_rules()[1] if d["layer"] == key and d["member"] == who.get("id")]
+            if not rules.in_ranges(v, [d for d in grants if d["field"] == f]):
+                if changed is None:
+                    changed = dict(ra)
+                changed[f] = None
+        if changed is not None:
+            return dict(result, a=changed), ""
+        return result, ""
+
     def _room_rules(self):
         """({layer: {field: rule}}, [grant docs]) verified once per change of the stored settings."""
         seen = (rules.dump(self.store.get(rules.CKEY)), rules.dump(self.store.get(rules.GKEY)),

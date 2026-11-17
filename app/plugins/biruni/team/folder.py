@@ -939,7 +939,12 @@ class FolderCarrier:
             from .hub import room_settings
 
             head = st.head()
-            settings_key = _sha(json.dumps(room_settings(st), sort_keys=True).encode())
+            refused = dict(node.hub.refused_for) if node.hub is not None else {}
+            settings_key = _sha(json.dumps([
+                room_settings(st),
+                st.get("pigeon_results") or {},
+                refused,
+            ], sort_keys=True).encode())
             written_head = st.get("folder_written_head")
             written_settings = st.get("folder_written_settings")
             need_incr = written_head is None or head > int(written_head) or settings_key != written_settings

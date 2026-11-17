@@ -36,3 +36,22 @@ time.
 - A removed member keeps what it already received. Change the code, and unshare the folder in Drive.
 - The host right is checked by every computer against the owner's signature (`rules.may_host`). A computer that
   makes itself host without it is followed by nobody.
+
+## Data-entry right and locked fields (`rules.py`, `hub.py`, `node.py`)
+
+- **Data-entry right (`data`):** Members with `"data"` on a layer can edit attributes of existing features only.
+  `Hub.decide_op` refuses adds (`cur is None`), deletes (`kind == "del"`), and geometry changes (compared against
+  the host's current `cur` via `features.same_geometry`, never against `op["base"]`), pins `result["g"] = cur["g"]`,
+  and skips shared-node propagation. Schema changes (`kind == "field"`) from any non-host member are refused
+  regardless of right (`"only the host changes fields"`). On the member's computer, `_shape_guard` undoes
+  geometry/add/delete edits in the edit buffer.
+- **Locked fields (`field_locks`):** Stored in `ROOM_SETTINGS` as `{layer_key: {"doc", "sig"}}` signed by a rank-0
+  owner (`rules.make_field_lock` / `rules.locked_fields`). `Hub.decide_op` (for rank != 0, including a host by
+  host-grant) refuses any change to a locked field on an existing feature (`"locked field: <name>"`), and on a new
+  feature clears locked fields to `None` unless empty or within the author's own signed number range
+  (`rules.in_ranges`). `Hub.local` reverts changed locked fields when a rank != 0 host edits locally.
+  `_apply_field_locks` sets locked fields read-only in the layer's edit form config for rank != 0.
+- **Limits:**
+  - The read-only form and the shape guard are a courtesy, and the host's decision is the guarantee.
+  - Only the owner, while hosting, sets locks.
+  - Renaming a locked field drops its lock.

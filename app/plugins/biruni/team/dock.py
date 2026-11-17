@@ -182,6 +182,7 @@ class OpenDialog(QDialog):
         self.rights = QComboBox()
         self.rights.addItem(tr("Can edit"), "edit")
         self.rights.addItem(tr("Can edit, not delete"), "nodelete")
+        self.rights.addItem(tr("Data entry only"), "data")
         self.rights.addItem(tr("Can only view"), "view")
         form.addRow(tr("New members"), self.rights)
         v.addLayout(form)
@@ -665,7 +666,7 @@ class TeamDock(QDockWidget):
                          "and what was there brought back."))
         tm.clicked.connect(self.time_machine)
         rv.addWidget(tm)
-        # [I06] the room's merge rules and number ranges (team/rules.py, rules_ui.py)
+        # [I06] the room's merge rules, number ranges and locked fields (team/rules.py, rules_ui.py)
         rrow = QHBoxLayout()
         mr = QPushButton(tr("Merge Rules…"))
         mr.setToolTip(tr("What happens when two people change the same field at the same time, signed by the "
@@ -674,8 +675,12 @@ class TeamDock(QDockWidget):
         nr = QPushButton(tr("Number Ranges…"))
         nr.setToolTip(tr("Parcel or point numbers granted to each member, so numbers never repeat, even offline."))
         nr.clicked.connect(lambda: rules_ui.open_numbers(self.node, self))
+        lf = QPushButton(tr("Locked fields…"))
+        lf.setToolTip(tr("Fields locked by the room's owner so only the owner can edit them."))
+        lf.clicked.connect(lambda: rules_ui.open_locks(self.node, self))
         rrow.addWidget(mr)
         rrow.addWidget(nr)
+        rrow.addWidget(lf)
         rv.addLayout(rrow)
         # [room folder] the room's changes through Google Drive or another shared folder (team/folder.py)
         sh_row = QHBoxLayout()
@@ -1033,6 +1038,8 @@ class TeamDock(QDockWidget):
                 "rejoined": tr("Joined the room's new host. Your copy is up to date."),
                 "handover": tr("Another computer holds the room for more members. Joining it…"),
                 "fields": tr("Only the host can add columns to a shared layer."),
+                "data-only": tr(
+                    "You only have data-entry rights on this layer: shapes cannot be added, moved or deleted."),
                 "frozen": tr("The host froze editing for maintenance. You can look, not edit."),
                 "unfrozen": tr("Editing is open again."),
                 "base-too-large": tr("The room's files are over 2 GB and cannot be sent through the folder."),
@@ -1049,11 +1056,23 @@ class TeamDock(QDockWidget):
             self._bar(msgs[text], 2 if level == "ok" else 1)
         elif text.startswith("refused:"):
             why = text.split(":", 1)[1]
-            self._bar({"view only": tr("You can only view this layer; your change was not kept."),
-                       "cannot delete": tr("You can edit this layer but not delete from it; the feature is back."),
-                       "frozen": tr("Editing is frozen by the host; your change was not kept."),
-                       "outside your area": tr("That feature is outside your area of work; your change was not kept.")}.get(
-                why, tr("The host did not accept a change: {w}").format(w=why)), 1)
+            if why.startswith("locked field: "):
+                self._bar(tr("The field {f} is locked by the room's owner; your change was not kept.").format(
+                    f=why.split(": ", 1)[1]), 1)
+            else:
+                self._bar({
+                    "view only": tr("You can only view this layer; your change was not kept."),
+                    "cannot delete": tr("You can edit this layer but not delete from it; the feature is back."),
+                    "data entry only: cannot delete": tr(
+                        "You only have data-entry rights on this layer; the feature is back."),
+                    "data entry only: cannot add features": tr(
+                        "You only have data-entry rights on this layer; new features cannot be added."),
+                    "data entry only: the shape cannot change": tr(
+                        "You only have data-entry rights on this layer; the shape change was not kept."),
+                    "only the host changes fields": tr("Only the host can change columns of a shared layer."),
+                    "frozen": tr("Editing is frozen by the host; your change was not kept."),
+                    "outside your area": tr("That feature is outside your area of work; your change was not kept."),
+                }.get(why, tr("The host did not accept a change: {w}").format(w=why)), 1)
         elif text.startswith("external:"):
             self._bar(tr("Joining from outside could not start: {e}").format(e=text.split(":", 1)[1]), 1)
         elif level == "warn" and text:
@@ -1483,7 +1502,7 @@ class TeamDock(QDockWidget):
         for key, lyr in n.layers.items():
             sub = menu.addMenu(lyr.name())
             for right, label in (("edit", tr("Can edit")), ("nodelete", tr("Can edit, not delete")),
-                                 ("view", tr("Can only view"))):
+                                 ("data", tr("Data entry only")), ("view", tr("Can only view"))):
                 a = sub.addAction(label)
                 a.setCheckable(True)
                 a.setChecked((m.get("rights") or {}).get(key, "edit") == right)

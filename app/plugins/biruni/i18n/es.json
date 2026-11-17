@@ -8034,5 +8034,17 @@
  "raster": "ráster",
  "too large": "demasiado grande",
  "{layer}: stays on this computer ({why}). Hand it over separately.": "{layer}: permanece en este equipo ({why}). Entréguela por separado.",
- "{n} of your changes wait": "{n} de sus cambios esperan"
+ "{n} of your changes wait": "{n} de sus cambios esperan",
+ "Data entry only": "Solo entrada de datos",
+ "Locked fields…": "Campos bloqueados…",
+ "Fields locked by the room's owner so only the owner can edit them.": "Campos bloqueados por el propietario de la sala para que solo él pueda editarlos.",
+ "You only have data-entry rights on this layer: shapes cannot be added, moved or deleted.": "Solo tiene permisos de entrada de datos en esta capa: no se pueden añadir, mover ni eliminar geometrías.",
+ "The field {f} is locked by the room's owner; your change was not kept.": "El campo {f} está bloqueado por el propietario de la sala; su cambio no se guardó.",
+ "You only have data-entry rights on this layer; the feature is back.": "Solo tiene permisos de entrada de datos en esta capa; el elemento se ha restaurado.",
+ "You only have data-entry rights on this layer; new features cannot be added.": "Solo tiene permisos de entrada de datos en esta capa; no se pueden añadir nuevos elementos.",
+ "You only have data-entry rights on this layer; the shape change was not kept.": "Solo tiene permisos de entrada de datos en esta capa; el cambio de forma no se guardó.",
+ "Only the host can change columns of a shared layer.": "Solo el anfitrión puede cambiar las columnas de una capa compartida.",
+ "Locked Fields": "Campos bloqueados",
+ "Ticked fields can only be changed by the room's owner. Members can still fill a new feature's numbering field from their granted range.": "Los campos marcados solo pueden ser modificados por el propietario de la sala. Los miembros aún pueden rellenar el campo de numeración de un nuevo elemento desde su rango asignado.",
+ "Only the room's owner can lock fields, while hosting the room.": "Solo el propietario de la sala puede bloquear campos mientras la hospeda."
 }

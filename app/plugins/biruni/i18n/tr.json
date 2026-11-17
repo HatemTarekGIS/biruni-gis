@@ -8034,5 +8034,17 @@
  "raster": "raster",
  "too large": "çok büyük",
  "{layer}: stays on this computer ({why}). Hand it over separately.": "{layer}: bu bilgisayarda kalır ({why}). Ayrı olarak teslim edin.",
- "{n} of your changes wait": "{n} değişikliğiniz bekliyor"
+ "{n} of your changes wait": "{n} değişikliğiniz bekliyor",
+ "Data entry only": "Yalnızca veri girişi",
+ "Locked fields…": "Kilitli alanlar…",
+ "Fields locked by the room's owner so only the owner can edit them.": "Oda sahibi tarafından kilitlenen alanları yalnızca oda sahibi düzenleyebilir.",
+ "You only have data-entry rights on this layer: shapes cannot be added, moved or deleted.": "Bu katmanda yalnızca veri girişi yetkiniz var: şekiller eklenemez, taşınamaz veya silinemez.",
+ "The field {f} is locked by the room's owner; your change was not kept.": "{f} alanı oda sahibi tarafından kilitlendi; değişikliğiniz kaydedilmedi.",
+ "You only have data-entry rights on this layer; the feature is back.": "Bu katmanda yalnızca veri girişi yetkiniz var; detay geri getirildi.",
+ "You only have data-entry rights on this layer; new features cannot be added.": "Bu katmanda yalnızca veri girişi yetkiniz var; yeni detay eklenemez.",
+ "You only have data-entry rights on this layer; the shape change was not kept.": "Bu katmanda yalnızca veri girişi yetkiniz var; şekil değişikliği kaydedilmedi.",
+ "Only the host can change columns of a shared layer.": "Paylaşılan bir katmanın sütunlarını yalnızca sunucu değiştirebilir.",
+ "Locked Fields": "Kilitli Alanlar",
+ "Ticked fields can only be changed by the room's owner. Members can still fill a new feature's numbering field from their granted range.": "İşaretli alanlar yalnızca oda sahibi tarafından değiştirilebilir. Üyeler yine de yeni bir detayın numaralandırma alanını kendilerine verilen aralıktan doldurabilir.",
+ "Only the room's owner can lock fields, while hosting the room.": "Alanları yalnızca oda sahibi, odayı barındırırken kilitleyebilir."
 }

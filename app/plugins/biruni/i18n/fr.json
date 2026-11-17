@@ -8034,5 +8034,17 @@
  "raster": "raster",
  "too large": "trop volumineux",
  "{layer}: stays on this computer ({why}). Hand it over separately.": "{layer} : reste sur cet ordinateur ({why}). Transférez-le séparément.",
- "{n} of your changes wait": "{n} de vos modifications attendent"
+ "{n} of your changes wait": "{n} de vos modifications attendent",
+ "Data entry only": "Saisie de données uniquement",
+ "Locked fields…": "Champs verrouillés…",
+ "Fields locked by the room's owner so only the owner can edit them.": "Champs verrouillés par le propriétaire de la salle afin que lui seul puisse les modifier.",
+ "You only have data-entry rights on this layer: shapes cannot be added, moved or deleted.": "Vous n'avez que le droit de saisie de données sur cette couche : les géométries ne peuvent pas être ajoutées, déplacées ou supprimées.",
+ "The field {f} is locked by the room's owner; your change was not kept.": "Le champ {f} est verrouillé par le propriétaire de la salle ; votre modification n'a pas été conservée.",
+ "You only have data-entry rights on this layer; the feature is back.": "Vous n'avez que le droit de saisie de données sur cette couche ; l'entité a été restaurée.",
+ "You only have data-entry rights on this layer; new features cannot be added.": "Vous n'avez que le droit de saisie de données sur cette couche ; de nouvelles entités ne peuvent pas être ajoutées.",
+ "You only have data-entry rights on this layer; the shape change was not kept.": "Vous n'avez que le droit de saisie de données sur cette couche ; la modification de forme n'a pas été conservée.",
+ "Only the host can change columns of a shared layer.": "Seul l'hôte peut modifier les colonnes d'une couche partagée.",
+ "Locked Fields": "Champs verrouillés",
+ "Ticked fields can only be changed by the room's owner. Members can still fill a new feature's numbering field from their granted range.": "Les champs cochés ne peuvent être modifiés que par le propriétaire de la salle. Les membres peuvent toujours remplir le champ de numérotation d'une nouvelle entité à partir de leur plage attribuée.",
+ "Only the room's owner can lock fields, while hosting the room.": "Seul le propriétaire de la salle peut verrouiller des champs pendant qu'il héberge la salle."
 }

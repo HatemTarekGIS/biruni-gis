@@ -8034,5 +8034,17 @@
  "raster": "بيانات شبكية (راستر)",
  "too large": "كبير جداً",
  "{layer}: stays on this computer ({why}). Hand it over separately.": "{layer}: يبقى على هذا الكمبيوتر ({why}). سلّمه بشكل منفصل.",
- "{n} of your changes wait": "{n} من تعديلاتك قيد الانتظار"
+ "{n} of your changes wait": "{n} من تعديلاتك قيد الانتظار",
+ "Data entry only": "إدخال بيانات فقط",
+ "Locked fields…": "حقول مقفولة…",
+ "Fields locked by the room's owner so only the owner can edit them.": "حقول أقفلها صاحب الغرفة بحيث لا يعدّلها إلا هو.",
+ "You only have data-entry rights on this layer: shapes cannot be added, moved or deleted.": "صلاحيتك على هذه الطبقة إدخال بيانات فقط: لا يمكن إضافة الأشكال أو تحريكها أو حذفها.",
+ "The field {f} is locked by the room's owner; your change was not kept.": "الحقل {f} مقفول من صاحب الغرفة؛ لم يُحفظ تعديلك.",
+ "You only have data-entry rights on this layer; the feature is back.": "صلاحيتك على هذه الطبقة إدخال بيانات فقط؛ أُعيد العنصر.",
+ "You only have data-entry rights on this layer; new features cannot be added.": "صلاحيتك على هذه الطبقة إدخال بيانات فقط؛ لا يمكن إضافة عناصر جديدة.",
+ "You only have data-entry rights on this layer; the shape change was not kept.": "صلاحيتك على هذه الطبقة إدخال بيانات فقط؛ لم يُحفظ تعديل الشكل.",
+ "Only the host can change columns of a shared layer.": "المضيف فقط يمكنه تغيير أعمدة طبقة مشتركة.",
+ "Locked Fields": "الحقول المقفولة",
+ "Ticked fields can only be changed by the room's owner. Members can still fill a new feature's numbering field from their granted range.": "الحقول المحددة لا يغيّرها إلا صاحب الغرفة. يظل بإمكان الأعضاء تعبئة حقل الترقيم للعنصر الجديد من النطاق الممنوح لهم.",
+ "Only the room's owner can lock fields, while hosting the room.": "صاحب الغرفة فقط يمكنه قفل الحقول أثناء استضافة الغرفة."
 }

@@ -29,6 +29,18 @@ Both are signed by an admin (a member of rank 0) with the device key (ed25519): 
 or grant is ignored, and the room behaves as if it had none. Limits: a computer that has not yet received the
 constitution (a member who never joined over the network since it was set) still numbers with its old grants;
 an admin who is not the host cannot change the rules (the room's settings flow from the host).
+
+Data-entry right & locked fields
+--------------------------------
+- The ``data`` layer right lets a member edit attributes of existing features only: adding features, changing
+  shapes (compared against the host's current geometry via ``features.same_geometry``), deleting features and
+  shared-node propagation are refused by ``Hub.decide_op``.
+- ``field_locks`` stores ``{layer_key: {"doc", "sig"}}`` signed by a rank-0 owner. On existing features, any
+  change to a locked field by a member with rank != 0 is refused with ``locked field: <name>``. On new features,
+  locked fields stay empty unless filled with a number inside the author's own signed range (``in_ranges``);
+  any other value is cleared to ``None``.
+- Limits: the read-only form and the shape guard are a courtesy, and the host's decision is the guarantee;
+  only the owner, while hosting, sets locks; renaming a locked field drops its lock.
 """
 import json
 import time
@@ -39,7 +51,7 @@ RULES = ("keep", "last", "authority", "max", "min", "sum", "ask")
 RULE_LABELS = {"keep": "Keep the current value and ask the author", "last": "The last change wins",
                "authority": "The higher rank wins", "max": "The larger number", "min": "The smaller number",
                "sum": "Add both changes", "ask": "Never join by itself: ask"}
-CKEY, GKEY, HKEY = "constitution", "number_grants", "host_grants"
+CKEY, GKEY, HKEY, FKEY = "constitution", "number_grants", "host_grants", "field_locks"
 
 
 # ---- signing ------------------------------------------------------------------------------------------------
@@ -151,6 +163,29 @@ def may_host(store, lookup, member_id):
         return False
     newest = max(enumerate(valid), key=lambda p: (float(p[1].get("ts") or 0), p[0]))[1]
     return bool(newest.get("allow"))
+
+
+def make_field_lock(seed_hex, admin_id, layer_key, fields, version):
+    """Owner-signed field lock for ``layer_key`` listing the fields that only rank 0 may change."""
+    clean = sorted({str(f) for f in (fields or []) if f is not None and str(f) != ""})
+    doc = {"kind": "field_lock", "layer": str(layer_key), "fields": clean, "v": int(version),
+           "by": str(admin_id), "ts": round(time.time(), 3)}
+    return {"doc": doc, "sig": _sign(seed_hex, doc)}
+
+
+def locked_fields(store, lookup, key):
+    """The locked field names of ``key`` when verified under rank 0, else []."""
+    all_locks = store.get(FKEY)
+    if not isinstance(all_locks, dict):
+        return []
+    signed = all_locks.get(key)
+    if not isinstance(signed, dict):
+        return []
+    d = _verify(signed, lookup)
+    if d is None or d.get("kind") != "field_lock" or d.get("layer") != key:
+        return []
+    fields = d.get("fields")
+    return [str(f) for f in fields] if isinstance(fields, list) else []
 
 
 # ---- the field decision -------------------------------------------------------------------------------------

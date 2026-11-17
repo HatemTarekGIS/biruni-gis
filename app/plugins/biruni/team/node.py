@@ -103,6 +103,7 @@ class Node(QObject):
         self._finding = False
         self._rekey_at = None    # the time of the code change this computer is waiting for
         self._fields_before = {}  # layer key -> its field names before a save (renamed / deleted fields)
+        self._guarding = False    # True while undoing a disallowed shape edit under "data" right
         self._held_said = False   # told the user once that its deletions wait for the host
         self._found_at = 0.0
         self._checked = time.time()
@@ -147,6 +148,9 @@ class Node(QObject):
                               (lyr.beforeCommitChanges, lambda *_, k=key: self._before(k)),
                               (lyr.afterCommitChanges, lambda k=key: self._after(k)),
                               (lyr.attributeAdded, lambda idx, k=key: self._field_added(k, idx)),
+                              (lyr.geometryChanged, lambda *_, k=key: self._shape_guard(k)),
+                              (lyr.featureAdded, lambda *_, k=key: self._shape_guard(k)),
+                              (lyr.featureDeleted, lambda *_, k=key: self._shape_guard(k)),
                               (lyr.willBeDeleted, lambda k=key: self._layer_gone(k))):
                 sig.connect(slot)
                 self._links.append((key, sig, slot))
@@ -404,6 +408,36 @@ class Node(QObject):
         name = lyr.fields().at(idx).name() if 0 <= idx < lyr.fields().count() else ""
         QTimer.singleShot(0, lambda: lyr.deleteAttribute(lyr.fields().indexOf(name)) if name else None)
         self.status.emit("warn", "fields")
+
+    def _shape_guard(self, key):
+        if self.role == "host" or self._guarding:
+            return
+        if ((self.member or {}).get("rights") or {}).get(key, "edit") != "data":
+            return
+        QTimer.singleShot(0, lambda k=key: self._shape_undo(k))
+
+    def _shape_undo(self, key):
+        lyr = self.layers.get(key)
+        if lyr is None or not lyr.isEditable():
+            return
+
+        def _bad():
+            b = lyr.editBuffer()
+            return b is not None and (b.changedGeometries() or b.addedFeatures() or b.deletedFeatureIds())
+
+        if not _bad():
+            return
+        self._guarding = True
+        try:
+            stack = lyr.undoStack()
+            while _bad() and stack is not None and stack.canUndo():
+                stack.undo()
+            if _bad():
+                lyr.rollBack(False)
+        finally:
+            self._guarding = False
+        lyr.triggerRepaint()
+        self.status.emit("warn", "data-only")
 
     def _op(self, key, fid, kind, base, state, note=None):
         op = {"uid": uuid.uuid4().hex, "layer": key, "fid": int(fid), "kind": kind,
@@ -710,6 +744,7 @@ class Node(QObject):
         self._pres_timer.start()
         if self.store.get("external"):
             self.start_external()
+        self._apply_field_locks()
         self.changed.emit()
         return self.hub.port
 
@@ -726,6 +761,22 @@ class Node(QObject):
         self.store.put(rules.HKEY, grants)
         self.hub._settings = (0.0, {})
         self.hub._bump()
+
+    def set_locked_fields(self, layer_key, fields):
+        """Owner only (host, rank 0): sign and store locked field names for ``layer_key``."""
+        if self.role != "host" or self.my_rank() != 0 or self.hub is None:
+            raise PermissionError("only the room's owner can lock fields while hosting")
+        from . import rules
+
+        all_locks = dict(self.store.get(rules.FKEY) or {})
+        cur = all_locks.get(layer_key)
+        cur_doc = (cur.get("doc") if isinstance(cur, dict) else None) or {}
+        ver = int((cur_doc.get("v") if isinstance(cur_doc, dict) else 0) or 0) + 1
+        all_locks[layer_key] = rules.make_field_lock(self.ident["seed"], self.me_id, layer_key, fields, ver)
+        self.store.put(rules.FKEY, all_locks)
+        self.hub._settings = (0.0, {})
+        self.hub._bump()
+        self._apply_field_locks()
 
     def can_make_host(self):
         """True when this folder-room member is allowed to take over as host."""
@@ -774,8 +825,11 @@ class Node(QObject):
             if r == "later":
                 left = True
                 continue
-            if isinstance(r, dict) and r.get("conflicts"):
-                self._keep_conflict(dict(r, layer=r.get("layer", op["layer"]), fid=r.get("fid", op["fid"])))
+            if isinstance(r, dict):
+                if r.get("conflicts"):
+                    self._keep_conflict(dict(r, layer=r.get("layer", op["layer"]), fid=r.get("fid", op["fid"])))
+                if r.get("status") == "refused":
+                    self._revert(op["uid"])
             self.store.drop_outbox(op["uid"])
         if left:
             QTimer.singleShot(2000, self._drain_host_outbox)
@@ -990,9 +1044,16 @@ class Node(QObject):
             self._publish()
 
     def _keep_settings(self, settings):
+        from . import rules
+
+        locks_changed = False
         for k, v in (settings or {}).items():
             if self.store.get(k) != v:
                 self.store.put(k, v)
+                if k == rules.FKEY:
+                    locks_changed = True
+        if locks_changed:
+            self._apply_field_locks()
 
     def change_code(self, wait=20):
         """Host: a new room code. It is sealed to each member still in the room, then everyone switches to it at
@@ -1375,6 +1436,38 @@ class Node(QObject):
                 self.commit_layer(key)
                 lyr.commitChanges(True)
             lyr.setReadOnly(view)
+        self._apply_field_locks()
+
+    def _apply_field_locks(self):
+        from . import rules
+
+        prev = dict(self.store.get("form_locked") or {})
+        now = {}
+        is_owner = self.my_rank() == 0
+        for key, lyr in self.layers.items():
+            wanted = [] if is_owner else rules.locked_fields(self.store, self.lookup_member, key)
+            fields = lyr.fields()
+            cfg = lyr.editFormConfig()
+            changed = False
+            wanted_set = set(wanted)
+            for name in prev.get(key) or []:
+                if name not in wanted_set:
+                    idx = fields.indexOf(name)
+                    if idx >= 0:
+                        cfg.setReadOnly(idx, False)
+                        changed = True
+            applied = []
+            for name in wanted:
+                idx = fields.indexOf(name)
+                if idx >= 0:
+                    cfg.setReadOnly(idx, True)
+                    applied.append(name)
+                    changed = True
+            if changed:
+                lyr.setEditFormConfig(cfg)
+            if applied:
+                now[key] = applied
+        self.store.put("form_locked", now)
 
     # ---- where everyone is ----------------------------------------------------------------------------
     def set_cursor(self, pt):

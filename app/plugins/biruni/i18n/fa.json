@@ -8034,5 +8034,17 @@
  "raster": "رستر",
  "too large": "بیش از حد بزرگ",
  "{layer}: stays on this computer ({why}). Hand it over separately.": "{layer}: روی این رایانه می‌ماند ({why}). جداگانه تحویل دهید.",
- "{n} of your changes wait": "{n} تغییر شما در انتظار است"
+ "{n} of your changes wait": "{n} تغییر شما در انتظار است",
+ "Data entry only": "فقط ورود داده",
+ "Locked fields…": "فیلدهای قفل‌شده…",
+ "Fields locked by the room's owner so only the owner can edit them.": "فیلدهایی که مالک اتاق قفل کرده است تا فقط خودش بتواند آن‌ها را ویرایش کند.",
+ "You only have data-entry rights on this layer: shapes cannot be added, moved or deleted.": "شما در این لایه فقط دسترسی ورود داده دارید: عارضه‌ها قابل افزودن، جابه‌جایی یا حذف نیستند.",
+ "The field {f} is locked by the room's owner; your change was not kept.": "فیلد {f} توسط مالک اتاق قفل شده است؛ تغییر شما ذخیره نشد.",
+ "You only have data-entry rights on this layer; the feature is back.": "شما در این لایه فقط دسترسی ورود داده دارید؛ عارضه بازگردانده شد.",
+ "You only have data-entry rights on this layer; new features cannot be added.": "شما در این لایه فقط دسترسی ورود داده دارید؛ عارضه جدید قابل افزودن نیست.",
+ "You only have data-entry rights on this layer; the shape change was not kept.": "شما در این لایه فقط دسترسی ورود داده دارید؛ تغییر شکل ذخیره نشد.",
+ "Only the host can change columns of a shared layer.": "فقط میزبان می‌تواند ستون‌های یک لایه اشتراکی را تغییر دهد.",
+ "Locked Fields": "فیلدهای قفل‌شده",
+ "Ticked fields can only be changed by the room's owner. Members can still fill a new feature's numbering field from their granted range.": "فیلدهای تیک‌خورده فقط توسط مالک اتاق قابل تغییرند. اعضا همچنان می‌توانند فیلد شماره‌گذاری عارضه جدید را از بازه مجاز خود پر کنند.",
+ "Only the room's owner can lock fields, while hosting the room.": "فقط مالک اتاق هنگام میزبانی اتاق می‌تواند فیلدها را قفل کند."
 }
