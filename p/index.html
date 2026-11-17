@@ -207,7 +207,7 @@ function kept(k){try{return localStorage.getItem(k)}catch(e){return null}}
 
 const HP=new URLSearchParams(location.hash.slice(1)),KEYB=HP.get('k')||'';HASHL=HP.get('l');ROOM=KEYB.slice(0,12);
 GPSMODE=HP.get('m')==='gps';const VIAONLY=HP.get('v')==='1';
-if('serviceWorker' in navigator&&location.protocol==='https:'&&/\.github\.io$/.test(location.hostname))
+if('serviceWorker' in navigator&&location.protocol==='https:'&&/(^|\.)biruni-gis\.com$|\.github\.io$/.test(location.hostname))
  navigator.serviceWorker.register('sw.js').catch(()=>{});   /* opens again in the field without internet *//* v=1: never direct, always through a teammate (to try it) */
 try{const c=JSON.parse(kept('biruni-hello-'+ROOM)||'null');if(c&&Array.isArray(c.kinds))KINDS=c.kinds;
  if(c&&Array.isArray(c.form))FORM=c.form}catch(e){}
