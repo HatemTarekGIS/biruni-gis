@@ -595,7 +595,9 @@ def phone_page(all_texts):
 
     head, rest = PAGE.split("/*SEND{*/", 1)
     _, tail = rest.split("/*}SEND*/", 1)
-    page = head + _core() + PHONE_JS + tail
+    from . import drive, drive_page
+
+    page = head + _core() + drive.BFP_JS + drive_page.drive_js() + PHONE_JS + tail
     page = page.replace("/*BOOT*/", BOOT_JS)
     return (page.replace("__LANG__", "en").replace("__DEFLANG__", "").replace("__DIR__", "ltr")
             .replace("__TEXTS__", json.dumps(all_texts, ensure_ascii=False, sort_keys=True).replace("</", "<\\/"))

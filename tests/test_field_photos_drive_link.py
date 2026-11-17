@@ -28,6 +28,8 @@ PA, PB, PC = free_port(), free_port(), free_port()
 PARENT, HELPER, STRANGER = f"http://127.0.0.1:{PA}", f"http://localhost:{PB}", f"http://127.0.0.1:{PC}"
 os.environ.update({"BIRUNI_DRIVE_API": HELPER, "BIRUNI_DRIVE_HELPER": HELPER, "BIRUNI_DRIVE_PARENT": PARENT,
                    "BIRUNI_DRIVE_GSI": HELPER + "/gsi.js"})
+os.environ["BIRUNI_BRIDGE_RELAYS"] = f"ws://127.0.0.1:{free_port()}"   # nothing there: never the public relays
+os.environ["BIRUNI_BRIDGE_NTFY"] = "https://127.0.0.1:9/"
 os.environ["QT_QPA_PLATFORM"] = "offscreen"
 os.environ["QTWEBENGINE_DISABLE_SANDBOX"] = "1"
 os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--disable-gpu --no-sandbox"
@@ -42,7 +44,11 @@ from PyQt6.QtGui import QGuiApplication  # noqa: E402
 from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile  # noqa: E402
 
 app = QGuiApplication(sys.argv[:1])
-from biruni.field_photos import drive_page  # noqa: E402
+from biruni.field_photos import bridge, drive_page  # noqa: E402
+from biruni.field_photos.server import all_phone_texts  # noqa: E402
+
+PHONE = bridge.with_csp(bridge.phone_page(all_phone_texts()), connect=(drive_page.API,), frames=(drive_page.HELPER,))
+LINK_GETS = []
 
 failures, CONSOLE, ABOUT = [], [], []
 
@@ -102,6 +108,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):  # noqa: N802
         path = self.path.split("?", 1)[0]
         if path == "/link/":
+            LINK_GETS.append(self.headers.get("Referer") or "")
             self._send(200, drive_page.helper_page().encode("utf-8"))
         elif path == "/gsi.js":
             self._send(200, FAKE_GSI.encode("utf-8"), "text/javascript")
@@ -109,6 +116,8 @@ class Handler(BaseHTTPRequestHandler):
             ABOUT.append(self.headers.get("Authorization"))
             self._send(200, json.dumps({"user": {"emailAddress": "surveyor@example.com"}}).encode(),
                        "application/json", cors=True)
+        elif path == "/p/":
+            self._send(200, PHONE.encode("utf-8"))
         elif path == "/parent.html":
             self._send(200, PARENT_PAGE.encode("utf-8"))
         else:
@@ -190,6 +199,37 @@ stranger.load(QUrl(STRANGER + "/parent.html"))
 wait(lambda: False, 3)
 check(js(stranger, "document.querySelector('iframe')!==null") is True and got(stranger) == "[]",
       "a stranger framing the link page gets nothing at all, not even ready")
+
+# ---- the phone page: its Drive card (7c) ---------------------------------------------------------------------------
+from biruni.field_photos.handover import HandoverKey  # noqa: E402
+import tempfile  # noqa: E402
+
+pk = HandoverKey(tempfile.mkdtemp()).public
+k = bridge.new_key()
+plain = Page(profile)
+n_link = len(LINK_GETS)
+plain.load(QUrl(f"{PARENT}/p/#k={k}&i={bridge.pin(k)}&l=en"))
+wait(lambda: js(plain, "typeof DRV") == "object", 15)
+wait(lambda: False, 2)
+check(js(plain, "document.getElementById('driveCard')===null&&!DRV.on") is True and len(LINK_GETS) == n_link,
+      "a link without d=1: no Drive card, and the link page is never asked for")
+ph = Page(profile)
+ph.load(QUrl(f"{PARENT}/p/#k={k}&i={bridge.pin(k)}&l=ar&d=1&pk={pk}"))
+check(wait(lambda: js(ph, "!!document.getElementById('driveCard')") is True, 15), "with d=1&pk=: the Drive card")
+check(js(ph, "PCKEY") == pk, "… and photos are sealed for that key from the start")
+check(wait(lambda: js(ph, "DRV.ok()") is True, 20), "the link page hands its token to the phone page "
+      + str(js(ph, "JSON.stringify({s:DRV.state,r:DRV.ready})")))
+check(js(ph, "DRV.state") == "idle" and js(ph, "document.querySelector('#driveCard .dstate').textContent")
+      == js(ph, "T.driveIdle") and js(ph, "T.driveIdle") != "", "the card says it is linked, in the page's language")
+check(js(ph, "document.querySelector('#driveCard iframe').src") == HELPER + "/link/",
+      "the link is a frame of the link page (not Google's script in the photo page)")
+check(js(ph, "[...document.scripts].every(s=>!s.src)&&typeof google==='undefined'") is True,
+      "the photo page itself loads no outside script, and Google's object never exists in it")
+check(all(not r.startswith(PARENT + "/p/#") and "k=" not in r for r in LINK_GETS),
+      "the photo page's address (with the key after #) never reaches the link page")
+ph.runJavaScript("window.postMessage({v:1,type:'biruni-drive-token',nonce:DRV.nonce,token:'forged',exp:Date.now()+9e6},'*')")
+wait(lambda: False, 1)
+check(js(ph, "DRV.tok") != "forged", "a token posted by the page to itself (not from the link frame) is ignored")
 
 check(not any("Content Security Policy" in m for m in CONSOLE), "nothing was refused by the CSP")
 print(f"\n{'FAILED ' + str(len(failures)) if failures else 'ALL PASSED'}")

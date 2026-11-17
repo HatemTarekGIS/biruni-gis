@@ -999,7 +999,21 @@ def phone_texts(tr):
             "handNoScan": tr("This browser cannot read codes. Use Chrome on Android."),
             "handFail": tr("The two phones could not link. Put both on the same Wi-Fi or on one phone's hotspot - no "
                            "internet is needed."),
-            "handBad": tr("This is not a hand-over code."), "handCarry": tr("Carrying {n} photos for teammates.")}
+            "handBad": tr("This is not a hand-over code."), "handCarry": tr("Carrying {n} photos for teammates."),
+            # sending through the surveyor's own Google Drive (drive_page.py)
+            "driveTitle": tr("Google Drive"), "driveLink": tr("Link Google Drive"),
+            "driveRelink": tr("Link Google Drive again"), "driveOpen": tr("Open the Google Drive link"),
+            "driveUnlinked": tr("When the computer cannot be reached, photos go to your own Google Drive, locked so "
+                                "that only the office computer can open them."),
+            "driveIdle": tr("Linked. Photos go here when the computer cannot be reached."),
+            "driveAuth": tr("The link to Google Drive has ended. Tap to link again."),
+            "driveUp": tr("Sending to Google Drive…"), "driveWait": tr("Google Drive is busy - trying again soon."),
+            "driveFull": tr("Your Google Drive is full. Photos wait on this phone."),
+            "driveErr": tr("Google Drive could not be linked."), "driveDenied": tr("Google Drive was not allowed."),
+            "driveInApp": tr("To use Google Drive, open this page in Chrome or Safari."),
+            "drivePopupBlocked": tr("The browser blocked the Google Drive window. Allow pop-ups for this page."),
+            "driveIn": tr("In Google Drive:"),
+            "driveMode": tr("The computer cannot be reached - photos are going to your Google Drive.")}
 
 
 def all_phone_texts():
@@ -1165,6 +1179,9 @@ input.in:focus{border-color:var(--accent)}
 #handQr{display:block;width:min(78vw,300px);height:auto;margin:0 auto 12px;border-radius:12px;image-rendering:pixelated}
 #handScan{max-width:260px;margin:0 auto 12px}.panel button#handCancel{justify-content:center}
 .hide{display:none!important}
+.dframe{display:block;width:100%;height:84px;border:0;margin-top:8px;background:transparent}
+.dstate{font-size:14px;color:var(--dim);margin-top:4px}.dcount{font-weight:700;font-variant-numeric:tabular-nums}
+.dpop{margin-top:8px}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style></head><body>
 <header class="top">

@@ -94,6 +94,66 @@ else{$('ui').hidden=false;showWho();post({type:'biruni-drive-ready',mode:MODE});
 </script></body></html>"""
 
 
+# ---- the phone page's side (bridge.phone_page puts it before PHONE_JS; it needs BOOT_JS's DRIVE_ON) ---------------
+DRIVE_JS = r"""
+/* ---- Google Drive: the card, the link (a frame or a window of the link page), the token in memory only ---- */
+const DRV={on:false,tok:'',exp:0,state:'',nonce:'',frame:null,win:null,card:null,ready:false,n:0,
+ HELPER:'__DRIVE_HELPER__',API:'__DRIVE_API__',HOLD:new Map(),
+ ok(){return !!this.tok&&Date.now()<this.exp-300000},
+ holds(id){return this.HOLD.get(id)==='drive'}};
+DRV.ORIGIN=(()=>{try{return new URL(DRV.HELPER).origin}catch(e){return ''}})();
+function driveUA(){const u=navigator.userAgent||'';
+ return {inapp:/; wv\)|FBAN|FBAV|Instagram|Line\//.test(u),
+  ios:/iPad|iPhone|iPod/.test(u)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1)}}
+function driveEl(tag,cls,txt){const e=document.createElement(tag);if(cls)e.className=cls;if(txt!=null)e.textContent=txt;return e}
+function driveSay(state){DRV.state=state;const c=DRV.card;if(!c)return;
+ const S={unlinked:T.driveUnlinked,auth:T.driveAuth,idle:T.driveIdle,up:T.driveUp,wait:T.driveWait,full:T.driveFull,
+  err:T.driveErr,denied:T.driveDenied,inapp:T.driveInApp,blocked:T.drivePopupBlocked}[state]||'';
+ c.querySelector('.dstate').textContent=S||'';
+ const linked=DRV.ok();c.querySelector('.dcount').classList.toggle('hide',!linked&&!DRV.n);
+ c.querySelector('.dcount').textContent=(T.driveIn||'')+' '+DRV.n}
+function driveHello(){const t=DRV.win&&!DRV.win.closed?DRV.win:(DRV.frame&&DRV.frame.contentWindow);if(!t)return;
+ const label=DRV.ok()?T.driveRelink:(DRV.state==='auth'?T.driveRelink:T.driveLink);
+ try{t.postMessage({v:1,type:'biruni-drive-hello',nonce:DRV.nonce,label:String(label||'Google Drive').slice(0,80),
+  dir:document.documentElement.dir==='rtl'?'rtl':'ltr'},DRV.ORIGIN)}catch(e){}}
+function driveLabel(){if(!DRV.card)return;DRV.card.querySelector('.dtitle').textContent=T.driveTitle||'Google Drive';
+ DRV.card.querySelector('.dpop').textContent=T.driveOpen||'';driveSay(DRV.state);if(DRV.ready)driveHello()}
+function driveFrame(){if(DRV.frame||!DRV.card)return;const f=document.createElement('iframe');f.className='dframe';
+ f.title='Google Drive';f.src=DRV.HELPER+'/link/';DRV.frame=f;DRV.card.querySelector('.dlink').appendChild(f);
+ setTimeout(()=>{if(!DRV.ready)drivePopupButton()},8000)}
+function drivePopupButton(){if(DRV.card)DRV.card.querySelector('.dpop').classList.remove('hide')}
+function driveOpenWindow(){const w=window.open(DRV.HELPER+'/link/','biruni-drive','popup,width=480,height=640');
+ if(!w){driveSay('blocked');return}DRV.win=w}
+function driveToken(m){if(typeof m.token!=='string'||!m.token||m.token.length>4096||!(+m.exp>Date.now()))return;
+ DRV.tok=m.token;DRV.exp=+m.exp;driveSay('idle');driveHello();if(typeof drivePump==='function')drivePump()}
+function driveDead(){DRV.tok='';DRV.exp=0;driveSay('auth');driveHello()}
+window.addEventListener('message',e=>{
+ if(!DRV.on||e.origin!==DRV.ORIGIN)return;
+ const fromFrame=DRV.frame&&e.source===DRV.frame.contentWindow,fromWin=DRV.win&&e.source===DRV.win;
+ if(!fromFrame&&!fromWin)return;const m=e.data;if(!m||m.v!==1||typeof m.type!=='string')return;
+ if(m.type==='biruni-drive-ready'){DRV.ready=true;driveHello();return}
+ if(m.nonce!==DRV.nonce)return;
+ if(m.type==='biruni-drive-token')driveToken(m);
+ else if(m.type==='biruni-drive-error'){const c=String(m.code||'');
+  if(c==='gsi'||c==='popup_blocked'){drivePopupButton();driveSay(c==='popup_blocked'?'blocked':'err')}
+  else if(c==='denied'||c==='scope')driveSay('denied');else if(c!=='closed')driveSay('err')}});
+function driveStart(){if(DRV.on||typeof DRIVE_ON==='undefined'||!DRIVE_ON||!DRV.ORIGIN)return;DRV.on=true;
+ DRV.nonce=rid();const ua=driveUA();
+ const c=driveEl('div','card dcard');c.id='driveCard';
+ const r=driveEl('div','row');r.appendChild(driveEl('span','lbl dtitle'));r.appendChild(driveEl('span','dcount hide'));c.appendChild(r);
+ c.appendChild(driveEl('div','dstate'));c.appendChild(driveEl('div','dlink'));
+ const pb=driveEl('button','ghost dpop hide');pb.type='button';pb.onclick=driveOpenWindow;c.appendChild(pb);
+ const w=$('work');w.insertBefore(c,w.firstChild);DRV.card=c;driveLabel();
+ if(ua.inapp){driveSay('inapp');return}
+ driveSay('unlinked');if(ua.ios)drivePopupButton();else driveFrame();
+ window.addEventListener('online',()=>{if(!DRV.ready&&DRV.frame){DRV.frame.src=DRV.HELPER+'/link/'}})}
+"""
+
+
+def drive_js():
+    return DRIVE_JS.replace("__DRIVE_HELPER__", HELPER).replace("__DRIVE_API__", API)
+
+
 def _origin(url):
     from urllib.parse import urlsplit
 
