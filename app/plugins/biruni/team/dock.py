@@ -1037,7 +1037,19 @@ class TeamDock(QDockWidget):
                 return
         d = QFileDialog.getExistingDirectory(self, tr("A folder the whole team syncs"), cur)
         if d:
-            rf.use_folder(self.node, d)
+            try:
+                rf.use_folder(self.node, d)
+            except rf.FolderError as e:
+                why = e.args[0] if e.args else ""
+                if why == "no-room-here":
+                    msg = tr("No team room was found in that folder.")
+                elif why == "no-parent":
+                    msg = tr("That folder does not exist.")
+                elif why == "not-host":
+                    msg = tr("Only the host can create the room folder.")
+                else:
+                    msg = tr("Could not use that folder.")
+                QMessageBox.warning(self, tr("Shared folder"), msg)
             self.refresh_folder()
 
     def refresh_folder(self):
@@ -1052,8 +1064,24 @@ class TeamDock(QDockWidget):
             lab.setText("")
             return
         s = c.status
-        if s.get("error"):
-            lab.setText(tr("Shared folder: cannot be reached ({0})").format(s["error"][:120]))
+        state = s.get("state") or "ok"
+        if state == "error" or s.get("error"):
+            lab.setText(tr("Shared folder: cannot be reached ({0})").format((s.get("error") or "")[:120]))
+            return
+        if state == "no-drive":
+            lab.setText(tr("Shared folder: drive or folder not found"))
+            return
+        if state == "missing":
+            lab.setText(tr("Shared folder: room folder is missing"))
+            return
+        if state == "no-marker":
+            lab.setText(tr("Shared folder: room marker is missing"))
+            return
+        if state == "host-silent":
+            lab.setText(tr("Shared folder: host has been silent for days"))
+            return
+        if state == "rejoin-needed":
+            lab.setText(tr("Shared folder: rejoin needed"))
             return
         when = time.strftime("%H:%M", time.localtime(s["last"])) if s.get("last") else "–"
         text = tr("Shared folder: synced at {0} · {1} other computers").format(when, s.get("devices", 0))

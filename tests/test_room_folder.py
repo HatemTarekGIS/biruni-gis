@@ -125,6 +125,7 @@ for n in (A, B, C):
 
 shared = os.path.join(root, "OneDrive - Office", "Projects")
 os.makedirs(shared)
+rf.create_room_folder(host, shared)
 hc, ac, bc = (rf.FolderCarrier(n, shared) for n in (host, A, B))
 
 
@@ -160,9 +161,10 @@ check(same, "the host's map and both members' maps end the same: " + str([[owner
 check(A.since == B.since == host.store.head(), f"everyone is at the head of the stream ({A.since}, {B.since}, "
                                                  f"{host.store.head()})")
 check(A.store.outbox_count() == 0 and B.store.outbox_count() == 0, "the members' outboxes are empty")
-names = sorted(os.listdir(rf.room_dir(shared, host)))
+names = sorted(x for x in os.listdir(rf.room_dir(shared, host)) if x.startswith("d-"))
 check(names == sorted("d-" + x for x in ("a" * 32, "b" * 32, host.me_id)), f"one folder per computer ({names})")
-with open(os.path.join(ac.my_dir(), rf.HEAD), "rb") as f:
+ahead = sorted(x for x in os.listdir(ac.my_dir()) if rf._HEAD_RE.match(x))[-1]
+with open(os.path.join(ac.my_dir(), ahead), "rb") as f:
     raw = f.read()
 check(b"Mona" not in raw and all(b"Mona" not in open(os.path.join(ac.my_dir(), x), "rb").read()
                                  for x in os.listdir(ac.my_dir())), "the storage provider reads nothing (sealed)")
@@ -171,11 +173,11 @@ check(b"Mona" not in raw and all(b"Mona" not in open(os.path.join(ac.my_dir(), x
 adir = ac.my_dir()
 anyfile = next(x for x in os.listdir(adir) if x.endswith(rf.EXT))
 shutil.copy(os.path.join(adir, anyfile), os.path.join(adir, anyfile[:-4] + " (1)" + rf.EXT))
-shutil.copy(os.path.join(adir, rf.HEAD), os.path.join(adir, "head (1).bph"))
+shutil.copy(os.path.join(adir, ahead), os.path.join(adir, ahead[:-4] + " (1).bph"))
 with open(os.path.join(adir, "000099-0123456789ab.bpf.tmp"), "wb") as f:
     f.write(b"half")
 set_owner(A, al, f4, "Mona again")
-ac.sync()
+ac.sync(force=True)
 newest = sorted(x for x in os.listdir(adir) if rf._NAME.match(x))[-1]
 full = open(os.path.join(adir, newest), "rb").read()
 with open(os.path.join(adir, newest), "wb") as f:
@@ -186,12 +188,12 @@ check(rep["pending"] >= 1 and owner(hl, f4) == "owner 4", f"a half-synced file w
 check(rep["skipped"] >= 3, f"conflict copies and temp files are never opened (skipped {rep['skipped']})")
 with open(os.path.join(adir, newest), "wb") as f:
     f.write(full)
-rep = hc.sync()
+rep = hc.sync(force=True)
 check(owner(hl, f4) == "Mona again", f"once complete, the file is used ({rep['in']} in)")
 
 # ---- 3. altered: refused --------------------------------------------------------------------------------------------
 set_owner(B, bl, f2, "Sami again")
-bc.sync()
+bc.sync(force=True)
 bdir = bc.my_dir()
 newest_b = sorted(x for x in os.listdir(bdir) if rf._NAME.match(x))[-1]
 good = open(os.path.join(bdir, newest_b), "rb").read()
@@ -201,27 +203,36 @@ open(os.path.join(bdir, newest_b), "wb").write(bytes(bad))
 rep = hc.sync()
 check(owner(hl, f2) == "Sami", f"an altered file is never used (pending {rep['pending']})")
 open(os.path.join(bdir, newest_b), "wb").write(good)
-head_good = open(os.path.join(bdir, rf.HEAD), "rb").read()
+heads_b = {h: open(os.path.join(bdir, h), "rb").read() for h in os.listdir(bdir) if rf._HEAD_RE.match(h)}
+bhead = sorted(heads_b)[-1]
+for h in list(heads_b):
+    if h != bhead:
+        os.remove(os.path.join(bdir, h))
+head_good = heads_b[bhead]
 hb = bytearray(head_good)
 hb[-20] ^= 1
-open(os.path.join(bdir, rf.HEAD), "wb").write(bytes(hb))
+open(os.path.join(bdir, bhead), "wb").write(bytes(hb))
 rep = hc.sync()
 check(owner(hl, f2) == "Sami" and any("altered" in r for r in rep["refused"]),
       f"an altered head rejects that whole folder ({rep['refused']})")
-shutil.copy(os.path.join(adir, rf.HEAD), os.path.join(bdir, rf.HEAD))    # Mona's valid head in Sami's folder
+ahead_new = sorted(x for x in os.listdir(adir) if rf._HEAD_RE.match(x))[-1]
+os.remove(os.path.join(bdir, bhead))
+shutil.copy(os.path.join(adir, ahead_new), os.path.join(bdir, ahead_new))    # Mona's valid head in Sami's folder
 rep = hc.sync()
 check(owner(hl, f2) == "Sami" and any("someone else" in r for r in rep["refused"]),
       f"a head moved into another member's folder is refused ({rep['refused']})")
-open(os.path.join(bdir, rf.HEAD), "wb").write(head_good)
-rep = hc.sync()
+os.remove(os.path.join(bdir, ahead_new))
+for h, raw_h in heads_b.items():
+    open(os.path.join(bdir, h), "wb").write(raw_h)
+rep = hc.sync(force=True)
 check(owner(hl, f2) == "Sami again", "the intact files are used again")
 
 # ---- 4. a member removed from the room is no longer heard ----------------------------------------------------------
 host.hub.remove_member("b" * 32)
 check(any(m["id"] == "b" * 32 and m.get("state") == "out" for m in host.hub.roster()), "Sami is removed")
 set_owner(B, bl, f3, "Sami after removal")
-bc.sync()
-rep = hc.sync()
+bc.sync(force=True)
+rep = hc.sync(force=True)
 check(owner(hl, f3) == "Office" and any("not a member" in r for r in rep["refused"]),
       f"a removed member's new files are ignored ({rep['refused']})")
 ac.sync()
@@ -230,13 +241,14 @@ check(owner(al, f3) == "Office" and owner(al, f2) == "Sami again", "Mona never g
 # ---- 5. compaction, and a member away the whole time catches up from the snapshot ----------------------------------
 for i in range(5):
     set_owner(host, hl, f1, f"Office {i}")
-    hc.sync()
+    hc.sync(force=True)
 hc.keep_days = 0
 set_owner(host, hl, f4, "Office last")
-hc.sync()
+hc.sync(force=True)
 hdir = hc.my_dir()
 left = sorted(os.listdir(hdir))
-check(rf.SNAP in left and sum(1 for x in left if rf._NAME.match(x)) <= 3, f"the host compacted its folder ({left})")
+check(any(rf._SNAP_RE.match(x) for x in left) and sum(1 for x in left if rf._NAME.match(x)) <= 3,
+      f"the host compacted its folder ({left})")
 cc = rf.FolderCarrier(C, shared)
 pump(0.1)
 cc.sync()

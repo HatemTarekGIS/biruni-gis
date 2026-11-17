@@ -174,16 +174,17 @@ def _up_packs(node):
     return out
 
 
-def _down_packs(node):
+def _down_packs(node, low=None):
     st = node.store
     head = st.head()
     hub = node.hub
     roster = hub.roster() if hub is not None else node.roster
     seen = st.get("pigeon_seen_map") or {}
-    members = [m["id"] for m in roster if not m.get("host") and m.get("state") != "out" and m["id"] != node.me_id]
-    known = [int(seen[m]) for m in members if m in seen]
-    low = min(known) if known and len(known) == len(members) else 0
-    low = max(low, head - DOWN_KEEP, 0)
+    if low is None:
+        members = [m["id"] for m in roster if not m.get("host") and m.get("state") != "out" and m["id"] != node.me_id]
+        known = [int(seen[m]) for m in members if m in seen]
+        low = min(known) if known and len(known) == len(members) else 0
+    low = max(int(low), head - DOWN_KEEP, 0)
     entries, at = [], low
     while at < head:
         rows = st.since(at, 2000)
@@ -206,16 +207,8 @@ def _down_packs(node):
     return out
 
 
-def make(node):
-    """The envelopes (bytes) this computer gives: its own packs and the ones it carries. More than one when large."""
-    st = _ready(node.store)
-    prune(node)
-    if _role(node) != "host":
-        node.store.put("pigeon_only", True)  # packs by hand: a lost network must not make this computer the host
-    own = _down_packs(node) if _role(node) == "host" else _up_packs(node)
-    blobs = [seal(node, b) for b in own]
-    now = time.time()
-    blobs += [bytes(r[0]) for r in _q(st, "SELECT blob FROM pigeon_carry WHERE expires>=? ORDER BY made", (now,))]
+def envelopes(blobs, room=None):
+    """Split sealed pack blobs into envelope byte strings, each at most MAX_FILE bytes."""
     files, cur, size = [], [], 0
     for blob in blobs:
         n = len(blob) * 4 // 3 + 4
@@ -226,7 +219,21 @@ def make(node):
         size += n
     if cur:
         files.append(cur)
-    return [MAGIC + crypto.canonical({"room": node.keys.tag, "packs": [crypto.b64(b) for b in f]}) for f in files]
+    head = {"room": room} if room is not None else {}
+    return [MAGIC + crypto.canonical(dict(head, packs=[crypto.b64(b) for b in f])) for f in files]
+
+
+def make(node):
+    """The envelopes (bytes) this computer gives: its own packs and the ones it carries. More than one when large."""
+    st = _ready(node.store)
+    prune(node)
+    if _role(node) != "host":
+        node.store.put("pigeon_only", True)  # packs by hand: a lost network must not make this computer the host
+    own = _down_packs(node) if _role(node) == "host" else _up_packs(node)
+    blobs = [seal(node, b) for b in own]
+    now = time.time()
+    blobs += [bytes(r[0]) for r in _q(st, "SELECT blob FROM pigeon_carry WHERE expires>=? ORDER BY made", (now,))]
+    return envelopes(blobs, node.keys.tag)
 
 
 def file_name(node):

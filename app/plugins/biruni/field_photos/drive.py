@@ -176,10 +176,10 @@ SEEN_NAME = "drive_seen.json"    # in the photo folder: files already taken in (
 INTERVAL = 15                    # seconds; Drive for desktop's streaming mode sends no change notices to rely on
 
 
-def office_folders(roots, k):
-    """The office's Drive folders under the synced roots the user chose (e.g. G:\\My Drive): the folder itself,
-    root/<folder>, and one level deeper (a folder kept inside another, a shared drive)."""
-    name, out = folder_name(k), []
+def named_folders(roots, name):
+    """The Drive folders named ``name`` under the synced roots the user chose (e.g. G:\\My Drive): the folder itself,
+    root/<name>, and one level deeper (a folder kept inside another, a shared drive)."""
+    out = []
     for root in roots or ():
         root = str(root or "")
         if not root or not os.path.isdir(root):
@@ -197,15 +197,13 @@ def office_folders(roots, k):
     return out
 
 
-def ensure_office_folder(roots, k):
-    """(path, created): the office's Drive folder, made in the first synced root that takes it when none is found.
-    The office owns this folder and shares it with each surveyor. A root that refuses (G:\\Shared drives) is
-    skipped. (None, False) when no root can hold it. The path is written like office_folders writes it, so a
-    later look finds the same one."""
-    found = office_folders(roots, k)
+def ensure_named_folder(roots, name):
+    """(path, created): the Drive folder named ``name``, made in the first synced root that takes it when none is
+    found. A root that refuses (G:\\Shared drives) is skipped. (None, False) when no root can hold it. The path is
+    written like named_folders writes it, so a later look finds the same one."""
+    found = named_folders(roots, name)
     if found:
         return found[0], False
-    name = folder_name(k)
     for root in roots or ():
         root = str(root or "")
         if not root or not os.path.isdir(root):
@@ -217,6 +215,20 @@ def ensure_office_folder(roots, k):
             continue
         return os.path.normcase(os.path.abspath(path)), True
     return None, False
+
+
+def office_folders(roots, k):
+    """The office's Drive folders under the synced roots the user chose (e.g. G:\\My Drive): the folder itself,
+    root/<folder>, and one level deeper (a folder kept inside another, a shared drive)."""
+    return named_folders(roots, folder_name(k))
+
+
+def ensure_office_folder(roots, k):
+    """(path, created): the office's Drive folder, made in the first synced root that takes it when none is found.
+    The office owns this folder and shares it with each surveyor. A root that refuses (G:\\Shared drives) is
+    skipped. (None, False) when no root can hold it. The path is written like office_folders writes it, so a
+    later look finds the same one."""
+    return ensure_named_folder(roots, folder_name(k))
 
 
 def _volumes():
