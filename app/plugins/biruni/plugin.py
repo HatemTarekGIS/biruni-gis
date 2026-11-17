@@ -378,6 +378,24 @@ class BiruniPlugin(QObject):
 
             return mod.install(self)
 
+        def field_photos_drive():
+            def on_change(*_):
+                import sys
+
+                m = sys.modules.get(f"{__package__}.field_photos.dock")
+                if m is not None:
+                    m.on_project_changed(self)
+
+            proj = QgsProject.instance()
+            proj.readProject.connect(on_change)
+            proj.cleared.connect(on_change)
+
+            def undo():
+                proj.readProject.disconnect(on_change)
+                proj.cleared.disconnect(on_change)
+
+            return undo
+
         skip = set(filter(None, os.environ.get("BIRUNI_SKIP_EXTRAS", "").split(",")))  # for tracking down issues
         parts = (("layer facts", layer_facts), ("autosave", autosave), ("area filter", area_filter),
                  ("explain", explain), ("arabic labels", arabic), ("selection sets", selections),
@@ -386,7 +404,8 @@ class BiruniPlugin(QObject):
                  ("map stops", map_stops), ("centred windows", centred_windows), ("vault", vault),
                  ("layers panel", layers_panel), ("locked files", locked_files),
                  ("service sign-in", service_sign_in), ("team rooms", team_rooms), ("diwan", diwan),
-                 ("astrolabe", astrolabe), ("shapefile arcs", shapefile_arcs))
+                 ("astrolabe", astrolabe), ("shapefile arcs", shapefile_arcs),
+                 ("field photos drive", field_photos_drive))
         self._extra_unloads = [u for u in (self._optional(name, fn) for name, fn in parts
                                            if name.replace(" ", "_") not in skip) if u]
 

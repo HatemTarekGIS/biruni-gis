@@ -15,14 +15,19 @@ from qgis.core import (Qgis, QgsApplication, QgsCoordinateReferenceSystem, QgsCo
                        QgsVectorFileWriter, QgsVectorLayer)
 from qgis.PyQt.QtCore import QMetaType, Qt, QTimer, QUrl
 from qgis.PyQt.QtGui import QColor, QDesktopServices, QPixmap
-from qgis.PyQt.QtWidgets import (QAbstractItemView, QComboBox, QDockWidget, QFileDialog, QFrame, QHBoxLayout,
-                                 QInputDialog, QLabel, QLineEdit, QMenu, QMessageBox, QPushButton, QTreeWidget,
-                                 QTreeWidgetItem, QVBoxLayout, QWidget)
+from qgis.PyQt.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QDialog, QDockWidget, QFileDialog, QFrame,
+                                 QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget, QMenu, QMessageBox,
+                                 QPushButton, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget)
 
 from ..i18n import lang, tr
 from .server import read_surveyor_keys
 
 KEY = "biruni/field-photos/"
+P_SCOPE = "Biruni"
+P_DRIVE = "/field-photos/drive"
+P_NOTICE = "/field-photos/drive-notice"
+DRIVE_ROOTS = KEY + "drive-roots"
+KEY_BACKUP = KEY + "key-backup"
 LAYER = "field_photos"
 GPKG = "field_photos.gpkg"
 WGS84 = QgsCoordinateReferenceSystem("EPSG:4326")
@@ -780,7 +785,8 @@ class FieldPhotosDock(QDockWidget):
         self.plugin = plugin
         self.iface = plugin.iface
         self.setObjectName("BiruniFieldPhotos")
-        self.server = self.tunnel = self.bridge = None
+        self.server = self.tunnel = self.bridge = self.drive = None
+        self._drive_last = None
         self._bridge_since = 0
         self._relays_up = 0
         self.layer = None
@@ -880,6 +886,45 @@ class FieldPhotosDock(QDockWidget):
         row.addWidget(show)
         cv.addWidget(QLabel(tr("Photos are saved in")))
         cv.addLayout(row)
+        self.drive_box = QCheckBox(tr("Receive photos through Google Drive (this project)"))
+        self.drive_box.toggled.connect(self._on_drive_toggled)
+        cv.addWidget(self.drive_box)
+        self.drive_frame = QFrame()
+        dv = QVBoxLayout(self.drive_frame)
+        dv.setContentsMargins(18, 2, 0, 4)
+        dv.setSpacing(4)
+        dv.addWidget(QLabel(tr("Google Drive folders on this computer")))
+        self.drive_list = QListWidget()
+        self.drive_list.setMaximumHeight(54)
+        dv.addWidget(self.drive_list)
+        drow = QHBoxLayout()
+        self.drive_add_btn = QPushButton(tr("Add…"))
+        self.drive_add_btn.clicked.connect(self._add_drive_root)
+        self.drive_remove_btn = QPushButton(tr("Remove"))
+        self.drive_remove_btn.clicked.connect(self._remove_drive_root)
+        drow.addWidget(self.drive_add_btn)
+        drow.addWidget(self.drive_remove_btn)
+        drow.addStretch(1)
+        dv.addLayout(drow)
+        self.drive_state = QLabel()
+        self.drive_state.setObjectName("GpsHint")
+        self.drive_state.setWordWrap(True)
+        dv.addWidget(self.drive_state)
+        krow = QHBoxLayout()
+        self.key_backup_btn = QPushButton(tr("Back up key…"))
+        self.key_backup_btn.clicked.connect(self._backup_key)
+        self.key_restore_btn = QPushButton(tr("Restore key…"))
+        self.key_restore_btn.clicked.connect(self._restore_key)
+        krow.addWidget(self.key_backup_btn)
+        krow.addWidget(self.key_restore_btn)
+        krow.addStretch(1)
+        dv.addLayout(krow)
+        self.key_hint = QLabel()
+        self.key_hint.setObjectName("GpsHint")
+        self.key_hint.setWordWrap(True)
+        dv.addWidget(self.key_hint)
+        self.drive_frame.hide()
+        cv.addWidget(self.drive_frame)
         self.start_btn = QPushButton(tr("Start"))
         self.start_btn.setObjectName("GpsPrimary")
         self.start_btn.clicked.connect(self.toggle)
@@ -1010,6 +1055,7 @@ class FieldPhotosDock(QDockWidget):
         self._show_hint()
         self._show_form()
         self.folder.setText(self._folder())
+        self._sync_drive()
 
     def refresh_theme(self):
         from ..tracking import panel_qss
@@ -1076,7 +1122,10 @@ class FieldPhotosDock(QDockWidget):
 
         if self.server is not None:
             return
-        if QMessageBox.question(self, tr("New code"), self.new_code.toolTip()) == QMessageBox.StandardButton.Yes:
+        msg = self.new_code.toolTip()
+        if self.drive_enabled():
+            msg += "\n\n" + tr("Photos still waiting in Google Drive under the old code will not be received.")
+        if QMessageBox.question(self, tr("New code"), msg) == QMessageBox.StandardButton.Yes:
             load_key(QgsSettings(), fresh=True)
             self.state.setText(tr("A new code is made. Press Start to show it."))
 
@@ -1149,7 +1198,7 @@ class FieldPhotosDock(QDockWidget):
             return
         texts = all_phone_texts()
         kinds = [k for k in self.kinds.text().replace("،", ",").split(",") if k.strip()]
-        cert_folder = os.path.join(QgsApplication.qgisSettingsDirPath(), "biruni")
+        cert_folder = self._cert_folder()
         bridged = mode == "bridge"  # then only the hidden receiver on this PC talks to the server
         try:
             self.server = PhotoServer(folder, cert_folder, texts, lang(), kinds, PHOTO_PORT,
@@ -1165,6 +1214,7 @@ class FieldPhotosDock(QDockWidget):
         self.own.setEnabled(False)
         self.new_code.setEnabled(False)
         self._poll.start()
+        self._start_drive()
         if bridged:
             self._start_bridge()
         elif mode in ("internet", "own"):
@@ -1233,6 +1283,7 @@ class FieldPhotosDock(QDockWidget):
         self.state.setText(tr("Opening the secure address…"))
 
     def stop(self):
+        self._stop_drive()
         self._poll.stop()
         if self._downloading is not None:
             self._downloading["cancel"] = True
@@ -1336,6 +1387,8 @@ class FieldPhotosDock(QDockWidget):
                 self._on_bridge(value)
             elif kind == "pos":
                 self._on_pos(value)
+            elif kind == "drive":
+                self._on_drive(value)
             elif kind == "rejected":
                 self.state.setText(tr("Refused a photo from blocked device {d} ({r}).").format(
                     d=value.get("device_id", ""), r=value.get("reason", "")))
@@ -1835,6 +1888,7 @@ class FieldPhotosDock(QDockWidget):
         else:
             PhotoStore(self._active_folder(), self.form()).unblock_device(device_id)
         self._show_team(include_disk=bool(self._photo_records))
+        self._drive_retry()
 
     def save_daily_report(self, out_path, day=None):
         """Write the daily report (HTML or PDF) for all photos in the folder."""
@@ -1972,6 +2026,7 @@ class FieldPhotosDock(QDockWidget):
             self.state.setText(tr("Per-surveyor QR mode: each surveyor needs their own QR code (Surveyor QR code…)."))
         else:
             self.show_shared_qr()
+        self._drive_retry()
 
     def _current_base_url(self):
         if self._base_qr_url:
@@ -2010,6 +2065,7 @@ class FieldPhotosDock(QDockWidget):
         self._show_qr(url, f"{entry['name']} — {url}")
         self.url.setText(f"{entry['name']} ({entry['id']})")
         self._show_team(include_disk=True)
+        self._drive_retry()
         return {"id": entry["id"], "name": entry["name"], "secret": entry["secret"], "url": url}
 
     def revoke_surveyor_qr(self, target, reason=""):
@@ -2217,6 +2273,399 @@ class FieldPhotosDock(QDockWidget):
             canvas.flashGeometries(geoms, canvas.mapSettings().destinationCrs(), QColor("#2CC5B4"),
                                    QColor("#FFFFFF"), 3, 300)
 
+    # ---- Google Drive intake & handover key backup -------------------------------------------------------------------
+    def _cert_folder(self):
+        return os.path.join(QgsApplication.qgisSettingsDirPath(), "biruni")
+
+    def drive_enabled(self):
+        return bool(QgsProject.instance().readBoolEntry(P_SCOPE, P_DRIVE, False)[0])
+
+    def _drive_roots(self):
+        try:
+            raw = json.loads(QgsSettings().value(DRIVE_ROOTS, "") or "[]")
+        except (TypeError, ValueError):
+            return []
+        if not isinstance(raw, list):
+            return []
+        out, seen = [], set()
+        for p in raw:
+            p = str(p or "").strip()
+            if not p:
+                continue
+            key = os.path.normcase(os.path.normpath(p))
+            if key not in seen:
+                seen.add(key)
+                out.append(p)
+        return out
+
+    def _set_drive_roots(self, roots):
+        out, seen = [], set()
+        for p in roots or ():
+            p = str(p or "").strip()
+            if not p:
+                continue
+            key = os.path.normcase(os.path.normpath(p))
+            if key not in seen:
+                seen.add(key)
+                out.append(p)
+        QgsSettings().setValue(DRIVE_ROOTS, json.dumps(out))
+        self.drive_list.clear()
+        self.drive_list.addItems(out)
+        if self.drive is not None:
+            self.drive.roots = list(out)
+        if not out:
+            self.drive_state.setText(tr("Add the folder Google Drive for desktop syncs to, for example G:\\My Drive."))
+            self.drive_state.setToolTip("")
+        elif self.server is None:
+            self.drive_state.setText(tr("Google Drive is checked while Field Photos is started."))
+            self.drive_state.setToolTip("")
+
+    def _add_drive_root(self):
+        d = QFileDialog.getExistingDirectory(self, tr("Google Drive folder on this computer"), os.path.expanduser("~"))
+        if not d:
+            return
+        self._set_drive_roots(self._drive_roots() + [d])
+        if self.server is not None and self.drive is None and self.drive_enabled():
+            self._start_drive()
+
+    def _remove_drive_root(self):
+        rows = sorted({idx.row() for idx in self.drive_list.selectedIndexes()}, reverse=True)
+        if not rows:
+            r = self.drive_list.currentRow()
+            if r >= 0:
+                rows = [r]
+        if not rows:
+            return
+        roots = self._drive_roots()
+        for r in rows:
+            if 0 <= r < len(roots):
+                roots.pop(r)
+        self._set_drive_roots(roots)
+
+    def _show_drive_idle_state(self, roots=None):
+        if roots is None:
+            roots = self._drive_roots()
+        if not roots:
+            self.drive_state.setText(tr("Add the folder Google Drive for desktop syncs to, for example G:\\My Drive."))
+        else:
+            self.drive_state.setText(tr("Google Drive is checked while Field Photos is started."))
+        self.drive_state.setToolTip("")
+
+    def _on_drive_toggled(self, on):
+        proj = QgsProject.instance()
+        if on:
+            if not proj.readBoolEntry(P_SCOPE, P_NOTICE, False)[0]:
+                if not self._confirm_drive():
+                    self.drive_box.blockSignals(True)
+                    self.drive_box.setChecked(False)
+                    self.drive_box.blockSignals(False)
+                    return
+            proj.writeEntryBool(P_SCOPE, P_DRIVE, True)
+            proj.writeEntryBool(P_SCOPE, P_NOTICE, True)
+            proj.setDirty(True)
+            if not self._drive_roots():
+                from . import drive
+
+                suggested = drive.suggest_roots()
+                if suggested:
+                    self._set_drive_roots(suggested)
+            roots = self._drive_roots()
+            self.drive_list.clear()
+            self.drive_list.addItems(roots)
+            self.drive_frame.setVisible(True)
+            self._show_key_state()
+            if not self._is_key_backed_up():
+                self._nudge_backup()
+            if self.server is not None:
+                self._start_drive()
+            if self.drive is None:
+                self._show_drive_idle_state(roots)
+        else:
+            proj.removeEntry(P_SCOPE, P_DRIVE)
+            proj.setDirty(True)
+            self.drive_frame.setVisible(False)
+            self._stop_drive()
+
+    def _confirm_drive(self):
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Question)
+        box.setWindowTitle(tr("Google Drive for this project"))
+        box.setText(tr(
+            "With this on, phones may send this project's photos through Google Drive.\n\n"
+            "Each photo, with its location and notes, is encrypted on the phone for this computer. Google and "
+            "anyone who can see the Drive folder cannot open it. The file's time, size and the phone's ID are not "
+            "hidden.\n\n"
+            "The encrypted files are kept in the Google account the phone signs in to, on Google's servers, which "
+            "may be outside Saudi Arabia. If this project's data must stay in the Kingdom (GEOSA rules), get approval "
+            "from whoever is responsible first.\n\n"
+            "This is for this project only; it stays off for every other project."
+        ))
+        on_btn = box.addButton(tr("Turn on"), QMessageBox.ButtonRole.AcceptRole)
+        cancel_btn = box.addButton(tr("Cancel"), QMessageBox.ButtonRole.RejectRole)
+        box.setDefaultButton(cancel_btn)
+        box.exec()
+        return box.clickedButton() is on_btn
+
+    def _nudge_backup(self):
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Information)
+        box.setWindowTitle(tr("Back up this computer's key"))
+        box.setText(tr(
+            "Photos sent through Google Drive are locked for this computer's key. If the key is lost (Windows "
+            "reinstalled, disk replaced, another user account), photos still waiting in Google Drive can never be "
+            "opened by anyone. The backup is one small file protected by a password you choose. Keep it away from "
+            "this computer."
+        ))
+        now_btn = box.addButton(tr("Back up now…"), QMessageBox.ButtonRole.AcceptRole)
+        box.addButton(tr("Later"), QMessageBox.ButtonRole.RejectRole)
+        box.setDefaultButton(now_btn)
+        box.exec()
+        if box.clickedButton() is now_btn:
+            self._backup_key()
+
+    def _sync_drive(self):
+        on = self.drive_enabled()
+        self.drive_box.blockSignals(True)
+        self.drive_box.setChecked(on)
+        self.drive_box.blockSignals(False)
+        self.drive_frame.setVisible(on)
+        roots = self._drive_roots()
+        self.drive_list.clear()
+        self.drive_list.addItems(roots)
+        if on:
+            self._show_key_state()
+        if self.server is not None:
+            if on and roots:
+                self._start_drive()
+            else:
+                self._stop_drive()
+                if on:
+                    self._show_drive_idle_state(roots)
+        elif on:
+            self._show_drive_idle_state(roots)
+
+    def _start_drive(self):
+        from . import bridge, drive
+
+        roots = self._drive_roots()
+        if not self.drive_enabled() or not roots or self.server is None or self.drive is not None:
+            return
+        k = bridge.load_key(QgsSettings())
+        self._drive_last = {"new": 0, "refused": 0, "reasons": []}
+        self.drive = drive.DriveIntake(
+            roots, self.server.store, self.server.handover, k, self.server.events, interval=drive.INTERVAL
+        )
+        self.drive.start()
+        self.drive_state.setText(tr("Checking Google Drive…"))
+        self.drive_state.setToolTip("")
+
+    def _stop_drive(self):
+        if self.drive is not None:
+            self.drive.stop()
+            self.drive = None
+        if self.drive_enabled():
+            self._show_drive_idle_state(self._drive_roots())
+
+    def _drive_retry(self):
+        if self.drive is not None:
+            self.drive.retry_refused()
+        else:
+            from . import drive
+
+            drive.forget_refused(self._active_folder())
+
+    def _on_drive(self, ev):
+        if "error" in ev:
+            self.drive_state.setText(tr("Google Drive could not be checked: {e}").format(e=ev.get("error") or ""))
+            self.drive_state.setToolTip("")
+            return
+        if int(ev.get("folders") or 0) == 0:
+            from . import bridge, drive
+
+            k = self.drive.k if self.drive is not None else bridge.load_key(QgsSettings())
+            self.drive_state.setText(
+                tr("No Biruni folder in Google Drive yet ({name}). It appears after the first phone sends.")
+                .format(name=drive.folder_name(k))
+            )
+            self.drive_state.setToolTip("")
+            return
+        if self._drive_last is None:
+            self._drive_last = {"new": 0, "refused": 0, "reasons": []}
+        st = self._drive_last
+        st["new"] += int(ev.get("new") or 0)
+        refused = ev.get("refused") or []
+        st["refused"] += len(refused)
+        for item in refused:
+            if isinstance(item, (list, tuple)) and len(item) >= 2:
+                st["reasons"].append(f"{item[0]}: {item[1]}")
+            else:
+                st["reasons"].append(str(item))
+        st["reasons"] = st["reasons"][-10:]
+        at = ev.get("at")
+        t = time.strftime("%H:%M", time.localtime(at if at is not None else time.time()))
+        self.drive_state.setText(
+            tr("Google Drive checked at {t}. Received: {n}. Refused: {r}.").format(t=t, n=st["new"], r=st["refused"])
+        )
+        self.drive_state.setToolTip("\n".join(st["reasons"]))
+
+    def _pc_kid(self):
+        from . import drive
+        from .handover import HandoverKey
+
+        pub = self.server.handover.public if self.server is not None else HandoverKey(self._cert_folder()).public
+        return drive.key_id(pub)
+
+    def _key_backup_info(self):
+        try:
+            d = json.loads(QgsSettings().value(KEY_BACKUP, "") or "{}")
+        except (TypeError, ValueError):
+            return {}
+        return d if isinstance(d, dict) else {}
+
+    def _record_key_backup(self, kid, at=None):
+        QgsSettings().setValue(KEY_BACKUP, json.dumps({"kid": kid, "at": at or time.strftime("%Y-%m-%d")}))
+
+    def _is_key_backed_up(self):
+        info = self._key_backup_info()
+        return bool(info.get("kid") and info.get("kid") == self._pc_kid())
+
+    def _show_key_state(self):
+        if not self.drive_enabled():
+            return
+        info = self._key_backup_info()
+        if info.get("kid") == self._pc_kid():
+            self.key_hint.setText(tr("Key backed up on {date}.").format(date=info.get("at") or ""))
+        else:
+            self.key_hint.setText(tr(
+                "This computer's key is not backed up. If it is lost, photos waiting in Google Drive can never be "
+                "opened."
+            ))
+
+    def _secure_plugin(self):
+        try:
+            t = self.plugin.theme.tokens()
+            if isinstance(t, dict) and "window" in t and "icon_disabled" in t:
+                return self.plugin
+        except Exception:  # noqa: BLE001
+            pass
+        return None
+
+    def _ask_backup_password(self):
+        from ..secure import passwords, widgets
+
+        p = self._secure_plugin()
+        dlg = QDialog(self)
+        dlg.setWindowTitle(tr("Back up this computer's key"))
+        widgets.style_dialog(dlg, p)
+        v = QVBoxLayout(dlg)
+        v.setContentsMargins(18, 16, 18, 16)
+        v.setSpacing(8)
+        v.addWidget(widgets.header(tr("Back up this computer's key"),
+                                   tr("Nobody can recover this password."), "key", p))
+        v.addWidget(widgets.label(tr("Password"), "SecSub"))
+        pw1 = widgets.PasswordField(tr("Password"), p)
+        v.addWidget(pw1)
+        meter = widgets.StrengthMeter(passwords.MIN_USER)
+        v.addWidget(meter)
+        v.addWidget(widgets.label(tr("Repeat the password"), "SecSub"))
+        pw2 = widgets.PasswordField(tr("Repeat the password"), p)
+        v.addWidget(pw2)
+        err = widgets.label("", "SecError")
+        err.hide()
+        v.addWidget(err)
+        row = QHBoxLayout()
+        row.addStretch(1)
+        cancel = QPushButton(tr("Cancel"))
+        ok = widgets.primary(tr("Back up…"))
+        ok.setEnabled(False)
+        row.addWidget(cancel)
+        row.addWidget(ok)
+        v.addLayout(row)
+
+        def refresh(*_):
+            good = meter.update_for(pw1.text())
+            same = bool(pw1.text()) and pw1.text() == pw2.text()
+            if pw2.text() and not same:
+                err.setText(tr("The two passwords do not match."))
+                err.show()
+            else:
+                err.hide()
+            ok.setEnabled(bool(good and same))
+
+        pw1.changed.connect(refresh)
+        pw2.changed.connect(refresh)
+        cancel.clicked.connect(dlg.reject)
+        ok.clicked.connect(dlg.accept)
+        dlg.resize(440, 0)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return None
+        return pw1.text()
+
+    def _backup_key(self):
+        from . import drive, handover
+
+        pw = self._ask_backup_password()
+        if not pw:
+            return
+        docs = os.path.join(os.path.expanduser("~"), "Documents")
+        base_dir = docs if os.path.isdir(docs) else os.path.expanduser("~")
+        kid = self._pc_kid()
+        default_path = os.path.join(base_dir, f"biruni-photos-key-{kid}.biruni-key")
+        path, _ = QFileDialog.getSaveFileName(
+            self, tr("Back up this computer's key"), default_path, tr("Biruni key backup (*.biruni-key)")
+        )
+        if not path:
+            return
+        try:
+            pub = handover.backup(self._cert_folder(), path, pw)
+        except (OSError, ValueError) as e:
+            QMessageBox.warning(self, tr("Back up this computer's key"), tr("It could not be done: {e}").format(e=e))
+            return
+        self._record_key_backup(drive.key_id(pub))
+        self._show_key_state()
+        self.drive_state.setText(tr("Key backed up."))
+
+    def _restore_key(self):
+        from . import drive, handover
+        from ..secure import widgets
+
+        if self.server is not None:
+            QMessageBox.warning(self, tr("Restore key…"), tr("Stop Field Photos first."))
+            return
+        docs = os.path.join(os.path.expanduser("~"), "Documents")
+        base_dir = docs if os.path.isdir(docs) else os.path.expanduser("~")
+        path, _ = QFileDialog.getOpenFileName(
+            self, tr("Restore key…"), base_dir, tr("Biruni key backup (*.biruni-key);;All files (*)")
+        )
+        if not path:
+            return
+        try:
+            info = handover.backup_info(path)
+        except ValueError:
+            QMessageBox.warning(self, tr("Restore key…"), tr("Wrong password, or not a Biruni key backup."))
+            return
+        pw = widgets.ask_password(self, tr("Restore key…"), os.path.basename(path), self._secure_plugin())
+        if pw is None:
+            return
+        cur_pub = handover.HandoverKey(self._cert_folder()).public
+        if info["pub"] != cur_pub:
+            ans = QMessageBox.question(
+                self, tr("Restore key…"),
+                tr("This replaces this computer's key. Phones must scan the code again; the present key is kept "
+                   "beside it as a file.")
+            )
+            if ans != QMessageBox.StandardButton.Yes:
+                return
+        try:
+            pub = handover.restore(self._cert_folder(), path, pw)
+        except ValueError:
+            QMessageBox.warning(self, tr("Restore key…"), tr("Wrong password, or not a Biruni key backup."))
+            return
+        drive.forget_refused(self._active_folder())
+        self._record_key_backup(drive.key_id(pub))
+        self._show_key_state()
+        self.drive_state.setText(tr("Key restored."))
+
 
 _DOCK = {}
 
@@ -2246,3 +2695,9 @@ def close_dock(plugin):
         d.shutdown()
         plugin.iface.mainWindow().removeDockWidget(d)
         d.deleteLater()
+
+
+def on_project_changed(plugin):
+    d = _DOCK.get(id(plugin))
+    if d is not None:
+        d._sync_drive()
