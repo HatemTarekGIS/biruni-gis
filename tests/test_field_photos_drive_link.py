@@ -606,6 +606,16 @@ wait(lambda: False, 0.5)
 check(js(ph, "(()=>{const t=document.querySelector('.top');return t.scrollWidth<=t.clientWidth&&t.clientWidth<=360})()") is True,
       "a long waiting count never makes the phone's top bar wider than the screen")
 
+# a photo is kept at 5 MB at most: a bigger camera photo is saved again smaller, a small one is kept as it came
+fit = ajs(ph, "(async()=>{const c=document.createElement('canvas');c.width=4000;c.height=3000;const x=c.getContext('2d'),"
+              "d=x.createImageData(4000,3000);for(let i=0;i<d.data.length;i++)d.data[i]=(i*2654435761>>>13)&255;"
+              "x.putImageData(d,0,0);const big=await new Promise(r=>c.toBlob(r,'image/jpeg',1));"
+              "const out=await fitPhoto(big),bm=await createImageBitmap(out),small=new Blob([new Uint8Array(3000)]);"
+              "return {big:big.size,out:out.size,w:bm.width,type:out.type,same:(await fitPhoto(small))===small}})()")
+check(isinstance(fit, dict) and fit["big"] > 5 * 1024 * 1024 and fit["out"] <= 5 * 1024 * 1024 - 65536
+      and fit["w"] >= 1200 and fit["type"] == "image/jpeg" and fit["same"],
+      f"a camera photo over 5 MB is saved again under 5 MB and still opens; a small one is not touched ({fit})")
+
 check(not any("Content Security Policy" in m for m in CONSOLE), "nothing was refused by the CSP")
 print(f"\n{'FAILED ' + str(len(failures)) if failures else 'ALL PASSED'}")
 sys.exit(1 if failures else 0)

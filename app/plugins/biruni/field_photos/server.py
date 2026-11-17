@@ -1497,6 +1497,18 @@ setInterval(tickAvg,500);
 function shotFix(){if(room&&indoorFix)return indoorFix;if(avgFix&&fix&&Date.now()-avgFix.t<120000&&meters(avgFix,fix)<Math.max(15,2*(fix.acc||0))){
   const a=avgFix;avgFix=null;$('avgInfo').textContent='';return a}return fix}
 /* photos not yet on the PC wait in the phone's browser storage, sealed with the PC's key (ECDH P-256 + AES-GCM) */
+/* a photo is kept at 5 MB at most (Hatem's choice): one plain upload carries it to Drive and the line sends it in
+   one go; a bigger one is saved again as JPEG, first only a little more compressed, then smaller, until it fits.
+   PMAX leaves room for the seal around it. The browser canvas holds about 16 million pixels at most (iPhone) */
+const PMAX=5*1024*1024-65536,PPIX=16000000;
+async function fitPhoto(blob){if(!blob||blob.size<=PMAX||typeof createImageBitmap!=='function')return blob;
+ let bm;try{bm=await createImageBitmap(blob);const w=bm.width,h=bm.height,s0=Math.min(1,Math.sqrt(PPIX/Math.max(1,w*h)));
+  for(const [s,q] of [[1,.92],[1,.85],[.85,.85],[.7,.85],[.55,.82],[.4,.8],[.3,.75]]){
+   const c=document.createElement('canvas');c.width=Math.max(1,Math.round(w*s*s0));c.height=Math.max(1,Math.round(h*s*s0));
+   c.getContext('2d').drawImage(bm,0,0,c.width,c.height);
+   const b=await new Promise(r=>c.toBlob(r,'image/jpeg',q));c.width=c.height=0;
+   if(b&&b.size>0&&b.size<=PMAX)return b}}catch(e){}finally{if(bm&&bm.close)bm.close()}
+ return blob}
 async function makePreview(blob){
  if(typeof createImageBitmap==='function'){
   try{const bm=await createImageBitmap(blob),m=Math.max(bm.width,bm.height,1),s=m>720?720/m:1,
@@ -1802,7 +1814,7 @@ $('shot').onclick=()=>{if(!fix&&!indoorFix)return;if(!requireName())return;const
  pending={fix:shotFix(),compass:compass,at:Date.now(),f:f};$('file').click()};
 $('file').onchange=async()=>{const f=$('file').files[0];$('file').value='';if(!f||!pending)return;
  const who=requireName();if(!who)return;
- const p=pending.fix,blob=new Blob([await f.arrayBuffer()],{type:f.type||'image/jpeg'});
+ const p=pending.fix,blob=await fitPhoto(new Blob([await f.arrayBuffer()],{type:f.type||'image/jpeg'}));
  const meta={id:uid(),lat:p.lat,lon:p.lon,acc:p.acc,alt:p.alt,heading:p.heading,compass:pending.compass,
   t:pending.at,fix_age:Math.max(0,Math.round((pending.at-p.t)/1000)),kind:kind,note:$('note').value.trim(),device:dev,device_id:DEVID,surveyor:who.slice(0,40),by:who.slice(0,40),sk:SURVKEY||undefined,f:pending.f,avg_n:p.n,avg_sd:p.sd,level:p.level,unit:p.unit};
  const it={id:meta.id,blob:blob,meta:meta,room:ROOM};pending=null;await put(it);thumb(it,'⏳');$('note').value='';afterShot();

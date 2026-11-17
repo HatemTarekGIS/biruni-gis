@@ -2285,9 +2285,11 @@ class FieldPhotosDock(QDockWidget):
         self._show_team()
         self.received += len(new_recs)
         self.count.setText(tr("Photos received: {n}").format(n=self.received))
-        senders = sorted({r.get("by") or r.get("device") or tr("a phone") for r in records})
-        self._notify(tr("{n} photos received from {who}.").format(n=len(records), who=", ".join(senders))
-                     if len(records) > 1 else tr("A photo was received from {who}.").format(who=senders[0]), lyr)
+        # a full original replacing its preview is the same photo: told once, when the first copy came
+        if new_recs:
+            senders = sorted({r.get("by") or r.get("device") or tr("a phone") for r in new_recs})
+            self._notify(tr("{n} photos received from {who}.").format(n=len(new_recs), who=", ".join(senders))
+                         if len(new_recs) > 1 else tr("A photo was received from {who}.").format(who=senders[0]), lyr)
         r = records[-1]
         self._last_photo = r["photo"]
         pm = QPixmap(r["photo"])

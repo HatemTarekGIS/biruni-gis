@@ -217,7 +217,7 @@ function driveStart(){if(DRV.on||typeof DRIVE_ON==='undefined'||!DRIVE_ON||!DRV.
    when Drive cannot (driveFirst false: not linked, no folder, full, too big, or failing for DFALL since the line
    opened). DRV.HOLD says which way has an original ('drive' or 'line'), so it never goes both. The phone's own key (ECDSA P-256, not extractable), the numbering and the
    files' header bytes are kept in the database biruni-drive, so a retry uploads the very same bytes. */
-const DMAX=5*1024*1024;   /* step 8 adds resumable uploads for larger photos */
+const DMAX=5*1024*1024;   /* the phone keeps every photo under 5 MB (fitPhoto), so one plain upload carries it */
 let DDB=null,DKEY=null,DBUSY=false;const DSKIP=new Set();
 function ddb(){return DDB||(DDB=new Promise(r=>{try{const q=indexedDB.open('biruni-drive',1);
  q.onupgradeneeded=()=>q.result.createObjectStore('d',{keyPath:'id'});q.onsuccess=()=>r(q.result);q.onerror=()=>r(null);
