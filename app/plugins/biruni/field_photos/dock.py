@@ -414,7 +414,8 @@ def _link_tip(p):
              "direct": tr("Directly over the internet."),
              "relay": tr("Through a relay on the internet (the phone's network does not allow a direct link)."),
              "tunnel": tr("Through the tunnel on the internet."),
-             "peer": tr("Carried by a teammate's phone (this phone's network allows no direct link).")}.get(
+             "peer": tr("Carried by a teammate's phone (this phone's network allows no direct link)."),
+             "drive": tr("Through the surveyor's own Google Drive, synced to this computer.")}.get(
         p.get("route"), "")
     parts = [route] if route else []
     if p.get("ping") is not None:
@@ -437,6 +438,7 @@ def _route_text(route):
         "peer": tr("Teammate"),
         "lan": tr("Local network"),
         "tunnel": tr("Tunnel"),
+        "drive": tr("Google Drive"),
     }.get(route or "", "—")
 
 

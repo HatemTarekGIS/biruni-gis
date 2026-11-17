@@ -88,7 +88,7 @@ def clean_meta(m, form=()):
     if dev_id and not DEV_RE.match(dev_id):
         dev_id = ""
     route = str(m.get("route") or "")
-    route = route if route in ("lan", "direct", "relay", "peer") else ("relay" if m.get("preview") else "")
+    route = route if route in ("lan", "direct", "relay", "peer", "drive") else ("relay" if m.get("preview") else "")
     return {"id": m["id"], "lat": lat, "lon": lon, "acc": _num(m.get("acc"), 0),
             "alt": _num(m.get("alt")), "heading": _num(m.get("heading"), 0, 360),
             "compass": _num(m.get("compass"), 0, 360), "fix_age": _num(m.get("fix_age")),

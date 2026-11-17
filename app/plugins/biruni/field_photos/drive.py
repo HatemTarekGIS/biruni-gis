@@ -25,7 +25,10 @@ import base64
 import hashlib
 import hmac
 import json
+import os
 import re
+import threading
+import time
 
 MAGIC = b"BFP1"
 MAX_HEADER = 4096
@@ -166,6 +169,162 @@ def verify(blob, kas, kid, room=None):
         if hmac.compare_digest(cert(ka, h["pub"], h["dev"]), h["cert"]):
             return h, body, sk
     raise BfpError("not from this office's code")
+
+
+# ---- the intake: Drive for desktop's folder -> PhotoStore ------------------------------------------------------------
+SEEN_NAME = "drive_seen.json"    # in the photo folder: files already taken in (or refused), so they are read once
+INTERVAL = 15                    # seconds; Drive for desktop's streaming mode sends no change notices to rely on
+
+
+def office_folders(roots, k):
+    """The office's Drive folders under the synced roots the user chose (e.g. G:\\My Drive): the folder itself,
+    root/<folder>, and one level deeper (a folder kept inside another, a shared drive)."""
+    name, out = folder_name(k), []
+    for root in roots or ():
+        root = str(root or "")
+        if not root or not os.path.isdir(root):
+            continue
+        cands = [root, os.path.join(root, name)]
+        try:
+            cands += [os.path.join(e.path, name) for e in os.scandir(root) if e.is_dir() and e.name != name]
+        except OSError:
+            pass
+        for c in cands:
+            if os.path.basename(os.path.normpath(c)) == name and os.path.isdir(c):
+                c = os.path.normcase(os.path.abspath(c))
+                if c not in out:
+                    out.append(c)
+    return out
+
+
+class DriveIntake:
+    """Every INTERVAL seconds, opens the new .bfp files in the office's Drive folders and saves each photo with the
+    same PhotoStore the phone server uses (route "drive"). Events go to ``events`` like the server's own:
+    ("photo", record), ("rejected", {"device_id", "reason"}), and ("drive", {"seen", "new", "refused", "at"}).
+
+    A file is read again only when its size or time changes - a file Drive for desktop has not finished bringing
+    down is refused as damaged now and taken in when it is whole. A full disk is not remembered: tried again."""
+
+    def __init__(self, roots, store, handover, k, events, interval=INTERVAL):
+        self.roots = list(roots or ())
+        self.store, self.handover, self.k, self.events = store, handover, k, events
+        self.interval = interval
+        self.kid, self.room = key_id(handover.public), room_tag(k)
+        self.path = os.path.join(store.folder, SEEN_NAME)
+        self.seen = self._load()
+        self._stop = threading.Event()
+        self.thread = None
+
+    def _load(self):
+        try:
+            with open(self.path, encoding="utf-8") as f:
+                d = json.load(f)
+            if isinstance(d, dict) and d.get("room") == self.room and isinstance(d.get("files"), dict):
+                return d["files"]
+        except (OSError, ValueError):
+            pass
+        return {}
+
+    def _keep(self):
+        tmp = self.path + ".tmp"
+        try:
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump({"room": self.room, "files": self.seen}, f, separators=(",", ":"))
+            os.replace(tmp, self.path)
+        except OSError:
+            pass
+
+    def scan(self):
+        """One pass; returns {"seen": files looked at, "new": photos saved, "refused": [(file, why)]}."""
+        from .server import BlockedDeviceError, read_surveyor_keys
+
+        kas = auth_keys(self.k, read_surveyor_keys(self.store.folder))
+        out = {"seen": 0, "new": 0, "refused": []}
+        changed = False
+        for top in office_folders(self.roots, self.k):
+            try:
+                devs = [e for e in os.scandir(top) if e.is_dir() and e.name.startswith("p-")]
+            except OSError:
+                continue
+            for d in devs:
+                try:
+                    files = [e for e in os.scandir(d.path) if e.is_file() and NAME_RE.match(e.name)]
+                except OSError:
+                    continue
+                for e in files:
+                    if self._stop.is_set():
+                        break
+                    out["seen"] += 1
+                    try:
+                        st = e.stat()
+                    except OSError:
+                        continue
+                    key = d.name + "/" + e.name
+                    stamp = [st.st_size, st.st_mtime_ns]
+                    if (self.seen.get(key) or [])[:2] == stamp:
+                        continue
+                    ok = 1
+                    try:
+                        rec, new = self._take(e.path, d.name[2:], e.name, st.st_size, kas)
+                    except BlockedDeviceError as b:
+                        self.events.put(("rejected", {"device_id": b.device_id, "reason": b.reason}))
+                        out["refused"].append((key, b.reason))
+                        ok = 0
+                    except (BfpError, ValueError, TypeError, KeyError) as x:
+                        out["refused"].append((key, str(x) or type(x).__name__))
+                        ok = 0
+                    except OSError:
+                        continue          # disk full, the folder gone, the file still downloading: next pass
+                    else:
+                        if new:
+                            out["new"] += 1
+                            self.events.put(("photo", rec))
+                    self.seen[key] = stamp + [ok]
+                    changed = True
+        if changed:
+            self._keep()
+        self.events.put(("drive", dict(out, at=time.time())))
+        return out
+
+    def _take(self, path, dev, name, size, kas):
+        if size > 6 + MAX_HEADER + SIG + MAX_BODY:
+            raise BfpError("too large")
+        with open(path, "rb") as f:
+            blob = f.read()
+        h, body, sk = verify(blob, kas, self.kid, self.room)
+        if h["dev"] != dev or NAME_RE.match(name).group(2) != h["sha"][:12]:
+            raise BfpError("file name does not match its header")
+        meta, data = self.handover.open(body)
+        if str(meta.get("id") or "") != h["id"]:
+            raise BfpError("photo id does not match its header")
+        meta = dict(meta, sk=sk, route="drive")   # the cert decides the surveyor, never the sealed data
+        meta.pop("preview", None)
+        return self.store.save(meta, data)
+
+    def retry_refused(self):
+        """Read the refused files again on the next pass (after a surveyor or phone is let back in)."""
+        self.seen = {key: v for key, v in self.seen.items() if (v or [0, 0, 0])[2:] == [1]}
+        self._keep()
+
+    def start(self):
+        if self.thread is None:
+            self._stop.clear()
+            self.thread = threading.Thread(target=self._run, name="biruni-drive-intake", daemon=True)
+            self.thread.start()
+
+    def _run(self):
+        while not self._stop.is_set():
+            try:
+                self.scan()
+            except Exception as x:  # noqa: BLE001 - the intake keeps going; the dock shows the error
+                self.events.put(("drive", {"error": str(x), "at": time.time()}))
+            self._stop.wait(self.interval)
+
+    def stop(self):
+        self._stop.set()
+        if self.thread is not None:
+            self.thread.join(timeout=5)
+            self.thread = None
 
 
 # ---- the same on the phone page (field_photos/drive_page.py puts it in /p/) --------------------------------------
