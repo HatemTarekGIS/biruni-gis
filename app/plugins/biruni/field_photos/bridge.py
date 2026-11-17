@@ -332,6 +332,9 @@ function gathered(pc,ms){return new Promise(r=>{if(pc.iceGatheringState==='compl
 BOOT_JS = r"""
 const HP=new URLSearchParams(location.hash.slice(1)),KEYB=HP.get('k')||'';HASHL=HP.get('l');ROOM=KEYB.slice(0,12);
 GPSMODE=HP.get('m')==='gps';const VIAONLY=HP.get('v')==='1';
+/* d=1&pk=: this project takes photos through Google Drive; pk is the computer's key, so photos are sealed for it
+   before the phone ever reaches the computer (drive_page.py) */
+const DPK=HP.get('pk')||'',DRIVE_ON=HP.get('d')==='1'&&/^[\w-]{81,99}$/.test(DPK)&&!GPSMODE;if(DRIVE_ON)PCKEY=DPK;
 if('serviceWorker' in navigator&&location.protocol==='https:'&&/(^|\.)biruni-gis\.com$|\.github\.io$/.test(location.hostname))
  navigator.serviceWorker.register('sw.js').catch(()=>{});   /* opens again in the field without internet *//* v=1: never direct, always through a teammate (to try it) */
 try{const c=JSON.parse(kept('biruni-hello-'+ROOM)||'null');if(c&&Array.isArray(c.kinds))KINDS=c.kinds;

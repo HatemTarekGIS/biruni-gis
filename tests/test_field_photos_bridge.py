@@ -265,7 +265,7 @@ def js(expr):
     return result.get("v")
 
 
-check(wait(lambda: js("document.documentElement.dir") == "rtl", 20), "the phone page opens in Arabic, right to left")
+check(wait(lambda: js("document.documentElement&&document.documentElement.dir") == "rtl", 20), "the phone page opens in Arabic, right to left")
 check(js("T.title") == "بيروني - صور ميدانية", "the phone has its texts before it ever connects")
 check(wait(lambda: js("!!(dc&&dc.readyState==='open')") is True, 60),
       "phone and PC opened a direct channel ".replace("","") + js_log())

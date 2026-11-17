@@ -1255,7 +1255,8 @@ function label(){document.title=T.title;$('hero').textContent=T.hero;$('introTex
  $('handCancel').textContent=T.handCancel;$('lSent').textContent=bare(T.sent);$('lWait').textContent=bare(T.queued);$('shotHint').textContent=fix?T.shoot:T.waiting;
  $('shot').setAttribute('aria-label',T.shoot);$('langBtn').setAttribute('aria-label',T.language);
  $('langCode').textContent=LANG.split('_')[0].toUpperCase();const e=$('list').querySelector('.empty');if(e)e.textContent=T.none;
- if(privMode&&$('privWarn'))$('privWarn').textContent=T.incognito||'';if(typeof count==='function')count()}
+ if(privMode&&$('privWarn'))$('privWarn').textContent=T.incognito||'';if(typeof count==='function')count();
+ if(typeof driveLabel==='function')driveLabel()}
 function setLang(l){LANG=l;T=Object.assign({},ALL.en||{},ALL[l]||{});const h=document.documentElement;
  h.lang=l.replace('_','-');h.dir=(l==='ar'||l==='fa')?'rtl':'ltr';label();drawKinds();drawForm();
  if(lastSt)status(lastSt[0],lastSt[1]);else chip('wait')}
@@ -1484,7 +1485,7 @@ async function sealRecord(it){if(!PCKEY||!it||!it.meta||it.meta.sealed||!it.blob
   if(!it.carried&&!it.prevSent){const pb=await makePreview(it.blob);
    prev=await sealItem({meta:Object.assign({},it.meta,{preview:true}),blob:pb})}
   return {id:it.id,blob:orig,prev:prev,prevSent:!!it.prevSent,meta:{id:it.id,sealed:1,t:it.meta.t||Date.now()},
-   room:it.room||ROOM,carried:!!it.carried}}catch(e){return it}}
+   room:it.room||ROOM,carried:!!it.carried,pk:PCKEY}}catch(e){return it}}   /* pk: the key it is sealed for (.bfp kid) */
 function openDb(){return new Promise(r=>{try{const q=indexedDB.open('biruni-photos',1);
  q.onupgradeneeded=()=>q.result.createObjectStore('q',{keyPath:'id'});q.onsuccess=()=>r(q.result);
  q.onerror=()=>r(null)}catch(e){r(null)}})}
@@ -1711,6 +1712,7 @@ async function flush(){if(busy)return;busy=true;
    rOnly=typeof relayOnly==='function'&&relayOnly(),items=rOnly?allItems.filter(x=>!x.prevSent&&!x.carried):allItems;
   for(const it of items){
    const st=await sendItem(it);
+   if(!st)continue;   /* 0: another way (Google Drive) is sending this one */
    if(st===200){await del(it.id);sent++;arrived++;mark(it.id,'✓')}
    else if(st===202){it.prevSent=true;it.prev=null;await put(it);mark(it.id,'◐')}
    else if(st===403){await del(it.id);mark(it.id,'✗');status(false,'blocked')}
@@ -1780,5 +1782,5 @@ $('sheet').onclick=e=>{if(e.target===$('sheet'))$('sheet').classList.add('hide')
 setLang(pick(kept('biruni-lang'))||pick(HASHL)||pick(DEF)||pick(navigator.language)||'en');
 try{const g=JSON.parse(kept('biruni-guide-'+ROOM)||'null');if(g)setGuide(g)}catch(e){}
 {const e=document.createElement('div');e.className='empty';e.textContent=T.none;$('list').appendChild(e)}
-(async()=>{db=await openDb();await checkPrivate();await sealWaiting();const w=await all();w.filter(it=>!it.carried).slice(-9).forEach(it=>thumb(it,'⏳'));count();flush()})();
+(async()=>{db=await openDb();await checkPrivate();await sealWaiting();if(typeof driveStart==='function')driveStart();const w=await all();w.filter(it=>!it.carried).slice(-9).forEach(it=>thumb(it,'⏳'));count();flush()})();
 </script></body></html>"""
