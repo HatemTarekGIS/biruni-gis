@@ -162,8 +162,12 @@ def pin(key):
     return identity(key)[1]
 
 
-def phone_url(key, lang="en"):
-    return f"{PAGE_URL}#k={key}&i={pin(key)}&l={lang}"
+def phone_url(key, lang="en", drive_pk=None):
+    """The phone page's address (everything after # stays on the phone). drive_pk: this computer's handover public
+    key when the project takes photos through Google Drive - the page then offers Drive and seals each photo for it
+    (&d=1&pk=, see drive.py) even before it has ever reached this computer."""
+    url = f"{PAGE_URL}#k={key}&i={pin(key)}&l={lang}"
+    return url + f"&d=1&pk={drive_pk}" if drive_pk else url
 
 
 # ---- the shared script: encryption, Nostr signatures, relays ------------------------------

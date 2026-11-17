@@ -1242,7 +1242,7 @@ class FieldPhotosDock(QDockWidget):
             return
         self._bridge_since = time.monotonic()
         self._relays_up = 0
-        url = bridge.phone_url(key, lang())
+        url = bridge.phone_url(key, lang(), self._drive_pk())
         from ..secure.door import door_ok
 
         if not door_ok(self, url):   # the phone page on the site is not the released one: no link, no QR
@@ -2038,7 +2038,28 @@ class FieldPhotosDock(QDockWidget):
             return self.server.url(ips[0] if ips else "127.0.0.1")
         from . import bridge
 
-        return bridge.phone_url(bridge.load_key(QgsSettings()), lang())
+        return bridge.phone_url(bridge.load_key(QgsSettings()), lang(), self._drive_pk())
+
+    def _drive_pk(self):
+        """This computer's handover public key for the phone link when this project takes photos through Google
+        Drive, else None (the link stays as it was)."""
+        if not self.drive_enabled():
+            return None
+        if self.server is not None:
+            return self.server.handover.public
+        from .handover import HandoverKey
+
+        return HandoverKey(self._cert_folder()).public
+
+    def _refresh_drive_link(self):
+        """The bridge link with or without &d=1&pk= after the box changes, while the bridge is up."""
+        from . import bridge
+
+        if self.bridge is None or not self._base_qr_url.startswith(bridge.PAGE_URL):
+            return
+        url = bridge.phone_url(bridge.load_key(QgsSettings()), lang(), self._drive_pk())
+        self._base_qr_url = self._base_qr_tip = url
+        self._show_qr(url, url)
 
     def show_shared_qr(self):
         base = self._current_base_url()
@@ -2385,6 +2406,7 @@ class FieldPhotosDock(QDockWidget):
             proj.setDirty(True)
             self.drive_frame.setVisible(False)
             self._stop_drive()
+        self._refresh_drive_link()
 
     def _confirm_drive(self):
         box = QMessageBox(self)
@@ -2443,6 +2465,7 @@ class FieldPhotosDock(QDockWidget):
                     self._show_drive_idle_state(roots)
         elif on:
             self._show_drive_idle_state(roots)
+        self._refresh_drive_link()
 
     def _start_drive(self):
         from . import bridge, drive

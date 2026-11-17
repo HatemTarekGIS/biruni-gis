@@ -293,6 +293,28 @@ finally:
     d.stop()
 check(any("Stop Field Photos first." in w for w in warns), "14. restore refused while started")
 
+# 16. The phone link carries &d=1&pk= only while this project takes photos through Drive (step 6)
+kk = bridge.load_key(QgsSettings())
+pc_pub = handover.HandoverKey(d._cert_folder()).public
+check(bridge.phone_url(kk, "en") == bridge.phone_url(kk, "en", None) and "&d=" not in bridge.phone_url(kk, "en")
+      and bridge.phone_url(kk, "en", pc_pub).endswith(f"&d=1&pk={pc_pub}"),
+      "16a. phone_url adds &d=1&pk= only when given the key")
+d._base_qr_url = d._base_qr_tip = ""   # the last start left its local address: the bridge link is what changes
+d.drive_box.setChecked(True)
+base = d._current_base_url()
+check("#" in base and base.endswith(f"&d=1&pk={pc_pub}"), "16b. Drive on: the link carries this computer's key")
+sq = d.issue_surveyor_qr("Mona")["url"]
+check(f"&d=1&pk={pc_pub}&sk=" in sq, "16c. … and so does a surveyor's own code")
+d.bridge = object()            # as if the bridge were up, showing its link
+d._base_qr_url = d._base_qr_tip = bridge.phone_url(kk, "en", pc_pub)
+d.drive_box.setChecked(False)
+check("&d=" not in d._base_qr_url and "&d=" not in d.url.text() and "&d=" not in d._current_base_url(),
+      "16d. Drive off while the bridge is up: the shown code drops it at once")
+d.drive_box.setChecked(True)
+check(d._base_qr_url.endswith(f"&pk={pc_pub}"), "16e. Drive on again: the shown code carries it again")
+d.bridge = None
+d._base_qr_url = d._base_qr_tip = ""
+
 # 15. The backup password dialog builds (closed at once), and a cancelled backup writes nothing
 orig_exec = fd.QDialog.exec
 fd.QDialog.exec = lambda self: 0
