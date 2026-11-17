@@ -197,7 +197,7 @@ else:
     v.setPage(pg)
     v.resize(900, 700)
     v.show()
-    pg.setHtml(cfg["html"], QUrl("https://hatemtarekgis.github.io/biruni-gis/d/#l=en"))
+    pg.setHtml(cfg["html"], QUrl("https://biruni-gis.com/d/#l=en"))
     wait(lambda: js(pg, "!!window.BiruniSound") is True, 20)
     js(pg, "window.CFG=" + json.dumps(cfg) + ";1")
     check(js(pg, "!!document.getElementById('ext_sound_lis')") is True, "a page without a card offers «Listen to join»")

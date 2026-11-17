@@ -182,7 +182,7 @@ else:
     v.setPage(pg)
     v.resize(900, 700)
     v.show()
-    pg.setHtml(cfg["html"], QUrl("https://hatemtarekgis.github.io/biruni-gis/d/#l=en"))
+    pg.setHtml(cfg["html"], QUrl("https://biruni-gis.com/d/#l=en"))
     wait(lambda: js(pg, "!!(window.BiruniMesh&&window.BiruniEd)") is True, 20)
     js(pg, "window.CFG=" + json.dumps(cfg, ensure_ascii=False) + ";1")
 

@@ -27,7 +27,7 @@ import time
 import urllib.error
 import urllib.request
 
-SITE = "https://hatemtarekgis.github.io/biruni-gis/"
+SITE = "https://biruni-gis.com/"
 FORMAT = "biruni-release"
 RELEASE, SIG = "release.json", "release.sig"
 TTL = 300                 # a verdict is reused this many seconds

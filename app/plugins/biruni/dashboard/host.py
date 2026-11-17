@@ -1,6 +1,6 @@
 """The dashboard from anywhere: the Biruni bridge (field_photos/bridge.py), as "See my map" uses it.
 
-The viewer opens the public page (https://hatemtarekgis.github.io/biruni-gis/d/) with the card and a key
+The viewer opens the public page (https://biruni-gis.com/d/) with the card and a key
 after "#" - never sent to any server. Viewer and PC meet through public relays that see only unreadable
 bytes, then talk over a direct encrypted WebRTC channel. On this PC a hidden Chromium page (BridgeHost,
 in its own process) answers the viewers and relays their messages to the dashboard's LAN server on
@@ -11,7 +11,7 @@ A message to the viewer longer than PART characters goes in parts (SPEC "Changes
 """
 import time
 
-PAGE_URL = "https://hatemtarekgis.github.io/biruni-gis/d/"
+PAGE_URL = "https://biruni-gis.com/d/"
 PART = 48000
 MAX_VIEWERS = 30
 

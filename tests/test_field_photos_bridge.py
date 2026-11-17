@@ -384,7 +384,7 @@ srv.set_indoor(indoor_payload([{"id": 1, "name": "الدور الأول"}],
                                 "p": [46.67503, 24.713025], "r": 4}]))
 check(wait(lambda: js("INDOOR&&INDOOR.units.length") == 1, 15), "the indoor map reaches the phone")
 check(js("$('roomRow').classList.contains('hide')") is False, "the phone offers to scan a room code")
-js("roomFromText('https://hatemtarekgis.github.io/biruni-gis/r/#u=L1-101&n=101&l=1');1")
+js("roomFromText('https://biruni-gis.com/r/#u=L1-101&n=101&l=1');1")
 check(js("[room&&room.id,indoorFix.level,indoorFix.unit,$('shot').disabled].join(',')") == "L1-101,1,L1-101,false",
       "a scanned room code places the phone in that room, without GPS")
 check("الدور الأول" in (js("$('roomName').textContent") or ""), "and names the room and its level")

@@ -8,7 +8,7 @@ The page has every language in it, so it is complete on its own: public_page().
 """
 import json
 
-PAGE_URL = "https://hatemtarekgis.github.io/biruni-gis/s/"
+PAGE_URL = "https://biruni-gis.com/s/"
 
 
 def share_url(key, lang="en"):

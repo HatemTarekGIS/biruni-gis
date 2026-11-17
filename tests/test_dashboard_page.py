@@ -499,7 +499,7 @@ v2.close()
 srv.shutdown()
 
 # ---- 4. the bridge page opens and asks for a link when it has none -------------------------------------------------------
-v3, pg3 = view_of("bridge", P.page_html("en", "bridge"), "https://hatemtarekgis.github.io/biruni-gis/d/#c=BDC1.x.y&k=short")
+v3, pg3 = view_of("bridge", P.page_html("en", "bridge"), "https://biruni-gis.com/d/#c=BDC1.x.y&k=short")
 pump(0.8)
 check("link or QR" in (js(pg3, "document.getElementById('banner').textContent") or ""), "bridge: a link without a key says how to open it")
 v3.close()

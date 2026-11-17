@@ -94,7 +94,7 @@ statement as a QR/text) verifies it, and — when the data is at hand — recomp
   `POST /d/<token>/m` and server events by long-poll `GET /d/<token>/ev?rev=n`.
 * Anywhere: the Biruni bridge (field_photos/bridge.py; WebRTC over Nostr/ntfy signalling) with a
   hidden host page like live_share; the public page is `build/bridge-page/d/index.html`
-  (https://hatemtarekgis.github.io/biruni-gis/d/), published by the user's own push.
+  (https://biruni-gis.com/d/), published by the user's own push.
 * Inside Biruni: the builder's preview is the same page in QtWebEngine, fed in-process.
 
 The page never trusts anything but the PC; the PC never trusts the page: every message is checked

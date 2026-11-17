@@ -17,7 +17,7 @@ import secrets
 import struct
 import time
 
-PAGE_URL = "https://hatemtarekgis.github.io/biruni-gis/v/"
+PAGE_URL = "https://biruni-gis.com/v/"
 KEY = "biruni/seal/"
 MAGIC = b"BIRUNI-SEAL"
 VERSION = 1

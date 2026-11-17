@@ -32,7 +32,7 @@ import subprocess
 import sys
 import threading
 
-PAGE_URL = "https://hatemtarekgis.github.io/biruni-gis/p/"
+PAGE_URL = "https://biruni-gis.com/p/"
 RELAYS = ("wss://relay.damus.io", "wss://nos.lol", "wss://relay.primal.net", "wss://nostr.mom",
           "wss://relay.nostr.band")
 NTFY = "https://ntfy.sh/"

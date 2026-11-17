@@ -2,7 +2,7 @@
 
 Everything travels after the "#" of the address, so the browser never sends it to any server:
 
-    https://hatemtarekgis.github.io/biruni-gis/m/#B<data>
+    https://biruni-gis.com/m/#B<data>
 
 The first letter is the format: "A" = the packed bytes as they are, "B" = the same bytes compressed with
 raw deflate (the page uses DecompressionStream('deflate-raw')). The bytes are written with 43 characters
@@ -24,7 +24,7 @@ other.
 import math
 import zlib
 
-PAGE_URL = "https://hatemtarekgis.github.io/biruni-gis/m/"
+PAGE_URL = "https://biruni-gis.com/m/"
 ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ$*+-./:"
 FORMAT_VERSION = 1
 MAX_CHARS = 1500          # the whole address; ~ QR version 27-29 (M), still readable printed ~4 cm wide

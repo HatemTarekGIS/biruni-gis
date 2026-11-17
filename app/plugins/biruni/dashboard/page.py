@@ -14,7 +14,7 @@ seal is made by a small encoder in the page (byte mode, error level M).
 import json
 import os
 
-PAGE_URL = "https://hatemtarekgis.github.io/biruni-gis/d/"
+PAGE_URL = "https://biruni-gis.com/d/"
 LANGS = ("en", "ar", "es", "fr", "pt_BR", "tr", "fa")
 THEMES = ("biruni-light", "biruni-dark", "desert", "ocean", "high-contrast", "tv-wall")
 TRANSPORTS = ("lan", "bridge", "preview")

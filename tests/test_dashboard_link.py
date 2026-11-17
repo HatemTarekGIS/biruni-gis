@@ -233,7 +233,7 @@ else:
 
 
     HTML = cfg["html"]
-    BASE = "https://hatemtarekgis.github.io/biruni-gis/d/"
+    BASE = "https://biruni-gis.com/d/"
 
 
     def open_link(name, frag, flags=""):
