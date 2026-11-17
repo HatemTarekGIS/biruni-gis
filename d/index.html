@@ -1567,7 +1567,7 @@ async function listen(){const box=document.createElement('div');box.className='e
    if(p){done=true;clearInterval(scan);t.textContent=BD.t('ext_sound_heard');stream.getTracks().forEach(x=>x.stop());try{proc.disconnect();ctx.close()}catch(x){}go(p)}}
   finally{busy=false}},400)}
 function go(p){const lang=BD.lang();
- if(p.mode==='bridge'){const base=BD.transport==='bridge'?location.pathname:'https://hatemtarekgis.github.io/biruni-gis/d/';
+ if(p.mode==='bridge'){const base=BD.transport==='bridge'?location.pathname:'https://biruni-gis.com/d/';
   const url=(BD.transport==='bridge'?location.origin:'')+base+'#k='+p.key+'&j='+p.token+'&l='+lang;
   if(BD.transport==='bridge'){location.hash='k='+p.key+'&j='+p.token+'&l='+lang;location.reload()}else location.href=url}
  else location.href='https://'+p.ip+':'+p.port+'/d/'+p.path+'/#j='+p.token+'&l='+lang}

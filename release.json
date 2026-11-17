@@ -1,22 +1,24 @@
 {
  "files": {
   ".nojekyll": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "CNAME": "aea7a259185f7201e9cf40cf6219bc7014972a230c2bbf87c1fa30b151608b65",
   "assets/logo.png": "68b27830ba203cd6c26f5ac42fb31e6f2d281e4ffaf3a605f606e98b8b0d0aa6",
   "assets/mapsheet.png": "07f8ed74f0ad902dd6173e787704044dbc70862d68b775a6ed25b7fc0e40971d",
   "assets/overview.png": "22c2162add95c638cdf5d0866e9a1cad1ec2e7247b262f90d8f402699adaa74e",
   "assets/start.png": "2b1e895df5c23f00d1a8b0dcebb7bb2ccf0fac328d2cb5100846620dc8596b41",
   "assets/toolbox.png": "673c5986ae87f3bf266c8c32cb71822789e106725918e07410afc9a1fc51c30b",
-  "d/index.html": "033ce689c5a2fbe29c6a12c96efe8c604ab9d7063e52c0a5601a7ade7ac5ca62",
-  "index.html": "825038a37a5ad5c212586f0ae5cfcc1a8c0e6f2819e417487a94a509cd21b7b3",
+  "d/index.html": "7148b9bc6ba51ddc984df43b32cd131d2b7ac7c6b129a748bcb860c7629db082",
+  "index.html": "e85ac05dc9936363515730f50cc4fd0fb8599a2eebed080566fb50949f378e65",
   "m/index.html": "c308ca490fe421290826adae1913572f592d723e70df8aa63c28b07182d566e4",
   "p/index.html": "b0a89571a9d351db7ffe1402b57ce2f5c4451b2f189c91d52dc6a685eafab0d9",
   "p/sw.js": "46f5e287db16818e038c6ce15ce574c2acae180b83bbd6b436fcdde9074fa543",
   "paper/index.html": "78f1c173a7e7ae8ed0a4a2a0367a7a5a608ada24e751d2c1e1bbf8eb60f45a9e",
   "portal/index.html": "654b8e6dda57881c7ec0b83cc395b776f355f18e78ab7c6fa81073ce1c58e11e",
+  "privacy.html": "f5301a93a6548f51818f12beb85e394ca2b43666afbe8b3ed146c5ac38acd493",
   "r/index.html": "9eae4f224310599c4cfca10bc65e03cade9d05202674111f36653d173843469a",
   "s/index.html": "a6c9f988b26461f0fe8c50f3ee801651babf247a23b504c04b88c1e94dc93963",
   "v/index.html": "b10206b33b221b209d114ead12723a0dd2249fc6930cfa1f0c450e8290097b33"
  },
  "format": "biruni-release",
- "version": "2026-11-11T13:01:14Z"
+ "version": "2026-11-17T07:00:14Z"
 }
