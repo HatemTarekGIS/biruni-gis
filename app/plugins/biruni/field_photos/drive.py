@@ -1,0 +1,188 @@
+"""Field photos through the surveyor's own Google Drive: one .bfp file per photo.
+
+The phone page uploads each photo, sealed for this computer, into the user's own Drive; Drive for desktop syncs
+the folder to this PC, and the intake (DriveIntake, below) opens each file and saves it like a photo that came
+over the bridge. Google sees only sealed bytes.
+
+A .bfp file:  "BFP1" | header length (2 bytes, big-endian) | header (JSON, UTF-8) | signature (64) | body
+
+  body       the sealed photo exactly as the bridge carries it (handover.seal: ECDH P-256 to this computer's
+             handover key, then AES-256-GCM), so it opens with HandoverKey.open.
+  header     {"v": 1, "room": tag, "dev": device id, "kid": handover key id, "id": photo id, "n": number on this
+             phone, "t": ms, "size": body length, "sha": SHA-256 of the body (hex), "pub": the phone's ECDSA P-256
+             public key (base64url, 65 bytes), "cert": base64url HMAC-SHA256(Ka, "BFP-CERT1|" + pub + "|" + dev)}
+  signature  ECDSA P-256 / SHA-256 by that phone key over everything before it (raw r|s, as WebCrypto makes it).
+
+  Ka = SHA-256("biruni-drive-auth-1:" + k + sk): k is the office's bridge key, sk the surveyor's own key ("" with
+  the shared QR). Only a phone that scanned this office's code can make a cert, so a file dropped into a shared
+  folder by anyone else is refused; the matching sk then goes through PhotoStore.save's surveyor rules (revoked,
+  per-surveyor mode) like any other photo.
+
+Drive folder: biruni-photos-<tag>/p-<dev>/<n, 6 digits>-<sha, 12>.bfp, tag = hex SHA-256("biruni-drive-room-1:" + k)
+first 16 characters (it names the folder without revealing the key).
+"""
+import base64
+import hashlib
+import hmac
+import json
+import re
+
+MAGIC = b"BFP1"
+MAX_HEADER = 4096
+MAX_BODY = 40 * 1024 * 1024 + 4096      # the page uploads up to 40 MB; a sealed photo adds ~100 bytes
+SIG = 64
+NAME_RE = re.compile(r"^(\d{6})-([0-9a-f]{12})\.bfp$")
+DEV_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+FIELDS = ("v", "room", "dev", "kid", "id", "n", "t", "size", "sha", "pub", "cert")
+
+
+class BfpError(ValueError):
+    """Not a .bfp file this computer accepts (the message says why, in English, for the log)."""
+
+
+def _b64u(data):
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
+
+
+def _unb64u(s):
+    s = str(s)
+    return base64.urlsafe_b64decode(s + "==="[: (len(s) + 3) % 4])
+
+
+def room_tag(k):
+    return hashlib.sha256(("biruni-drive-room-1:" + k).encode("utf-8")).hexdigest()[:16]
+
+
+def folder_name(k):
+    return "biruni-photos-" + room_tag(k)
+
+
+def file_name(n, sha):
+    return f"{int(n):06d}-{sha[:12]}.bfp"
+
+
+def key_id(pk):
+    """Which computer a file is sealed for: from the handover public key the QR code carries (&pk=)."""
+    return hashlib.sha256(("biruni-drive-kid-1:" + pk).encode("utf-8")).hexdigest()[:16]
+
+
+def auth_key(k, sk=""):
+    return hashlib.sha256(("biruni-drive-auth-1:" + k + (sk or "")).encode("utf-8")).digest()
+
+
+def cert(ka, pub, dev):
+    return _b64u(hmac.new(ka, ("BFP-CERT1|" + pub + "|" + dev).encode("utf-8"), hashlib.sha256).digest())
+
+
+def auth_keys(k, surveyor_keys):
+    """{sk: Ka} for the shared code ("") and every surveyor's own code (revoked too: PhotoStore.save says why it
+    refuses them). surveyor_keys: what server.read_surveyor_keys returns."""
+    out = {"": auth_key(k)}
+    for s in ((surveyor_keys or {}).get("surveyors") or {}).values():
+        sec = str((s or {}).get("secret") or "")
+        if sec:
+            out[sec] = auth_key(k, sec)
+    return out
+
+
+def pack(header, body, sign_key):
+    """(file bytes, file name). header: the fields above except v/size/sha (filled in here); sign_key: a
+    cryptography EllipticCurvePrivateKey (the phone's key; the page does the same in BFP_JS)."""
+    from ..vendor import ensure_vendor
+
+    ensure_vendor()
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
+
+    body = bytes(body)
+    h = dict(header, v=1, size=len(body), sha=hashlib.sha256(body).hexdigest())
+    hb = json.dumps(h, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    if len(hb) > MAX_HEADER:
+        raise BfpError("header too long")
+    pre = MAGIC + len(hb).to_bytes(2, "big") + hb
+    r, s = decode_dss_signature(sign_key.sign(pre, ec.ECDSA(hashes.SHA256())))
+    return pre + r.to_bytes(32, "big") + s.to_bytes(32, "big") + body, file_name(h["n"], h["sha"])
+
+
+def parse(blob):
+    """(header, the signed bytes, signature, body) - the shape only, nothing is trusted yet."""
+    blob = bytes(blob)
+    if len(blob) < 6 or blob[:4] != MAGIC:
+        raise BfpError("not a .bfp file")
+    hlen = int.from_bytes(blob[4:6], "big")
+    if hlen < 2 or hlen > MAX_HEADER or len(blob) < 6 + hlen + SIG:
+        raise BfpError("damaged header")
+    try:
+        h = json.loads(blob[6:6 + hlen].decode("utf-8"))
+    except (UnicodeDecodeError, ValueError) as e:
+        raise BfpError("damaged header") from e
+    if not isinstance(h, dict) or h.get("v") != 1 or any(f not in h for f in FIELDS):
+        raise BfpError("unknown header")
+    for f in ("room", "dev", "kid", "id", "sha", "pub", "cert"):
+        if not isinstance(h[f], str):
+            raise BfpError("unknown header")
+    for f in ("n", "t", "size"):
+        if not isinstance(h[f], int) or isinstance(h[f], bool) or h[f] < 0:
+            raise BfpError("unknown header")
+    if not DEV_RE.match(h["dev"]) or not re.fullmatch(r"[0-9a-f]{64}", h["sha"]) or h["n"] > 999999:
+        raise BfpError("unknown header")
+    body = blob[6 + hlen + SIG:]
+    if len(body) > MAX_BODY:
+        raise BfpError("too large")
+    return h, blob[:6 + hlen], blob[6 + hlen:6 + hlen + SIG], body
+
+
+def verify(blob, kas, kid, room=None):
+    """A .bfp file -> (header, the sealed body, the surveyor key sk it was certified with).
+    kas: auth_keys(...); kid: key_id of this computer's handover key; room: room_tag(k) (checked when given).
+    BfpError when it is damaged, made by a phone that never scanned this office's code, or sealed for another
+    computer."""
+    from ..vendor import ensure_vendor
+
+    ensure_vendor()
+    from cryptography.exceptions import InvalidSignature
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature
+
+    h, signed, sig, body = parse(blob)
+    if room is not None and h["room"] != room:
+        raise BfpError("another office")
+    if not hmac.compare_digest(h["kid"], kid):
+        raise BfpError("sealed for another computer")
+    if h["size"] != len(body) or not hmac.compare_digest(hashlib.sha256(body).hexdigest(), h["sha"]):
+        raise BfpError("damaged body")
+    try:
+        raw = _unb64u(h["pub"])
+        if len(raw) != 65:
+            raise ValueError
+        pk = ec.EllipticCurvePublicKey.from_encoded_point(ec.SECP256R1(), raw)
+        der = encode_dss_signature(int.from_bytes(sig[:32], "big"), int.from_bytes(sig[32:], "big"))
+        pk.verify(der, signed, ec.ECDSA(hashes.SHA256()))
+    except (InvalidSignature, ValueError, TypeError) as e:
+        raise BfpError("bad signature") from e
+    for sk, ka in kas.items():
+        if hmac.compare_digest(cert(ka, h["pub"], h["dev"]), h["cert"]):
+            return h, body, sk
+    raise BfpError("not from this office's code")
+
+
+# ---- the same on the phone page (field_photos/drive_page.py puts it in /p/) --------------------------------------
+# needs enc, hex, b64u and cat from bridge.CORE_JS
+BFP_JS = r"""
+/* .bfp: one photo sealed for the PC, in the user's own Drive (field_photos/drive.py says the format) */
+const BFP={
+ sha:async b=>hex(await crypto.subtle.digest('SHA-256',b)),
+ tag:async k=>(await BFP.sha(enc.encode('biruni-drive-room-1:'+k))).slice(0,16),
+ kid:async pk=>(await BFP.sha(enc.encode('biruni-drive-kid-1:'+pk))).slice(0,16),
+ cert:async(k,sk,pub,dev)=>{const ka=await crypto.subtle.digest('SHA-256',enc.encode('biruni-drive-auth-1:'+k+(sk||'')));
+  const key=await crypto.subtle.importKey('raw',ka,{name:'HMAC',hash:'SHA-256'},false,['sign']);
+  return b64u.enc(await crypto.subtle.sign('HMAC',key,enc.encode('BFP-CERT1|'+pub+'|'+dev)))},
+ /* h: {room,dev,kid,id,n,t,pub,cert}; body: the sealed photo (Uint8Array); key: the phone's ECDSA P-256 key */
+ pack:async(h,body,key)=>{h=Object.assign({},h,{v:1,size:body.length,sha:await BFP.sha(body)});
+  const hb=enc.encode(JSON.stringify(h));if(hb.length>4096)throw new Error('bfp header');
+  const pre=cat(enc.encode('BFP1'),new Uint8Array([hb.length>>8,hb.length&255]),hb);
+  const sig=new Uint8Array(await crypto.subtle.sign({name:'ECDSA',hash:'SHA-256'},key,pre));
+  return {bytes:cat(pre,sig,body),name:String(h.n).padStart(6,'0')+'-'+h.sha.slice(0,12)+'.bfp',sha:h.sha}}};
+"""
