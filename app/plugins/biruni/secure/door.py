@@ -113,7 +113,9 @@ def rel_of(url, site=SITE):
 def _fetch(url, timeout):
     sep = "&" if "?" in url else "?"
     req = urllib.request.Request(url + sep + "door=" + secrets.token_hex(6),
-                                 headers={"User-Agent": "BiruniGIS-door", "Cache-Control": "no-cache"})
+                                 headers={"User-Agent": "BiruniGIS-door", "Cache-Control": "no-cache",
+                                          # not "text/html": a CDN may then add its own beacon to the page
+                                          "Accept": "*/*", "Accept-Encoding": "identity"})
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return r.read()
 
