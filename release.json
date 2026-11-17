@@ -1,5 +1,6 @@
 {
  "files": {
+  ".git": "99a698eb8c912455cf0eee7899115e0d7e37c9a93b7d59f45160d1095abca01b",
   ".nojekyll": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "CNAME": "aea7a259185f7201e9cf40cf6219bc7014972a230c2bbf87c1fa30b151608b65",
   "assets/logo.png": "68b27830ba203cd6c26f5ac42fb31e6f2d281e4ffaf3a605f606e98b8b0d0aa6",
@@ -8,9 +9,10 @@
   "assets/start.png": "2b1e895df5c23f00d1a8b0dcebb7bb2ccf0fac328d2cb5100846620dc8596b41",
   "assets/toolbox.png": "673c5986ae87f3bf266c8c32cb71822789e106725918e07410afc9a1fc51c30b",
   "d/index.html": "7148b9bc6ba51ddc984df43b32cd131d2b7ac7c6b129a748bcb860c7629db082",
+  "drive-spike.html": "a0c5c7d4d5039f64fcbd0f9c9155d716fe05ee454447a5467bc03d513d4e2287",
   "index.html": "c2e7e40ae665b8e43d3dd640715742b235add9b5dcb11eb1b261e6f9bc0bb64d",
   "m/index.html": "c308ca490fe421290826adae1913572f592d723e70df8aa63c28b07182d566e4",
-  "p/index.html": "c6a2dd6b3db2f80742f73080db6734ef28e3aa2daf982d9b24bd157e983df401",
+  "p/index.html": "5dd762ac19f4e5b751f7af120ec0473a64f164868b386547fa76801353f24788",
   "p/sw.js": "46f5e287db16818e038c6ce15ce574c2acae180b83bbd6b436fcdde9074fa543",
   "paper/index.html": "78f1c173a7e7ae8ed0a4a2a0367a7a5a608ada24e751d2c1e1bbf8eb60f45a9e",
   "portal/index.html": "654b8e6dda57881c7ec0b83cc395b776f355f18e78ab7c6fa81073ce1c58e11e",
@@ -20,5 +22,5 @@
   "v/index.html": "b10206b33b221b209d114ead12723a0dd2249fc6930cfa1f0c450e8290097b33"
  },
  "format": "biruni-release",
- "version": "2026-11-17T08:32:13Z"
+ "version": "2026-11-17T08:36:48Z"
 }
