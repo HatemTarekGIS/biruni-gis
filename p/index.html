@@ -1,4 +1,4 @@
-<!doctype html><html lang="en" dir="ltr"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-Tf2qtzyzlhhkVgEpMqIujrkL9BTmXY503rvcVEkVA/Y='; style-src 'sha256-h+DCVBCxDm+oHJEL5j+jhobsnuXA/mKDA5AX//VlgFk='; img-src 'self' blob:; media-src blob:; connect-src wss://relay.damus.io wss://nos.lol wss://relay.primal.net wss://nostr.mom wss://relay.nostr.band https://ntfy.sh wss://ntfy.sh https://www.googleapis.com; worker-src 'self'; manifest-src 'self'; frame-src https://drive.biruni-gis.com; base-uri 'none'; form-action 'none'">
+<!doctype html><html lang="en" dir="ltr"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-Tf2qtzyzlhhkVgEpMqIujrkL9BTmXY503rvcVEkVA/Y='; style-src 'sha256-iw34GEk4IRVqboxfqMJMCXH6RhAoWw9d3gCrrJk1m5g='; img-src 'self' blob:; media-src blob:; connect-src wss://relay.damus.io wss://nos.lol wss://relay.primal.net wss://nostr.mom wss://relay.nostr.band https://ntfy.sh wss://ntfy.sh https://www.googleapis.com; worker-src 'self'; manifest-src 'self'; frame-src https://drive.biruni-gis.com; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#F4F6F8" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0E1114" media="(prefers-color-scheme: dark)">
@@ -17,9 +17,10 @@ svg{width:1em;height:1em;flex:none}
 button{font:inherit;cursor:pointer}
 .top{position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:10px;
  padding:calc(10px + env(safe-area-inset-top)) 16px 10px;background:var(--bg)}
-.brand{display:flex;align-items:center;gap:9px;font-weight:700;font-size:17px;letter-spacing:-.01em}
+.brand{display:flex;flex:none;align-items:center;gap:9px;font-weight:700;font-size:17px;letter-spacing:-.01em}
 .logo{width:30px;height:30px;border-radius:10px;background:var(--accent);color:var(--ink);display:grid;place-items:center;font-size:18px}
-.tools{display:flex;gap:8px;align-items:center}
+.tools{display:flex;gap:8px;align-items:center;min-width:0}
+#waitPill{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis}   /* a long count never widens the page */
 .pill{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;padding:6px 11px;border-radius:999px;
  background:var(--card);border:1px solid var(--line);color:var(--dim);white-space:nowrap}
 .pill.warn{border-color:var(--fair);color:var(--fair);font-weight:700}
