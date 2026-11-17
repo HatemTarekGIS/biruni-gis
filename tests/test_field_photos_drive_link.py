@@ -27,7 +27,7 @@ def free_port():
 PA, PB, PC = free_port(), free_port(), free_port()
 PARENT, HELPER, STRANGER = f"http://127.0.0.1:{PA}", f"http://localhost:{PB}", f"http://127.0.0.1:{PC}"
 os.environ.update({"BIRUNI_DRIVE_API": HELPER, "BIRUNI_DRIVE_HELPER": HELPER, "BIRUNI_DRIVE_PARENT": PARENT,
-                   "BIRUNI_DRIVE_GSI": HELPER + "/gsi.js"})
+                   "BIRUNI_DRIVE_GSI": HELPER + "/gsi.js", "BIRUNI_DRIVE_PICKER": HELPER + "/picker.js"})
 os.environ["BIRUNI_BRIDGE_RELAYS"] = f"ws://127.0.0.1:{free_port()}"   # nothing there: never the public relays
 os.environ["BIRUNI_BRIDGE_NTFY"] = "https://127.0.0.1:9/"
 os.environ["QT_QPA_PLATFORM"] = "offscreen"
@@ -78,6 +78,20 @@ window.google={accounts:{oauth2:{
  if(b&&!b.disabled&&!window.__tapped){window.__tapped=1;b.click()}else setTimeout(poll,50)})();
 """
 
+FAKE_PICKER = r"""
+window.gapi={load(n,o){window.__pkload=(window.__pkload||0)+1;setTimeout(()=>o.callback(),5)}};
+window.google=window.google||{};
+google.picker={ViewId:{FOLDERS:'folders'},DocsViewMode:{LIST:'list'},Response:{ACTION:'action',DOCUMENTS:'docs'},
+ Action:{PICKED:'picked',CANCEL:'cancel'},Document:{ID:'id',NAME:'name',MIME_TYPE:'mimeType'},
+ DocsView:class{constructor(v){this.o={view:v}}setSelectFolderEnabled(){return this}setIncludeFolders(){return this}
+  setMimeTypes(m){this.o.mime=m;return this}setMode(){return this}setQuery(q){this.o.q=q;return this}
+  setOwnedByMe(b){this.o.own=b;return this}},
+ PickerBuilder:class{constructor(){this.v=[]}addView(v){this.v.push(v.o);return this}setOAuthToken(t){this.t=t;return this}
+  setAppId(a){this.a=a;return this}setCallback(c){this.c=c;return this}
+  build(){const s=this;return {setVisible(){fetch('/fake/pick?'+new URLSearchParams({t:s.t,a:s.a,q:s.v[0].q}))
+   .then(r=>r.json()).then(d=>s.c(d))}}}}};
+"""
+
 PARENT_PAGE = r"""<!doctype html><html><body><script>
 window.got=[];const bad=location.search.indexOf('bad')>=0,NONCE=bad?'x':'n'+Math.random().toString(36).slice(2,14);
 const f=document.createElement('iframe');f.src='__HELPER__/link/';document.body.appendChild(f);
@@ -94,7 +108,43 @@ import re as _re  # noqa: E402
 import tempfile as _tf  # noqa: E402
 
 DRIVE_DISK = _tf.mkdtemp()
-FILES, FAKE = {}, {"drop": 0, "uploads": 0, "next": 0}
+FILES, FAKE = {}, {"drop": 0, "uploads": 0, "next": 0, "pick": [], "picks": []}
+GRANTS, PICKER_GETS = set(), []
+
+
+def chain(fid):
+    while fid in FILES:
+        yield FILES[fid]
+        fid = (FILES[fid]["parents"] or [None])[0]
+
+
+def visible(fid):
+    """drive.file: the app sees what it made and what the user picked, unless a folder above was taken back"""
+    return (fid in FILES and (FILES[fid].get("app", True) or fid in GRANTS)
+            and not any(f.get("revoked") for f in chain(fid)))
+
+
+def writable(fid):
+    return all(f.get("canAdd", True) for f in chain(fid))
+
+
+def drive_error(handler, code, reason):
+    handler._send(code, json.dumps({"error": {"code": code, "errors": [{"reason": reason}]}}).encode(),
+                  "application/json", cors=True)
+
+
+def parent_refused(handler, meta):
+    """404 if the parent cannot be seen, 403 if it is shared for viewing only; else False"""
+    par = (meta.get("parents") or [None])[0]
+    if par is None:
+        return False
+    if not visible(par):
+        drive_error(handler, 404, "notFound")
+        return True
+    if not writable(par):
+        drive_error(handler, 403, "insufficientFilePermissions")
+        return True
+    return False
 
 
 def drive_path(fid):
@@ -132,7 +182,7 @@ def drive_query(q):
             ok = ok and m.group(1) in f["parents"]
         for m in _re.finditer(r"appProperties has \{ key='([^']*)' and value='([^']*)' \}", q):
             ok = ok and f["appProperties"].get(m.group(1)) == m.group(2)
-        if ok:
+        if ok and visible(f["id"]):
             out.append(f)
     return sorted(out, key=lambda f: f["createdTime"])
 
@@ -160,6 +210,37 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/link/":
             LINK_GETS.append(self.headers.get("Referer") or "")
             self._send(200, drive_page.helper_page().encode("utf-8"))
+        elif path == "/picker.js":
+            PICKER_GETS.append(1)
+            self._send(200, FAKE_PICKER.encode("utf-8"), "text/javascript")
+        elif path == "/fake/pick":
+            from urllib.parse import parse_qs, urlsplit
+
+            q = {a: b[0] for a, b in parse_qs(urlsplit(self.path).query).items()}
+            FAKE["picks"].append(q)
+            how = FAKE["pick"].pop(0) if FAKE["pick"] else "cancel"
+            if how == "office":
+                GRANTS.add(OFFICE_ID)
+                d = {"action": "picked", "docs": [{"id": OFFICE_ID, "name": FILES[OFFICE_ID]["name"],
+                                                    "mimeType": "application/vnd.google-apps.folder"}]}
+            elif how == "wrong":
+                d = {"action": "picked", "docs": [{"id": "holidayphotos01", "name": "Holiday photos",
+                                                    "mimeType": "application/vnd.google-apps.folder"}]}
+            else:
+                d = {"action": "cancel"}
+            self._send(200, json.dumps(d).encode(), "application/json", cors=True)
+        elif path.startswith("/drive/v3/files/"):
+            if not self._auth():
+                return
+            fid = path.rsplit("/", 1)[1]
+            if not visible(fid):
+                drive_error(self, 404, "notFound")
+                return
+            f = FILES[fid]
+            self._send(200, json.dumps({"id": fid, "name": f["name"], "mimeType": f["mimeType"], "trashed": False,
+                                        "ownedByMe": f.get("own", True),
+                                        "capabilities": {"canAddChildren": writable(fid)}}).encode(),
+                       "application/json", cors=True)
         elif path == "/gsi.js":
             self._send(200, FAKE_GSI.encode("utf-8"), "text/javascript")
         elif path == "/drive/v3/about":
@@ -199,13 +280,18 @@ class Handler(BaseHTTPRequestHandler):
         path = self.path.split("?", 1)[0]
         body = self.rfile.read(int(self.headers.get("Content-Length") or 0))
         if path == "/drive/v3/files":
-            f = drive_new(json.loads(body))
+            meta = json.loads(body)
+            if parent_refused(self, meta):
+                return
+            f = drive_new(meta)
             self._send(200, json.dumps({"id": f["id"]}).encode(), "application/json", cors=True)
         elif path == "/upload/drive/v3/files":
             b = self.headers.get("Content-Type", "").split("boundary=", 1)[1].encode()
             parts = body.split(b"--" + b)
             meta = json.loads(parts[1].split(b"\r\n\r\n", 1)[1].rsplit(b"\r\n", 1)[0])
             data = parts[2].split(b"\r\n\r\n", 1)[1][:-2]
+            if parent_refused(self, meta):
+                return
             f = drive_new(meta, data)
             FAKE["uploads"] += 1
             if FAKE["drop"]:
@@ -224,13 +310,24 @@ for port in (PA, PB, PC):
     threading.Thread(target=srv.serve_forever, daemon=True).start()
 
 
+POPUPS = []
+
+
 class Page(QWebEnginePage):
     def javaScriptConsoleMessage(self, level, message, line, source):  # noqa: N802
         CONSOLE.append(message)
         print("js:", message, flush=True)
 
+    def createWindow(self, _type):  # noqa: N802
+        w = Page(self.profile())   # the link page opened as a window (where the office folder is chosen)
+        POPUPS.append(w)
+        return w
+
 
 profile = QWebEngineProfile.defaultProfile()
+from PyQt6.QtWebEngineCore import QWebEngineSettings  # noqa: E402
+
+profile.settings().setAttribute(QWebEngineSettings.WebAttribute.JavascriptCanOpenWindows, True)
 result = {}
 
 
@@ -252,8 +349,10 @@ def tokens(page):
 # ---- the page and its CSP ------------------------------------------------------------------------------------------
 html = drive_page.helper_page()
 csp = html.split('Content-Security-Policy" content="', 1)[1].split('"', 1)[0]
-check("'unsafe-inline'" not in csp and "default-src 'none'" in csp and f"script-src 'sha256-" in csp
-      and HELPER + "/gsi.js" in csp, "the link page has a CSP: its own script by hash and the sign-in script only")
+script_src = [d for d in csp.split("; ") if d.startswith("script-src ")][0]
+check("'unsafe-inline'" not in script_src and "default-src 'none'" in csp and "script-src 'sha256-" in csp
+      and HELPER + "/gsi.js" in script_src and "https://docs.google.com" in csp,
+      "the link page has a CSP: its own script by hash, the sign-in and Picker scripts only")
 check(PARENT in html and "*'" not in html.split("<script>", 1)[1], "it posts only to the photo page's exact origin")
 
 # ---- opened alone: it only explains --------------------------------------------------------------------------------
@@ -302,6 +401,14 @@ import tempfile  # noqa: E402
 KEYDIR = tempfile.mkdtemp()
 pk = HandoverKey(KEYDIR).public
 k = bridge.new_key()
+from biruni.field_photos import drive  # noqa: E402
+
+OFFICE_PATH, made = drive.ensure_office_folder([DRIVE_DISK], k)
+OFFICE_ID = "officefolder0001"
+FILES[OFFICE_ID] = {"id": OFFICE_ID, "name": os.path.basename(OFFICE_PATH), "mimeType": "application/vnd.google-apps.folder",
+                    "parents": [], "appProperties": {}, "data": None, "createdTime": "2026-11-16T00:00:00Z",
+                    "app": False, "own": False}
+check(made and os.path.isdir(OFFICE_PATH), "the office computer made its folder in Drive for desktop")
 plain = Page(profile)
 n_link = len(LINK_GETS)
 plain.load(QUrl(f"{PARENT}/p/#k={k}&i={bridge.pin(k)}&l=en"))
@@ -315,8 +422,11 @@ check(wait(lambda: js(ph, "!!document.getElementById('driveCard')") is True, 15)
 check(js(ph, "PCKEY") == pk, "… and photos are sealed for that key from the start")
 check(wait(lambda: js(ph, "DRV.ok()") is True, 20), "the link page hands its token to the phone page "
       + str(js(ph, "JSON.stringify({s:DRV.state,r:DRV.ready})")))
-check(js(ph, "DRV.state") == "idle" and js(ph, "document.querySelector('#driveCard .dstate').textContent")
-      == js(ph, "T.driveIdle") and js(ph, "T.driveIdle") != "", "the card says it is linked, in the page's language")
+check(wait(lambda: js(ph, "DRV.state") == "pick", 10)
+      and js(ph, "document.querySelector('#driveCard .dstate').textContent")
+      == js(ph, "T.drivePickHint.replace('{name}',DRV.fname())") and js(ph, "T.drivePickHint") != ""
+      and js(ph, "!document.querySelector('#driveCard .dpick').classList.contains('hide')") is True,
+      "linked, the card asks to choose the office folder, in the page's language")
 check(js(ph, "document.querySelector('#driveCard iframe').src") == HELPER + "/link/",
       "the link is a frame of the link page (not Google's script in the photo page)")
 check(js(ph, "[...document.scripts].every(s=>!s.src)&&typeof google==='undefined'") is True,
@@ -330,7 +440,6 @@ check(js(ph, "DRV.tok") != "forged", "a token posted by the page to itself (not 
 # ---- 7d: a photo taken with the computer out of reach goes to Drive, and the computer takes it in ---------------------
 import queue  # noqa: E402
 
-from biruni.field_photos import drive  # noqa: E402
 from biruni.field_photos.server import PhotoStore  # noqa: E402
 
 
@@ -359,8 +468,31 @@ def queued(pid):
 
 
 take("photo-drive-0001")
+wait(lambda: False, 2)
+check(not bfps() and queued("photo-drive-0001") is True and js(ph, "DRV.state") == "pick"
+      and not any(f["name"].startswith("biruni-photos-") and f.get("app", True) for f in FILES.values()),
+      "before the office folder is chosen: the photo waits, and the phone makes no folder of its own")
+check(not PICKER_GETS, "the small link frame never loads Google Picker")
+ph.runJavaScript("window.postMessage({v:1,type:'biruni-drive-folder',nonce:DRV.nonce,id:'%s',name:DRV.fname()},'*')"
+                 % OFFICE_ID)
+wait(lambda: False, 1)
+check(js(ph, "DRV.fold") is None, "a folder message from the page itself is ignored")
+
+# the surveyor taps "Choose the office folder": the link page opens as a window with Picker; a wrong folder first
+FAKE["pick"] = ["wrong", "office"]
+ph.runJavaScript("driveOpenPick()")
+check(wait(lambda: js(ph, "!!DRV.fold") is True, 30),
+      f"the office folder is chosen in the link window ({FAKE['picks']}, popups {len(POPUPS)}, state {js(ph, 'DRV.state')})")
+pq = FAKE["picks"]
+check(len(pq) == 2 and all(x.get("q") == FILES[OFFICE_ID]["name"] and x.get("t", "").startswith("tok-")
+                           and x.get("a") == "890626226614" for x in pq),
+      "Picker is asked for the office folder by name, with the phone's token and the app id")
+check(js(ph, "DRV.fold.r") == OFFICE_ID and js(ph, "DRV.fold.own") is False
+      and js(ph, "JSON.parse(kept('biruni-drive-f-'+ROOM)).k") == 1,
+      "a wrong folder is refused in the window; the office's folder is kept for this room")
 check(wait(lambda: len(bfps()) == 1, 20), f"the photo is uploaded to Drive ({bfps()}, state {js(ph, 'DRV.state')})")
 tag, dev = drive.room_tag(k), js(ph, "DEVID")
+check(FILES[OFFICE_ID]["name"] == f"biruni-photos-{tag}", "the office folder has the room's name")
 check(bool(bfps()) and bfps()[0].startswith(f"biruni-photos-{tag}/p-{dev}/000001-"),
       "… as biruni-photos-<tag>/p-<device>/000001-<sha>.bfp")
 check(wait(lambda: js(ph, "DRV.n") == 1, 10), "the card counts it")
@@ -396,10 +528,52 @@ check(ajs(ph, "dget('#key').then(k=>k.kp.privateKey.extractable)") is False,
 r2 = drive.DriveIntake([DRIVE_DISK], store, pc, k, queue.Queue()).scan()
 check(r2["new"] == 2 and not r2["refused"], f"the computer takes in the other two, nothing refused ({r2})")
 
+# p-<device> was deleted in Drive: it is made again, no new choice needed
+pdev = [i for i, f in FILES.items() if f["name"] == f"p-{dev}"]
+for i in pdev:
+    FILES.pop(i)
+n0 = len(bfps())
+take("photo-drive-0005")
+wait(lambda: False, 2)
+ph.runJavaScript("drivePump()")
+check(wait(lambda: js(ph, "DRV.n") == 4, 20) and len([f for f in FILES.values() if f["name"] == f"p-{dev}"]) == 1
+      and js(ph, "!!DRV.fold") is True, f"a deleted p-<device> is made again, no new choice (state {js(ph, 'DRV.state')})")
+
+
+def repick():
+    FAKE["pick"] = ["office"]
+    ph.runJavaScript("driveOpenPick()")
+    return wait(lambda: js(ph, "!!DRV.fold") is True, 30)
+
+
+# the office shares for viewing only: the card says so, the photo waits; made an Editor and chosen again, it goes
+FILES[OFFICE_ID]["canAdd"] = False
+take("photo-drive-0006")
+check(wait(lambda: js(ph, "DRV.state") == "ro", 20) and js(ph, "DRV.fold") is None and queued("photo-drive-0006") is True,
+      f"a view-only share: the card asks the office for Editor, the photo waits (state {js(ph, 'DRV.state')})")
+FILES[OFFICE_ID]["canAdd"] = True
+check(repick() and wait(lambda: js(ph, "DRV.n") == 5, 20), "made an Editor and chosen again: the photo goes")
+
+# the share is taken back: the folder is gone for the phone; shared and chosen again, the same p-<device> is used
+FILES[OFFICE_ID]["revoked"] = True
+take("photo-drive-0007")
+check(wait(lambda: js(ph, "DRV.state") == "gone", 20) and queued("photo-drive-0007") is True,
+      f"the share taken back: the card says the folder cannot be reached, the photo waits (state {js(ph, 'DRV.state')})")
+FILES[OFFICE_ID]["revoked"] = False
+check(repick() and wait(lambda: js(ph, "DRV.n") == 6, 20)
+      and len([f for f in FILES.values() if f["name"] == f"p-{dev}"]) == 1,
+      "shared and chosen again: the photo goes, into the same p-<device>")
+r3 = drive.DriveIntake([DRIVE_DISK], store, pc, k, queue.Queue()).scan()
+check(r3["new"] == 3 and not r3["refused"], f"the computer takes in those three too ({r3})")
+check(ajs(ph, "(()=>{const o=kept('biruni-drive-f-'+ROOM);keep('biruni-drive-f-'+ROOM,JSON.stringify({t:DRV.tag,r:'x',p:'y'}));"
+              "const c=dcache();keep('biruni-drive-f-'+ROOM,o);return c})()") is None,
+      "a folder kept by the older page (not chosen) is not used")
+
 # a refused token: the card asks for a new link, nothing is sent
+n0 = len(bfps())
 ph.runJavaScript("DRV.tok='bad-token';DRV.exp=Date.now()+9e6")
 take("photo-drive-0004")
-check(wait(lambda: js(ph, "DRV.state") == "auth", 15) and len(bfps()) == 3 and queued("photo-drive-0004") is True,
+check(wait(lambda: js(ph, "DRV.state") == "auth", 15) and len(bfps()) == n0 and queued("photo-drive-0004") is True,
       "a refused token: the card asks to link again, the photo waits")
 
 check(not any("Content Security Policy" in m for m in CONSOLE), "nothing was refused by the CSP")

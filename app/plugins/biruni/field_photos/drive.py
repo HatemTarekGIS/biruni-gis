@@ -197,6 +197,28 @@ def office_folders(roots, k):
     return out
 
 
+def ensure_office_folder(roots, k):
+    """(path, created): the office's Drive folder, made in the first synced root that takes it when none is found.
+    The office owns this folder and shares it with each surveyor. A root that refuses (G:\\Shared drives) is
+    skipped. (None, False) when no root can hold it. The path is written like office_folders writes it, so a
+    later look finds the same one."""
+    found = office_folders(roots, k)
+    if found:
+        return found[0], False
+    name = folder_name(k)
+    for root in roots or ():
+        root = str(root or "")
+        if not root or not os.path.isdir(root):
+            continue
+        path = os.path.join(root, name)
+        try:
+            os.mkdir(path)
+        except OSError:
+            continue
+        return os.path.normcase(os.path.abspath(path)), True
+    return None, False
+
+
 def _volumes():
     """[(root, label)] of this PC's fixed drives (Drive for desktop shows as one, labelled "Google Drive")."""
     if os.name != "nt":

@@ -472,7 +472,7 @@ async function sendItem1(it){
  throw new Error('closed')}
 async function alive(){if(lineOpen())return true;if(RELAY&&SIG.up())return true;connect();return false}
 function offline(){if(lineOpen())return;drivePump();
- if(DRV.on&&DRV.ok()){say(false,'driveMode');connect();return}
+ if(DRV.on&&DRV.go()){say(false,'driveMode');connect();return}
  if(RELAY&&SIG.up()){say(false,'relayMode');return}
  if(lastState==='connected'||!lastState||lastState==='driveMode')say(false,'connecting');else say(false,lastState);connect()}
 (async()=>{if(!KEYB||KEYB.length!==43||!window.isSecureContext||!window.RTCPeerConnection){

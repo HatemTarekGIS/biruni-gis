@@ -5,6 +5,7 @@ import html as html_mod
 import json
 import os
 import shutil
+import subprocess
 import threading
 import time
 from urllib.parse import quote
@@ -15,9 +16,9 @@ from qgis.core import (Qgis, QgsApplication, QgsCoordinateReferenceSystem, QgsCo
                        QgsVectorFileWriter, QgsVectorLayer)
 from qgis.PyQt.QtCore import QMetaType, Qt, QTimer, QUrl
 from qgis.PyQt.QtGui import QColor, QDesktopServices, QPixmap
-from qgis.PyQt.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QDialog, QDockWidget, QFileDialog, QFrame,
-                                 QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget, QMenu, QMessageBox,
-                                 QPushButton, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget)
+from qgis.PyQt.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QComboBox, QDialog, QDockWidget,
+                                 QFileDialog, QFrame, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget,
+                                 QMenu, QMessageBox, QPushButton, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget)
 
 from ..i18n import lang, tr
 from .server import read_surveyor_keys
@@ -27,6 +28,7 @@ P_SCOPE = "Biruni"
 P_DRIVE = "/field-photos/drive"
 P_NOTICE = "/field-photos/drive-notice"
 DRIVE_ROOTS = KEY + "drive-roots"
+DRIVE_MADE = KEY + "drive-made"   # the office tags whose Drive folder Biruni already made once (never made again)
 KEY_BACKUP = KEY + "key-backup"
 LAYER = "field_photos"
 GPKG = "field_photos.gpkg"
@@ -906,6 +908,25 @@ class FieldPhotosDock(QDockWidget):
         drow.addWidget(self.drive_remove_btn)
         drow.addStretch(1)
         dv.addLayout(drow)
+        self._office_path = None
+        self.drive_share = QLabel()
+        self.drive_share.setObjectName("GpsHint")
+        self.drive_share.setWordWrap(True)
+        self.drive_share.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.drive_share.hide()
+        dv.addWidget(self.drive_share)
+        orow = QHBoxLayout()
+        self.drive_show_btn = QPushButton(tr("Show folder"))
+        self.drive_show_btn.clicked.connect(self._show_office_folder)
+        self.drive_copy_btn = QPushButton(tr("Copy name"))
+        self.drive_copy_btn.clicked.connect(self._copy_office_name)
+        self.drive_make_btn = QPushButton(tr("Make the office folder"))
+        self.drive_make_btn.clicked.connect(self._make_office_folder)
+        for b in (self.drive_show_btn, self.drive_copy_btn, self.drive_make_btn):
+            b.hide()
+            orow.addWidget(b)
+        orow.addStretch(1)
+        dv.addLayout(orow)
         self.drive_state = QLabel()
         self.drive_state.setObjectName("GpsHint")
         self.drive_state.setWordWrap(True)
@@ -2340,6 +2361,7 @@ class FieldPhotosDock(QDockWidget):
         elif self.server is None:
             self.drive_state.setText(tr("Google Drive is checked while Field Photos is started."))
             self.drive_state.setToolTip("")
+        self._office_folder_state(create=False)
 
     def _add_drive_root(self):
         d = QFileDialog.getExistingDirectory(self, tr("Google Drive folder on this computer"), os.path.expanduser("~"))
@@ -2372,6 +2394,99 @@ class FieldPhotosDock(QDockWidget):
             self.drive_state.setText(tr("Google Drive is checked while Field Photos is started."))
         self.drive_state.setToolTip("")
 
+    def _drive_made(self):
+        raw = QgsSettings().value(DRIVE_MADE, "")
+        if isinstance(raw, list):
+            return [str(x) for x in raw if x]
+        try:
+            data = json.loads(raw or "[]")
+        except (TypeError, ValueError):
+            return []
+        return [str(x) for x in data if x] if isinstance(data, list) else []
+
+    def _record_drive_made(self, tag):
+        if not tag:
+            return
+        made = self._drive_made()
+        if tag not in made:
+            made.append(tag)
+            QgsSettings().setValue(DRIVE_MADE, json.dumps(made))
+
+    @staticmethod
+    def _office_not_found_text(name):
+        return tr(
+            "The office folder ({name}) is not in Google Drive on this computer. If Google Drive is still starting, "
+            "wait; otherwise make it and share it again."
+        ).format(name=name)
+
+    def _office_folder_state(self, create=False):
+        from . import bridge, drive
+
+        roots = self._drive_roots()
+        k = bridge.load_key(QgsSettings()) if self.drive_enabled() and roots else ""
+        if not self.drive_enabled() or not k or not roots:
+            self._office_path = None
+            for w in (self.drive_share, self.drive_show_btn, self.drive_copy_btn, self.drive_make_btn):
+                w.hide()
+            return None
+        name = drive.folder_name(k)
+        if create:
+            path, _ = drive.ensure_office_folder(roots, k)
+        else:
+            found = drive.office_folders(roots, k)
+            path = found[0] if found else None
+        if path:
+            self._office_path = path
+            self.drive_share.setText(tr(
+                "Office folder: {path}. Share it with each surveyor's Google account as Editor "
+                "(right-click → Google Drive → Share, or from drive.google.com). "
+                "The surveyor then chooses it once on the phone."
+            ).format(path=path))
+            self.drive_share.show()
+            self.drive_show_btn.show()
+            self.drive_copy_btn.show()
+            self.drive_make_btn.hide()
+            return path
+        self._office_path = None
+        self.drive_share.setText(self._office_not_found_text(name))
+        self.drive_share.show()
+        self.drive_show_btn.hide()
+        self.drive_copy_btn.hide()
+        self.drive_make_btn.show()
+        return None
+
+    def _show_office_folder(self):
+        path = self._office_path
+        if not path or not os.path.isdir(path):
+            path = self._office_folder_state(create=False)
+        if not path:
+            return
+        if os.name == "nt":
+            subprocess.Popen(["explorer", "/select,", os.path.normpath(path)])
+        else:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(path))
+
+    def _copy_office_name(self):
+        from . import bridge, drive
+
+        if self._office_path:
+            name = os.path.basename(self._office_path)
+        else:
+            k = bridge.load_key(QgsSettings())
+            name = drive.folder_name(k) if k else ""
+        cb = QApplication.clipboard()
+        if cb is not None and name:
+            cb.setText(name)
+
+    def _make_office_folder(self):
+        from . import bridge, drive
+
+        path = self._office_folder_state(create=True)
+        if path:
+            k = bridge.load_key(QgsSettings())
+            if k:
+                self._record_drive_made(drive.room_tag(k))
+
     def _on_drive_toggled(self, on):
         proj = QgsProject.instance()
         if on:
@@ -2397,6 +2512,14 @@ class FieldPhotosDock(QDockWidget):
             self._show_key_state()
             if not self._is_key_backed_up():
                 self._nudge_backup()
+            from . import bridge, drive
+
+            k = bridge.load_key(QgsSettings())
+            tag = drive.room_tag(k) if k else ""
+            should_create = bool(tag and tag not in self._drive_made())
+            path = self._office_folder_state(create=should_create)
+            if should_create and path:
+                self._record_drive_made(tag)
             if self.server is not None:
                 self._start_drive()
             if self.drive is None:
@@ -2406,6 +2529,7 @@ class FieldPhotosDock(QDockWidget):
             proj.setDirty(True)
             self.drive_frame.setVisible(False)
             self._stop_drive()
+            self._office_folder_state(create=False)
         self._refresh_drive_link()
 
     def _confirm_drive(self):
@@ -2418,8 +2542,9 @@ class FieldPhotosDock(QDockWidget):
             "anyone who can see the Drive folder cannot open it. The file's time, size and the phone's ID are not "
             "hidden.\n\n"
             "The encrypted files are kept in the Google account the phone signs in to, on Google's servers, which "
-            "may be outside Saudi Arabia. If this project's data must stay in the Kingdom (GEOSA rules), get approval "
-            "from whoever is responsible first.\n\n"
+            "may be outside Saudi Arabia. Photos are stored in the office's folder, but each file is owned by, and "
+            "counts against the storage of, the surveyor's Google account. If this project's data must stay in the "
+            "Kingdom (GEOSA rules), get approval from whoever is responsible first.\n\n"
             "This is for this project only; it stays off for every other project."
         ))
         on_btn = box.addButton(tr("Turn on"), QMessageBox.ButtonRole.AcceptRole)
@@ -2456,6 +2581,7 @@ class FieldPhotosDock(QDockWidget):
         self.drive_list.addItems(roots)
         if on:
             self._show_key_state()
+        self._office_folder_state(create=False)
         if self.server is not None:
             if on and roots:
                 self._start_drive()
@@ -2473,6 +2599,7 @@ class FieldPhotosDock(QDockWidget):
         roots = self._drive_roots()
         if not self.drive_enabled() or not roots or self.server is None or self.drive is not None:
             return
+        self._office_folder_state(create=False)
         k = bridge.load_key(QgsSettings())
         self._drive_last = {"new": 0, "refused": 0, "reasons": []}
         self.drive = drive.DriveIntake(
@@ -2506,10 +2633,7 @@ class FieldPhotosDock(QDockWidget):
             from . import bridge, drive
 
             k = self.drive.k if self.drive is not None else bridge.load_key(QgsSettings())
-            self.drive_state.setText(
-                tr("No Biruni folder in Google Drive yet ({name}). It appears after the first phone sends.")
-                .format(name=drive.folder_name(k))
-            )
+            self.drive_state.setText(self._office_not_found_text(drive.folder_name(k)))
             self.drive_state.setToolTip("")
             return
         if self._drive_last is None:

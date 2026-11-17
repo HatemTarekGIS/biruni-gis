@@ -97,6 +97,42 @@ check(drive.office_folders([os.path.join(work, "G", "Shared")], k) == [os.path.n
 check(drive.office_folders([root], bridge.new_key()) == [], "another office's key finds nothing here")
 shutil.rmtree(os.path.join(work, "G"))
 
+# ---- ensure_office_folder ------------------------------------------------------------------------------------------
+ek = bridge.new_key()
+ename = drive.folder_name(ek)
+eroot1 = os.path.join(work, "eroot1")
+eroot2 = os.path.join(work, "eroot2")
+emissing = os.path.join(work, "emissing")
+os.makedirs(eroot1)
+os.makedirs(eroot2)
+
+ep1, created1 = drive.ensure_office_folder([eroot1, eroot2], ek)
+expected_ep1 = os.path.normcase(os.path.abspath(os.path.join(eroot1, ename)))
+check(created1 is True and ep1 == expected_ep1 and os.path.isdir(ep1)
+      and not os.path.exists(os.path.join(eroot2, ename)),
+      "ensure_office_folder creates the folder in the first existing root")
+
+ep2, created2 = drive.ensure_office_folder([eroot1, eroot2], ek)
+check(created2 is False and ep2 == ep1,
+      "second ensure_office_folder call returns created=False with the same path")
+
+ek2 = bridge.new_key()
+ename2 = drive.folder_name(ek2)
+ep3, created3 = drive.ensure_office_folder([emissing, eroot2], ek2)
+expected_ep3 = os.path.normcase(os.path.abspath(os.path.join(eroot2, ename2)))
+check(created3 is True and ep3 == expected_ep3 and not os.path.exists(emissing),
+      "ensure_office_folder skips a missing root")
+
+ek3 = bridge.new_key()
+ename3 = drive.folder_name(ek3)
+eroot3 = os.path.join(work, "eroot3")
+edeep = os.path.join(eroot3, "x", ename3)
+os.makedirs(edeep)
+ep4, created4 = drive.ensure_office_folder([eroot3], ek3)
+check(created4 is False and ep4 == os.path.normcase(os.path.abspath(edeep))
+      and not os.path.exists(os.path.join(eroot3, ename3)),
+      "existing folder one level deeper (root/x/biruni-photos-<tag>) is reused, not duplicated")
+
 # ---- a good file ---------------------------------------------------------------------------------------------------
 ev = queue.Queue()
 intake = drive.DriveIntake([root], store, pc, k, ev)

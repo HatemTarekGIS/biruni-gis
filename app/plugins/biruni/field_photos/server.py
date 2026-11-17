@@ -1003,8 +1003,8 @@ def phone_texts(tr):
             # sending through the surveyor's own Google Drive (drive_page.py)
             "driveTitle": tr("Google Drive"), "driveLink": tr("Link Google Drive"),
             "driveRelink": tr("Link Google Drive again"), "driveOpen": tr("Open the Google Drive link"),
-            "driveUnlinked": tr("When the computer cannot be reached, photos go to your own Google Drive, locked so "
-                                "that only the office computer can open them."),
+            "driveUnlinked": tr("When the computer cannot be reached, photos go to the office's Google Drive folder, "
+                                "locked so that only the office computer can open them."),
             "driveIdle": tr("Linked. Photos go here when the computer cannot be reached."),
             "driveAuth": tr("The link to Google Drive has ended. Tap to link again."),
             "driveUp": tr("Sending to Google Drive…"), "driveWait": tr("Google Drive is busy - trying again soon."),
@@ -1013,7 +1013,14 @@ def phone_texts(tr):
             "driveInApp": tr("To use Google Drive, open this page in Chrome or Safari."),
             "drivePopupBlocked": tr("The browser blocked the Google Drive window. Allow pop-ups for this page."),
             "driveIn": tr("In Google Drive:"),
-            "driveMode": tr("The computer cannot be reached - photos are going to your Google Drive.")}
+            "driveMode": tr("The computer cannot be reached - photos are going to the office's Google Drive folder."),
+            "drivePick": tr("Choose the office folder"),
+            "drivePickHint": tr("The office shared a folder named {name} with your Google account. Choose it once."),
+            "drivePickWrong": tr("That is not the office's folder. Choose the one named {name}."),
+            "drivePickRO": tr("The folder is shared for viewing only. Ask the office to make you an Editor."),
+            "driveGone": tr("The office folder can no longer be reached. Ask the office to share it again, then choose it."),
+            "driveOwn": tr("in your own Google Drive. If the office uses another account, choose the folder it shared."),
+            "drivePickAgain": tr("Choose another folder"), "driveFolder": tr("Folder:")}
 
 
 def all_phone_texts():
@@ -1181,7 +1188,7 @@ input.in:focus{border-color:var(--accent)}
 .hide{display:none!important}
 .dframe{display:block;width:100%;height:84px;border:0;margin-top:8px;background:transparent}
 .dstate{font-size:14px;color:var(--dim);margin-top:4px}.dcount{font-weight:700;font-variant-numeric:tabular-nums}
-.dpop{margin-top:8px}
+.dpop,.dpick{margin-top:8px}.dfold{font-size:13px;color:var(--dim);margin-top:4px;overflow-wrap:anywhere}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style></head><body>
 <header class="top">

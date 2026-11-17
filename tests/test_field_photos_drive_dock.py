@@ -237,7 +237,7 @@ check("could not be checked: x" in d.drive_state.text(),
       f"9a. drive error status text ({d.drive_state.text()!r})")
 d.server.events.put(("drive", {"folders": 0, "seen": 0, "new": 0, "refused": [], "at": 0}))
 d._read_events()
-check(drive.folder_name(k) in d.drive_state.text() and "No Biruni folder" in d.drive_state.text(),
+check(drive.folder_name(k) in d.drive_state.text() and "not in Google Drive" in d.drive_state.text(),
       f"9b. folders == 0 status text ({d.drive_state.text()!r})")
 
 # 10. A blocked device's file is refused; d.unblock_device(...) then brings it in
@@ -328,6 +328,47 @@ except Exception as e:  # noqa: BLE001
 finally:
     fd.QDialog.exec = orig_exec
 check(ok15 and "2026-11-17" in d.key_hint.text(), "15. the password dialog builds; cancelling changes nothing")
+
+# 17. Office folder lifecycle: created on first toggle, copy name, delete + _sync_drive, make button, toggle off/on
+d.drive_box.setChecked(False)
+r3 = os.path.join(work, "root3")
+os.makedirs(r3)
+d._set_drive_roots([r3])
+QgsSettings().remove(fd.DRIVE_MADE)
+k17 = bridge.load_key(QgsSettings())
+tag17 = drive.room_tag(k17)
+name17 = drive.folder_name(k17)
+expected17 = os.path.normcase(os.path.abspath(os.path.join(r3, name17)))
+
+d.drive_box.setChecked(True)
+check(os.path.isdir(expected17) and expected17 in d.drive_share.text()
+      and not d.drive_show_btn.isHidden() and not d.drive_copy_btn.isHidden()
+      and d.drive_make_btn.isHidden(),
+      "17a. toggling on with a temp root creates the folder and label shows the path")
+
+fd.QApplication.clipboard().setText("")
+d.drive_copy_btn.click()
+check(fd.QApplication.clipboard().text() == name17,
+      "17b. copy name puts the folder name on the clipboard")
+
+shutil.rmtree(expected17)
+d._sync_drive()
+check(not os.path.exists(expected17) and not d.drive_make_btn.isHidden()
+      and d.drive_show_btn.isHidden() and d.drive_copy_btn.isHidden()
+      and name17 in d.drive_share.text(),
+      "17c. after delete + _sync_drive(): make button visible and folder NOT recreated")
+
+d.drive_make_btn.click()
+check(os.path.isdir(expected17) and expected17 in d.drive_share.text()
+      and d.drive_make_btn.isHidden() and not d.drive_show_btn.isHidden(),
+      "17d. clicking make recreates the folder")
+
+shutil.rmtree(expected17)
+d.drive_box.setChecked(False)
+d.drive_box.setChecked(True)
+check(not os.path.exists(expected17) and not d.drive_make_btn.isHidden()
+      and tag17 in d._drive_made(),
+      "17e. toggling off and on again for the same tag does not recreate a deleted folder")
 
 fd.close_dock(plugin)
 QgsProject.instance().clear()

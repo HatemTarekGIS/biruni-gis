@@ -28,8 +28,11 @@ API = os.environ.get("BIRUNI_DRIVE_API") or "https://www.googleapis.com"
 HELPER = os.environ.get("BIRUNI_DRIVE_HELPER") or "https://drive.biruni-gis.com"
 PARENT = os.environ.get("BIRUNI_DRIVE_PARENT") or "https://biruni-gis.com"
 GSI = os.environ.get("BIRUNI_DRIVE_GSI") or "https://accounts.google.com/gsi/client"
+PICKER = os.environ.get("BIRUNI_DRIVE_PICKER") or "https://apis.google.com/js/api.js"
+APP_ID = CLIENT_ID.split("-", 1)[0]   # Picker's app id is the Google Cloud project number
+PICKER_FRAMES = ("https://docs.google.com", "https://drive.google.com")
 HELPER_PATH = "/link/"
-TEST_VARS = ("BIRUNI_DRIVE_API", "BIRUNI_DRIVE_HELPER", "BIRUNI_DRIVE_PARENT", "BIRUNI_DRIVE_GSI")
+TEST_VARS = ("BIRUNI_DRIVE_API", "BIRUNI_DRIVE_HELPER", "BIRUNI_DRIVE_PARENT", "BIRUNI_DRIVE_GSI", "BIRUNI_DRIVE_PICKER")
 
 _HELPER_HTML = r"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
@@ -45,16 +48,17 @@ button:disabled{background:#e5e7eb;border-color:#d1d5db;color:#6b7280;cursor:def
 .d{color:#52606d;font-size:13px;margin-top:6px;overflow-wrap:anywhere}
 .alone{max-width:520px;margin:24px auto;padding:0 16px}.alone h1{font-size:18px}
 </style></head><body>
-<div class="w" id="ui" hidden><button id="go" type="button" disabled>Google Drive</button><div class="d" id="who"></div></div>
+<div class="w" id="ui" hidden><div class="d" id="hint"></div><button id="go" type="button" disabled>Google Drive</button>
+<div class="d" id="who"></div><div class="d" id="csp"></div></div>
 <div class="alone" id="alone" hidden><h1>Biruni GIS</h1>
 <p>This page links a phone's Google Drive to Biruni's field photos page. Open the photos page from the office's
 QR code instead.</p><p dir="rtl">هذه الصفحة تربط جوجل درايف بصفحة صور الموقع في بيروني. افتح صفحة الصور من رمز QR الخاص بالمكتب.</p></div>
 <script>
-const CID='__CID__',SCOPE='__SCOPE__',API='__API__',PARENT='__PARENT__',GSI='__GSI__';
+const CID='__CID__',SCOPE='__SCOPE__',API='__API__',PARENT='__PARENT__',GSI='__GSI__',PICKER='__PICKER__',APPID='__APPID__';
 const $=i=>document.getElementById(i);
 const TO=window.opener||(window.parent!==window?window.parent:null);
 const MODE=window.opener?'popup':(TO?'iframe':'alone');
-let nonce='',tc=null,gsiOk=false,gsiErr=false,pending=false;
+let nonce='',tc=null,gsiOk=false,gsiErr=false,pending=false,pick=null,tok=null,picking=false,autoPicked=false,pkLoad=null;
 function post(m){if(!TO)return;m.v=1;try{TO.postMessage(m,PARENT)}catch(e){}}
 function say(m){if(nonce){m.nonce=nonce;post(m)}}
 function keepTok(t,exp){try{sessionStorage.setItem('biruni-drive-tok',JSON.stringify({t:t,exp:exp}))}catch(e){}}
@@ -62,7 +66,31 @@ function cachedTok(){try{const c=JSON.parse(sessionStorage.getItem('biruni-drive
  if(c&&typeof c.t==='string'&&+c.exp-Date.now()>300000)return c}catch(e){}return null}
 function hint(){try{return localStorage.getItem('biruni-drive-hint')||''}catch(e){return ''}}
 function showWho(){const h=hint();$('who').textContent=h}
-function ready(){$('go').disabled=!(gsiOk&&nonce)||pending}
+function ready(){$('go').disabled=!(nonce&&(gsiOk||(pick&&tok)))||pending||picking}
+function tokOk(t){return t&&typeof t.t==='string'&&t.t&&t.t.length<=4096&&+t.exp-Date.now()>60000}
+/* ---- choosing the office's folder (only in the window, never in the small frame): Google Picker ---- */
+function loadPicker(){if(!pkLoad){pkLoad=new Promise((ok,no)=>{
+  const go=()=>{try{gapi.load('picker',{callback:ok,onerror:()=>no(new Error('load')),timeout:20000,
+   ontimeout:()=>no(new Error('timeout'))})}catch(e){no(e)}};
+  if(window.gapi&&gapi.load)return go();const s=document.createElement('script');s.src=PICKER;s.async=true;
+  s.onload=go;s.onerror=()=>no(new Error('script'));document.head.appendChild(s)});pkLoad.catch(()=>{pkLoad=null})}
+ return pkLoad}
+async function openPicker(){if(picking||!pick||!tokOk(tok))return;picking=true;ready();
+ try{await loadPicker();const P=google.picker,F='application/vnd.google-apps.folder';
+  const view=shared=>{const v=new P.DocsView(P.ViewId.FOLDERS).setSelectFolderEnabled(true).setIncludeFolders(true)
+   .setMimeTypes(F).setMode(P.DocsViewMode.LIST).setQuery(pick.name);if(shared)v.setOwnedByMe(false);return v};
+  new P.PickerBuilder().addView(view(true)).addView(view(false)).setOAuthToken(tok.t).setAppId(APPID)
+   .setCallback(onPick).build().setVisible(true)}
+ catch(e){picking=false;ready();say({type:'biruni-drive-error',code:'picker'})}}
+function onPick(d){const P=google.picker,a=d[P.Response.ACTION];
+ if(a===P.Action.PICKED){picking=false;ready();const doc=(d[P.Response.DOCUMENTS]||[])[0]||{};
+  const id=doc[P.Document.ID],name=doc[P.Document.NAME],mt=doc[P.Document.MIME_TYPE];
+  if(name===pick.name&&mt==='application/vnd.google-apps.folder'&&typeof id==='string'&&/^[\w-]{10,128}$/.test(id)){
+   $('hint').textContent='';say({type:'biruni-drive-folder',id:id,name:name});setTimeout(()=>window.close(),400)}
+  else $('hint').textContent=pick.wrong}
+ else if(a===P.Action.CANCEL){picking=false;ready();say({type:'biruni-drive-error',code:'pick_cancel'})}}
+document.addEventListener('securitypolicyviolation',e=>{
+ $('csp').textContent='CSP: '+e.effectiveDirective+' '+String(e.blockedURI||'').slice(0,100)});
 function fail(code){pending=false;ready();say({type:'biruni-drive-error',code:code})}
 async function whoAmI(tok){try{const r=await fetch(API+'/drive/v3/about?fields=user(emailAddress)',
   {headers:{Authorization:'Bearer '+tok}});const j=await r.json();const e=j&&j.user&&j.user.emailAddress;
@@ -72,16 +100,23 @@ function onToken(r){pending=false;ready();
  if(!google.accounts.oauth2.hasGrantedAllScopes(r,SCOPE)){say({type:'biruni-drive-error',code:'scope'});return}
  const exp=Date.now()+(+r.expires_in||3600)*1000;keepTok(r.access_token,exp);
  say({type:'biruni-drive-token',token:r.access_token,exp:exp,cached:false});
+ if(pick){tok={t:r.access_token,exp:exp};whoAmI(r.access_token);openPicker();return}
  whoAmI(r.access_token).then(()=>{if(MODE==='popup')setTimeout(()=>window.close(),400)})}
 function onError(e){const t=e&&e.type;fail(t==='popup_failed_to_open'?'popup_blocked':t==='popup_closed'?'closed':'other')}
-$('go').onclick=()=>{if(!tc||!nonce||pending)return;pending=true;ready();const h=hint();
+$('go').onclick=()=>{if(pick&&tokOk(tok)){openPicker();return}
+ if(!tc||!nonce||pending)return;pending=true;ready();const h=hint();
  const o={prompt:h?'':'select_account'};if(h)o.login_hint=h;try{tc.requestAccessToken(o)}catch(e){fail('other')}};
 window.addEventListener('message',e=>{
  if(!TO||e.origin!==PARENT||e.source!==TO)return;const m=e.data;
  if(!m||m.v!==1||m.type!=='biruni-drive-hello'||typeof m.nonce!=='string'||!/^[\w-]{8,64}$/.test(m.nonce))return;
  const fresh=nonce!==m.nonce;nonce=m.nonce;
  $('go').textContent=String(m.label||'Google Drive').slice(0,80);
- document.documentElement.dir=m.dir==='rtl'?'rtl':'ltr';ready();
+ document.documentElement.dir=m.dir==='rtl'?'rtl':'ltr';
+ const p=m.pick;
+ if(MODE==='popup'&&p&&typeof p==='object'&&/^biruni-photos-[0-9a-f]{16}$/.test(String(p.name))){
+  pick={name:p.name,wrong:String(p.wrong||'').slice(0,200)};$('hint').textContent=String(p.hint||'').slice(0,200);
+  const t={t:p.token,exp:+p.exp};if(tokOk(t))tok=t}
+ ready();if(pick&&tokOk(tok)&&!autoPicked){autoPicked=true;openPicker()}
  if(fresh){if(gsiErr)say({type:'biruni-drive-error',code:'gsi'});
   const c=cachedTok();if(c)say({type:'biruni-drive-token',token:c.t,exp:+c.exp,cached:true})}});
 if(MODE==='alone'){$('alone').hidden=false}
@@ -97,9 +132,11 @@ else{$('ui').hidden=false;showWho();post({type:'biruni-drive-ready',mode:MODE});
 # ---- the phone page's side (bridge.phone_page puts it before PHONE_JS; it needs BOOT_JS's DRIVE_ON) ---------------
 DRIVE_JS = r"""
 /* ---- Google Drive: the card, the link (a frame or a window of the link page), the token in memory only ---- */
-const DRV={on:false,tok:'',exp:0,state:'',nonce:'',frame:null,win:null,card:null,ready:false,n:0,
+const DRV={on:false,tok:'',exp:0,state:'',nonce:'',frame:null,win:null,card:null,ready:false,n:0,tag:'',fold:null,
  HELPER:'__DRIVE_HELPER__',API:'__DRIVE_API__',HOLD:new Map(),
  ok(){return !!this.tok&&Date.now()<this.exp-300000},
+ go(){return this.ok()&&!!this.fold},
+ fname(){return 'biruni-photos-'+this.tag},
  holds(id){return this.HOLD.get(id)==='drive'}};
 DRV.ORIGIN=(()=>{try{return new URL(DRV.HELPER).origin}catch(e){return ''}})();
 function driveUA(){const u=navigator.userAgent||'';
@@ -108,14 +145,27 @@ function driveUA(){const u=navigator.userAgent||'';
 function driveEl(tag,cls,txt){const e=document.createElement(tag);if(cls)e.className=cls;if(txt!=null)e.textContent=txt;return e}
 function driveSay(state){DRV.state=state;const c=DRV.card;if(!c)return;
  const S={unlinked:T.driveUnlinked,auth:T.driveAuth,idle:T.driveIdle,up:T.driveUp,wait:T.driveWait,full:T.driveFull,
-  err:T.driveErr,denied:T.driveDenied,inapp:T.driveInApp,blocked:T.drivePopupBlocked}[state]||'';
- c.querySelector('.dstate').textContent=S||'';
+  err:T.driveErr,denied:T.driveDenied,inapp:T.driveInApp,blocked:T.drivePopupBlocked,pick:T.drivePickHint,
+  ro:T.drivePickRO,gone:T.driveGone}[state]||'';
+ c.querySelector('.dstate').textContent=String(S||'').replace('{name}',DRV.fname());
  const linked=DRV.ok();c.querySelector('.dcount').classList.toggle('hide',!linked&&!DRV.n);
- c.querySelector('.dcount').textContent=(T.driveIn||'')+' '+DRV.n}
-function driveHello(){const t=DRV.win&&!DRV.win.closed?DRV.win:(DRV.frame&&DRV.frame.contentWindow);if(!t)return;
- const label=DRV.ok()?T.driveRelink:(DRV.state==='auth'?T.driveRelink:T.driveLink);
- try{t.postMessage({v:1,type:'biruni-drive-hello',nonce:DRV.nonce,label:String(label||'Google Drive').slice(0,80),
-  dir:document.documentElement.dir==='rtl'?'rtl':'ltr'},DRV.ORIGIN)}catch(e){}}
+ c.querySelector('.dcount').textContent=(T.driveIn||'')+' '+DRV.n;
+ const f=DRV.fold,pk=c.querySelector('.dpick'),fo=c.querySelector('.dfold');
+ pk.textContent=(f?T.drivePickAgain:T.drivePick)||'';
+ pk.classList.toggle('hide',!(linked&&DRV.tag&&(!f||f.own||state==='pick'||state==='gone'||state==='ro')));
+ fo.textContent=f?((T.driveFolder||'')+' '+DRV.fname()+(f.own?' · '+(T.driveOwn||''):'')):'';
+ fo.classList.toggle('hide',!f)}
+function dcache(){try{const c=JSON.parse(kept('biruni-drive-f-'+ROOM)||'null');
+  if(c&&c.k===1&&c.t===DRV.tag&&typeof c.r==='string'&&typeof c.p==='string')return c}catch(e){}return null}
+function driveHello(){const w=DRV.win&&!DRV.win.closed?DRV.win:null,t=w||(DRV.frame&&DRV.frame.contentWindow);if(!t)return;
+ let label=DRV.ok()?T.driveRelink:(DRV.state==='auth'?T.driveRelink:T.driveLink);
+ const m={v:1,type:'biruni-drive-hello',nonce:DRV.nonce,dir:document.documentElement.dir==='rtl'?'rtl':'ltr'};
+ /* the window (never the frame) is where the office's folder is chosen; it gets the token so no second sign-in */
+ if(w&&DRV.tag&&(!DRV.fold||DRV.wantPick)){label=T.drivePick;const n=DRV.fname();
+  m.pick={name:n,token:DRV.ok()?DRV.tok:'',exp:DRV.ok()?DRV.exp:0,
+   hint:String(T.drivePickHint||'').replace('{name}',n),wrong:String(T.drivePickWrong||'').replace('{name}',n)}}
+ m.label=String(label||'Google Drive').slice(0,80);
+ try{t.postMessage(m,DRV.ORIGIN)}catch(e){}}
 function driveLabel(){if(!DRV.card)return;DRV.card.querySelector('.dtitle').textContent=T.driveTitle||'Google Drive';
  DRV.card.querySelector('.dpop').textContent=T.driveOpen||'';driveSay(DRV.state);if(DRV.ready)driveHello()}
 function driveFrame(){if(DRV.frame||!DRV.card)return;const f=document.createElement('iframe');f.className='dframe';
@@ -124,8 +174,16 @@ function driveFrame(){if(DRV.frame||!DRV.card)return;const f=document.createElem
 function drivePopupButton(){if(DRV.card)DRV.card.querySelector('.dpop').classList.remove('hide')}
 function driveOpenWindow(){const w=window.open(DRV.HELPER+'/link/','biruni-drive','popup,width=480,height=640');
  if(!w){driveSay('blocked');return}DRV.win=w}
+function driveOpenPick(){DRV.wantPick=true;driveOpenWindow()}
 function driveToken(m){if(typeof m.token!=='string'||!m.token||m.token.length>4096||!(+m.exp>Date.now()))return;
- DRV.tok=m.token;DRV.exp=+m.exp;driveSay('idle');driveHello();if(typeof drivePump==='function')drivePump()}
+ DRV.tok=m.token;DRV.exp=+m.exp;driveSay(DRV.fold?'idle':'pick');driveHello();if(typeof drivePump==='function')drivePump()}
+async function drivePicked(m){const id=String(m.id||'');
+ if(!DRV.tag||!DRV.ok()||!/^[\w-]{10,128}$/.test(id)||m.name!==DRV.fname())return;
+ try{const v=await dverify(id);if(v==='ro'){driveSay('ro');return}
+  const p=await dfolder('p-'+DEVID,id,'biruniDev',DEVID);
+  const c={t:DRV.tag,r:id,p:p,k:1,own:v==='own'};keep('biruni-drive-f-'+ROOM,JSON.stringify(c));
+  DRV.fold=c;DRV.wantPick=false;driveSay('idle');drivePump()}
+ catch(e){if(e instanceof DriveStop)return;driveSay(e.status===403||e.status===404||e.perm?'gone':'err')}}
 function driveDead(){DRV.tok='';DRV.exp=0;driveSay('auth');driveHello()}
 window.addEventListener('message',e=>{
  if(!DRV.on||e.origin!==DRV.ORIGIN)return;
@@ -134,16 +192,20 @@ window.addEventListener('message',e=>{
  if(m.type==='biruni-drive-ready'){DRV.ready=true;driveHello();return}
  if(m.nonce!==DRV.nonce)return;
  if(m.type==='biruni-drive-token')driveToken(m);
+ else if(m.type==='biruni-drive-folder'){if(fromWin)drivePicked(m)}
  else if(m.type==='biruni-drive-error'){const c=String(m.code||'');
-  if(c==='gsi'||c==='popup_blocked'){drivePopupButton();driveSay(c==='popup_blocked'?'blocked':'err')}
+  if(c==='pick_cancel'){if(!DRV.fold)driveSay('pick')}
+  else if(c==='gsi'||c==='popup_blocked'){drivePopupButton();driveSay(c==='popup_blocked'?'blocked':'err')}
   else if(c==='denied'||c==='scope')driveSay('denied');else if(c!=='closed')driveSay('err')}});
 function driveStart(){if(DRV.on||typeof DRIVE_ON==='undefined'||!DRIVE_ON||!DRV.ORIGIN)return;DRV.on=true;
  DRV.nonce=rid();DRV.n=+kept('biruni-drive-c-'+ROOM)||0;const ua=driveUA();
  const c=driveEl('div','card dcard');c.id='driveCard';
  const r=driveEl('div','row');r.appendChild(driveEl('span','lbl dtitle'));r.appendChild(driveEl('span','dcount hide'));c.appendChild(r);
- c.appendChild(driveEl('div','dstate'));c.appendChild(driveEl('div','dlink'));
+ c.appendChild(driveEl('div','dstate'));c.appendChild(driveEl('div','dfold hide'));c.appendChild(driveEl('div','dlink'));
+ const kb=driveEl('button','dpick hide');kb.type='button';kb.onclick=driveOpenPick;c.appendChild(kb);
  const pb=driveEl('button','ghost dpop hide');pb.type='button';pb.onclick=driveOpenWindow;c.appendChild(pb);
  const w=$('work');w.insertBefore(c,w.firstChild);DRV.card=c;driveLabel();
+ BFP.tag(KEYB).then(t=>{DRV.tag=t;DRV.fold=dcache();driveSay(DRV.ok()&&!DRV.fold?'pick':DRV.state);drivePump()},()=>{});
  if(ua.inapp){driveSay('inapp');return}
  driveSay('unlinked');if(ua.ios)drivePopupButton();else driveFrame();
  window.addEventListener('online',()=>{if(!DRV.ready&&DRV.frame){DRV.frame.src=DRV.HELPER+'/link/'}drivePump()});
@@ -175,13 +237,15 @@ async function dcheck(r){if(r.ok)return r;if(r.status===401){driveDead();throw n
  let j=null;try{j=await r.clone().json()}catch(e){}
  const why=j&&j.error&&((j.error.errors||[])[0]||{}).reason||'';
  if(r.status===403&&/storageQuotaExceeded|quotaExceeded/.test(why)){driveSay('full');throw new DriveStop('full')}
- const e=new Error('drive '+r.status+' '+why);e.status=r.status;throw e}
+ const e=new Error('drive '+r.status+' '+why);e.status=r.status;
+ e.perm=r.status===403&&/insufficientFilePermissions|insufficientPermissions|forbidden|appNotAuthorizedToFile/.test(why);throw e}
 const DFOLDER='application/vnd.google-apps.folder';
 const dq=s=>"'"+String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'")+"'";
-async function dfind(q){const r=await dcheck(await dapi('/drive/v3/files?spaces=drive&orderBy=createdTime&pageSize=10&fields='
+async function dfind(q){const r=await dcheck(await dapi('/drive/v3/files?spaces=drive&orderBy=createdTime&pageSize=10'
+ +'&supportsAllDrives=true&includeItemsFromAllDrives=true&fields='
  +encodeURIComponent('files(id,name,size,createdTime)')+'&q='+encodeURIComponent(q)));return (await r.json()).files||[]}
 async function dmkdir(name,parent,props){const m={name:name,mimeType:DFOLDER,appProperties:props};if(parent)m.parents=[parent];
- const r=await dcheck(await dapi('/drive/v3/files?fields=id',{method:'POST',headers:{'Content-Type':'application/json'},
+ const r=await dcheck(await dapi('/drive/v3/files?supportsAllDrives=true&fields=id',{method:'POST',headers:{'Content-Type':'application/json'},
   body:JSON.stringify(m)}));return (await r.json()).id}
 async function dfolder(name,parent,key,val){
  const q="name="+dq(name)+" and mimeType="+dq(DFOLDER)+" and trashed=false and appProperties has { key="+dq(key)
@@ -191,10 +255,21 @@ async function dfolder(name,parent,key,val){
  /* two phones made it at the same moment: keep the oldest (Drive for desktop would show the other as "(1)") */
  if(f.length&&f[0].id!==mine){try{await dapi('/drive/v3/files/'+mine,{method:'DELETE'})}catch(e){}return f[0].id}
  return mine}
-async function dfolders(tag){const ck='biruni-drive-f-'+ROOM;try{const c=JSON.parse(kept(ck)||'null');
-  if(c&&c.r&&c.p&&c.t===tag)return c}catch(e){}
- const r=await dfolder('biruni-photos-'+tag,'','biruniRoom',tag),p=await dfolder('p-'+DEVID,r,'biruniDev',DEVID);
- const c={t:tag,r:r,p:p};keep(ck,JSON.stringify(c));return c}
+/* the office's folder biruni-photos-<tag> is made by Biruni on the office computer and shared with the surveyor;
+   the phone never makes it: it is chosen once in Google Picker (drivePicked), then kept per room */
+async function dfolders(tag){const c=DRV.fold;if(c&&c.t===tag)return c;driveSay('pick');throw new DriveStop('pick')}
+async function dverify(id){const r=await dapi('/drive/v3/files/'+encodeURIComponent(id)+'?supportsAllDrives=true&fields='
+ +encodeURIComponent('id,name,mimeType,trashed,ownedByMe,capabilities(canAddChildren)'));
+ if(r.status===404)return 'ok';   /* the write that follows is the real test */
+ await dcheck(r);const j=await r.json();
+ if(j.name!==DRV.fname()||j.mimeType!==DFOLDER||j.trashed){const e=new Error('not the folder');e.status=404;throw e}
+ if(j.capabilities&&j.capabilities.canAddChildren===false)return 'ro';return j.ownedByMe?'own':'ok'}
+async function dlost(){const c=DRV.fold,ck='biruni-drive-f-'+ROOM;if(!c)throw new DriveStop('pick');
+ try{const v=await dverify(c.r);if(v==='ro'){const e=new Error('ro');e.perm=true;e.ro=true;throw e}
+  c.p=await dfolder('p-'+DEVID,c.r,'biruniDev',DEVID);keep(ck,JSON.stringify(c))}
+ catch(e){if(e instanceof DriveStop)throw e;
+  if(e.status===403||e.status===404||e.perm){keep(ck,null);DRV.fold=null;driveSay(e.ro?'ro':'gone');throw new DriveStop('gone')}
+  throw e}}
 function deligible(it){return it&&it.meta&&it.meta.sealed&&!it.carried&&it.blob&&it.blob.size<=DMAX&&!DRV.HOLD.has(it.id)
  &&!DSKIP.has(it.id)}
 async function dupload(it){const tag=await BFP.tag(KEYB),k=await dkey();let rec=await dget(it.id);
@@ -205,24 +280,27 @@ async function dupload(it){const tag=await BFP.tag(KEYB),k=await dkey();let rec=
   const f=await BFP.pack(h,body,k.kp.privateKey);
   rec={id:it.id,room:tag,n:n,name:f.name,head:f.head,size:f.bytes.length,fsha:await BFP.sha(f.bytes),st:'q',tries:0,at:Date.now()};
   await dput(rec)}
- const fo=await dfolders(tag);
- if(rec.tries>0){   /* the last try may have arrived without its answer: look before sending again */
-  const got=await dfind("appProperties has { key='bfp' and value="+dq(it.id)+" } and "+dq(fo.p)+" in parents and trashed=false");
-  if(got.some(g=>+g.size===rec.size))return rec}
- rec.tries++;await dput(rec);
- const b='bfp'+rid().replace(/[^A-Za-z0-9]/g,''),meta={name:rec.name,parents:[fo.p],appProperties:{bfp:it.id}};
- const body=new Blob(['--'+b+'\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'+JSON.stringify(meta)+'\r\n--'+b
-  +'\r\nContent-Type: application/octet-stream\r\n\r\n',rec.head,it.blob,'\r\n--'+b+'--\r\n']);
- let r;try{r=await dapi('/upload/drive/v3/files?uploadType=multipart&fields='+encodeURIComponent('id,size,sha256Checksum'),
-  {method:'POST',headers:{'Content-Type':'multipart/related; boundary='+b},body:body,ms:180000})}
- catch(e){throw new Error('network')}
- if(r.status===404){keep('biruni-drive-f-'+ROOM,null);throw new Error('folder gone')}
- await dcheck(r);const j=await r.json();
+ const fo=await dfolders(tag);let j;
+ try{
+  if(rec.tries>0){   /* the last try may have arrived without its answer: look before sending again */
+   const got=await dfind("appProperties has { key='bfp' and value="+dq(it.id)+" } and "+dq(fo.p)+" in parents and trashed=false");
+   if(got.some(g=>+g.size===rec.size))return rec}
+  rec.tries++;await dput(rec);
+  const b='bfp'+rid().replace(/[^A-Za-z0-9]/g,''),meta={name:rec.name,parents:[fo.p],appProperties:{bfp:it.id}};
+  const body=new Blob(['--'+b+'\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'+JSON.stringify(meta)+'\r\n--'+b
+   +'\r\nContent-Type: application/octet-stream\r\n\r\n',rec.head,it.blob,'\r\n--'+b+'--\r\n']);
+  let r;try{r=await dapi('/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&fields='
+   +encodeURIComponent('id,size,sha256Checksum'),
+   {method:'POST',headers:{'Content-Type':'multipart/related; boundary='+b},body:body,ms:180000})}
+  catch(e){throw new Error('network')}
+  await dcheck(r);j=await r.json()}
+ catch(e){if(e.status===404||e.perm)await dlost();   /* the share was taken back (stops), or only p-<device> went */
+  throw e}
  if(+j.size!==rec.size||(j.sha256Checksum&&j.sha256Checksum!==rec.fsha))throw new Error('drive copy differs');
  rec.fid=j.id;return rec}
-async function drivePump(){if(!DRV.on||DBUSY||!DRV.ok()||(typeof lineOpen==='function'&&lineOpen()))return;DBUSY=true;
+async function drivePump(){if(!DRV.on||DBUSY||!DRV.go()||(typeof lineOpen==='function'&&lineOpen()))return;DBUSY=true;
  try{const items=(await all()).filter(deligible).sort((a,b)=>a.meta.t-b.meta.t);
-  for(const it of items){if(!DRV.ok()||(typeof lineOpen==='function'&&lineOpen()))break;
+  for(const it of items){if(!DRV.go()||(typeof lineOpen==='function'&&lineOpen()))break;
    DRV.HOLD.set(it.id,'drive');driveSay('up');
    try{const rec=await dupload(it);rec.st='done';rec.head=null;rec.at=Date.now();await dput(rec);
     await del(it.id);DRV.n++;keep('biruni-drive-c-'+ROOM,String(DRV.n));mark(it.id,'✓');count();driveSay('idle')}
@@ -249,7 +327,8 @@ def helper_page():
     """The link page with its Content-Security-Policy: its own script and style (by SHA-256), Google's sign-in
     script, and talking only to Google's sign-in and the Drive API."""
     page = (_HELPER_HTML.replace("__CID__", CLIENT_ID).replace("__SCOPE__", SCOPE).replace("__API__", API)
-            .replace("__PARENT__", PARENT).replace("__GSI__", GSI))
+            .replace("__PARENT__", PARENT).replace("__GSI__", GSI).replace("__PICKER__", PICKER)
+            .replace("__APPID__", APP_ID))
 
     def sha(tag):
         body = page.split(f"<{tag}>", 1)[1].split(f"</{tag}>", 1)[0]
@@ -257,9 +336,12 @@ def helper_page():
 
     assert page.count("<script>") == 1 and page.count("<style>") == 1 and "<script " not in page
     gsi_dir = GSI.rsplit("/", 1)[0] + "/"
+    pk = _origin(PICKER)
+    # Google Picker (in the window only) adds its own script from apis.google.com, its dialog in a frame from
+    # docs.google.com, and inline styles; so style-src allows inline styles here (scripts stay strict)
     csp = "; ".join([
-        "default-src 'none'", f"script-src {sha('script')} {GSI}", f"style-src {sha('style')}",
-        f"connect-src {gsi_dir} {_origin(API)}", f"frame-src {gsi_dir}", "img-src 'none'",
-        "base-uri 'none'", "form-action 'none'"])
+        "default-src 'none'", f"script-src {sha('script')} {GSI} {pk}", "style-src 'unsafe-inline'",
+        f"connect-src {gsi_dir} {_origin(API)} {pk}", f"frame-src {gsi_dir} {' '.join(PICKER_FRAMES)} {pk}",
+        "img-src 'none'", "base-uri 'none'", "form-action 'none'"])
     return page.replace('<meta charset="utf-8">',
                         f'<meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="{csp}">', 1)
