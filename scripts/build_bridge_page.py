@@ -9,12 +9,21 @@ lists every file with its SHA-256 and release.sig signs it with the update-signi
 office PC refuses to hand out links to a page Biruni did not release (secure/door.py). Pages added to the folder
 later (the showcase paper/ page) need: build_bridge_page.py --sign-only
 
+The Google Drive link page (field_photos/drive_page.py) is written beside it, to <out>-drive-helper\link\index.html:
+it is published on its own site (repository biruni-drive, drive.biruni-gis.com), never with these pages.
+
 usage: engine\bin\python-qgis.bat scripts\build_bridge_page.py [out folder]   (default build\bridge-page)
        engine\bin\python-qgis.bat scripts\build_bridge_page.py --sign-only [out folder]
 """
 import os
 import shutil
 import sys
+
+# a test's fake relays or fake Google must never reach a published page
+_test = [v for v in ("BIRUNI_BRIDGE_RELAYS", "BIRUNI_BRIDGE_NTFY", "BIRUNI_DRIVE_API", "BIRUNI_DRIVE_HELPER",
+                     "BIRUNI_DRIVE_PARENT", "BIRUNI_DRIVE_GSI") if os.environ.get(v)]
+if _test:
+    sys.exit("refusing to build with test settings: " + ", ".join(_test))
 
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 sys.path.insert(0, os.path.join(ROOT, "app", "plugins"))
@@ -86,4 +95,15 @@ try:
 except ImportError:
     pass
 print(f"{out}: p/index.html ({len(page) // 1024} KB, {len(texts)} languages)")
+from biruni.field_photos import drive_page  # noqa: E402
+
+helper = drive_page.helper_page()
+assert ("https://www.googleapis.com" in helper and "https://accounts.google.com/gsi/client" in helper
+        and "127.0.0.1" not in helper and "localhost" not in helper), "the link page must point at Google"
+assert "accounts.google.com" not in page, "the photo page must not load Google's script"
+hdir = os.path.join(os.path.normpath(out) + "-drive-helper", "link")
+os.makedirs(hdir, exist_ok=True)
+with open(os.path.join(hdir, "index.html"), "w", encoding="utf-8", newline="\n") as f:
+    f.write(helper)
+print(f"{os.path.join(hdir, 'index.html')} (the Google Drive link page: publish it to the biruni-drive repository)")
 sign()
