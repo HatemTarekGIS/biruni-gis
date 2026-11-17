@@ -636,7 +636,7 @@ function recStart(){const P=X.film;if(!P)return;const cv=document.createElement(
 function recStop(){const P=X.film;if(!P||!P.rec)return;try{P.rec.mr.stop()}catch(e){}P.recB.textContent='● '+t('rec');setTimeout(()=>{if(X.film)X.film.rec=null},50)}
 const PROPS=['fill','stroke','stroke-width','opacity','fill-opacity','stroke-opacity','stroke-dasharray','font-size','font-weight','font-family','paint-order'];
 function recDraw(){const P=X.film;if(!P||!P.rec)return;const src=P.c.svg,cl=src.cloneNode(true),a=src.querySelectorAll('*'),b=cl.querySelectorAll('*');
- for(let i=0;i<a.length;i++){const cs=getComputedStyle(a[i]);let st='';for(const p of PROPS){const v=cs.getPropertyValue(p);if(v)st+=p+':'+v+';'}b[i].setAttribute('style',st)}
+ for(let i=0;i<a.length;i++){const cs=getComputedStyle(a[i]);let st='';for(const p of PROPS){const v=cs.getPropertyValue(p);if(v)st+=p+':'+v+';'}b[i].style.cssText=st}
  const r=src.getBoundingClientRect();cl.setAttribute('width',r.width);cl.setAttribute('height',r.height);
  const xml=new XMLSerializer().serializeToString(cl);const img=new Image();const cv=P.rec.cv,g=cv.getContext('2d');
  img.onload=()=>{const bg=getComputedStyle(P.c.mp).backgroundColor||'#fff';g.fillStyle=bg;g.fillRect(0,0,cv.width,cv.height);g.drawImage(img,0,0,cv.width,cv.height);

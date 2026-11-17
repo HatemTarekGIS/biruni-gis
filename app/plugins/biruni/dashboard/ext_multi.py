@@ -99,7 +99,9 @@ function saveHash(){const o={t:cfg.t||'',s:cfg.s.map(s=>({n:s.n||'',u:s.u}))};if
  const hp=new URLSearchParams(location.hash.slice(1));hp.set('m',enc(JSON.stringify(o)));
  try{history.replaceState(null,'','#'+hp.toString())}catch(e){location.hash=hp.toString()}}
 function frameUrl(u,i){const k=u.indexOf('#');return (k<0?u+'#':u+'&')+'mx='+i}
+const okSrc=u=>typeof u==='string'&&(/^https:\/\/[^\s#]+\/d\/[^\s]*#.*\bc=/.test(u)||/^https:\/\/[^\s#]+#.*\bc=/.test(u));
 function build(){
+ cfg.s=cfg.s.filter(s=>s&&okSrc(s.u));
  $('title').textContent=cfg.t||T('mx_title');
  document.title=(cfg.t||T('mx_title'))+' - Biruni GIS';
  if(wrap)wrap.remove();src.length=0;
@@ -201,7 +203,7 @@ function addSheet(){
  else el('p','mxNote',T('mx_noscan'),f);
  const ok=el('button','mxBtn',T('mx_add'),f);ok.type='submit';
  f.onsubmit=e=>{e.preventDefault();const u=inp.value.trim();
-  if(!/^https:\/\/[^\s#]+\/d\/[^\s]*#.*\bc=/.test(u)&&!/^https:\/\/[^\s#]+#.*\bc=/.test(u)){err.textContent=T('mx_bad');return}
+  if(!okSrc(u)){err.textContent=T('mx_bad');return}
   stop();cfg.s.push({n:nm.value.trim(),u:u});saveHash();BD.close();build()};
  BD.sheet(T('mx_add'),f);
  const sheetClose=document.getElementById('sheetClose');if(sheetClose)sheetClose.addEventListener('click',stop,{once:true})}

@@ -35,7 +35,7 @@ from biruni.live_share.viewer import public_page as share_page  # noqa: E402
 from biruni.living_paper import public_page as map_page  # noqa: E402
 from biruni.field_photos.room_page import room_page  # noqa: E402
 
-from biruni.secure import door  # noqa: E402
+from biruni.secure import csp, door  # noqa: E402
 
 KEY = os.path.join(ROOT, "_secrets", "update-signing.key")
 args = [a for a in sys.argv[1:] if a != "--sign-only"]
@@ -51,6 +51,7 @@ def sign():
 
 
 if "--sign-only" in sys.argv[1:]:
+    csp.apply_site(out)
     sign()
     sys.exit(0)
 from biruni.field_photos import drive_page as _dpv  # noqa: E402
@@ -114,4 +115,5 @@ os.makedirs(hdir, exist_ok=True)
 with open(os.path.join(hdir, "index.html"), "w", encoding="utf-8", newline="\n") as f:
     f.write(helper)
 print(f"{os.path.join(hdir, 'index.html')} (the Google Drive link page: publish it to the biruni-drive repository)")
+csp.apply_site(out)
 sign()

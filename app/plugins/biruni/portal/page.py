@@ -299,15 +299,18 @@ window.BiruniPortal={state:S,ready:()=>S.ready,useKey:useKey,forgetKey:forgetKey
 """
 
 
-def viewer_html():
-    return HTML.replace("__CSS__", CSS).replace("__LOGO__", _logo()).replace("__JS__", JS)
+def viewer_html(hosted=False):
+    html = HTML.replace("__CSS__", CSS).replace("__LOGO__", _logo()).replace("__JS__", JS)
+    if hosted:
+        html = html.replace('<script src="portal.js" onerror="void 0"></script>\n', "")
+    return html
 
 
-def write_viewer(folder):
+def write_viewer(folder, hosted=False):
     """index.html of a portal folder -> its path."""
     path = os.path.join(folder, "index.html")
     with open(path, "w", encoding="utf-8", newline="\n") as f:
-        f.write(viewer_html())
+        f.write(viewer_html(hosted=hosted))
     return path
 
 
@@ -318,4 +321,4 @@ def build_bridge_viewer(root=None):
         root = os.path.normpath(os.path.join(HERE, "..", "..", "..", "..", "build", "bridge-page"))
     out = os.path.join(root, "portal")
     os.makedirs(out, exist_ok=True)
-    return write_viewer(out)
+    return write_viewer(out, hosted=True)
