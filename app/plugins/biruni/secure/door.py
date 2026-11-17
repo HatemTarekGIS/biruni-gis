@@ -50,7 +50,7 @@ def list_files(folder):
         dirs[:] = sorted(x for x in dirs if x not in SKIP_DIRS)
         for n in sorted(names):
             rel = os.path.relpath(os.path.join(d, n), folder).replace(os.sep, "/")
-            if rel in (RELEASE, SIG):
+            if rel in (RELEASE, SIG) or n == ".git":   # a git worktree's pointer file is not part of the site
                 continue
             with open(os.path.join(d, n), "rb") as f:
                 out[rel] = sha256_bytes(f.read())

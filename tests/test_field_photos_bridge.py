@@ -348,6 +348,19 @@ check((got2[0] if got2 else {}).get("fields") == {n_pole: "P-17", n_state: "تا
                                                   n_lamps: 3, n_safe: False, n_who: "حاتم"},
       "the answers are kept with the photo: " + str(got2[0].get("fields") if got2 else None))
 
+# ---- receipts for Google Drive: the PC names, signed, the photos it holds as full originals --------------------
+srv.drive_clean = "auto"
+js("window._dg=null;window._dgok=null;(()=>{const f=fromPc;window._fromPc0=f;"
+   "window.fromPc=m=>{if(m&&m.t==='dgot'){window._dg=m;IDOK(m.ip,m.is,'BRDG1|'+m.nonce+'|'+m.clean+'|'+m.ids.join(','))"
+   ".then(v=>window._dgok=v)}else f(m)}})();"
+   "lineText(JSON.stringify({t:'dhave',nonce:'n-receipt-1',ids:['bridgephoto-0002','never-sent',7]}));1")
+check(wait(lambda: js("window._dgok") is not None, 15)
+      and js("JSON.stringify([window._dg.nonce,window._dg.clean,window._dg.ids,window._dgok])")
+      == '["n-receipt-1","auto",["bridgephoto-0002"],true]',
+      f"asked over the line, the PC names only what it holds, with the office's choice, signed ({js('JSON.stringify(window._dg)')})")
+js("window.fromPc=window._fromPc0;1")
+srv.drive_clean = "manual"
+
 # ---- the team and the guide over the bridge, the averaged position -------------------------------------------
 js("fix={lat:24.7136,lon:46.6753,acc:5,alt:null,heading:null,t:Date.now()};$('me').value='Ali';tellPos(true);1")
 check(wait(lambda: any(e[0] == "pos" and e[1]["name"] == "Ali" for e in drain()), 15),

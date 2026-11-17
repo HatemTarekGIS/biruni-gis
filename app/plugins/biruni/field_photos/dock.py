@@ -26,6 +26,7 @@ from .server import read_surveyor_keys
 KEY = "biruni/field-photos/"
 P_SCOPE = "Biruni"
 P_DRIVE = "/field-photos/drive"
+P_CLEAN = "/field-photos/drive-clean"   # the surveyors' Drive copies once here: manual / auto / keep
 P_NOTICE = "/field-photos/drive-notice"
 DRIVE_ROOTS = KEY + "drive-roots"
 DRIVE_MADE = KEY + "drive-made"   # the office tags whose Drive folder Biruni already made once (never made again)
@@ -931,6 +932,15 @@ class FieldPhotosDock(QDockWidget):
         self.drive_state.setObjectName("GpsHint")
         self.drive_state.setWordWrap(True)
         dv.addWidget(self.drive_state)
+        clean_lbl = QLabel(tr("Once a photo is on this computer, its copy in the surveyor's Google Drive:"))
+        clean_lbl.setWordWrap(True)
+        dv.addWidget(clean_lbl)
+        self.drive_clean_box = QComboBox()
+        for key, text in (("manual", tr("is deleted when the surveyor taps “Free space”")),
+                          ("auto", tr("is deleted at once")), ("keep", tr("is kept"))):
+            self.drive_clean_box.addItem(text, key)
+        self.drive_clean_box.currentIndexChanged.connect(self._on_drive_clean_changed)
+        dv.addWidget(self.drive_clean_box)
         krow = QHBoxLayout()
         self.key_backup_btn = QPushButton(tr("Back up key…"))
         self.key_backup_btn.clicked.connect(self._backup_key)
@@ -1225,6 +1235,7 @@ class FieldPhotosDock(QDockWidget):
             self.server = PhotoServer(folder, cert_folder, texts, lang(), kinds, PHOTO_PORT,
                                       ["127.0.0.1"] if bridged else local_addresses(),
                                       bind="127.0.0.1" if bridged else "0.0.0.0", form=form)
+            self.server.drive_clean = self.drive_clean()
         except OSError as e:
             self.state.setText(tr("Port {p} is busy ({e}).").format(p=PHOTO_PORT, e=e))
             return
@@ -2572,7 +2583,26 @@ class FieldPhotosDock(QDockWidget):
         if box.clickedButton() is now_btn:
             self._backup_key()
 
+    def drive_clean(self):
+        v = QgsProject.instance().readEntry(P_SCOPE, P_CLEAN, "manual")[0]
+        return v if v in ("manual", "auto", "keep") else "manual"
+
+    def _on_drive_clean_changed(self, _i=None):
+        v = self.drive_clean_box.currentData()
+        if v == "manual":
+            QgsProject.instance().removeEntry(P_SCOPE, P_CLEAN)
+        else:
+            QgsProject.instance().writeEntry(P_SCOPE, P_CLEAN, v)
+        if self.server is not None:
+            self.server.drive_clean = v
+
     def _sync_drive(self):
+        v = self.drive_clean()
+        self.drive_clean_box.blockSignals(True)
+        self.drive_clean_box.setCurrentIndex(max(0, self.drive_clean_box.findData(v)))
+        self.drive_clean_box.blockSignals(False)
+        if self.server is not None:
+            self.server.drive_clean = v
         on = self.drive_enabled()
         self.drive_box.blockSignals(True)
         self.drive_box.setChecked(on)

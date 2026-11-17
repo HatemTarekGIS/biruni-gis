@@ -75,7 +75,10 @@ window.google={accounts:{oauth2:{
   setTimeout(()=>c.callback({access_token:'tok-'+window.__asked,expires_in:3600,scope:c.scope}),10)}}},
  hasGrantedAllScopes(r,s){return r.scope===s}}}};
 (function poll(){const b=document.getElementById('go');   /* a user's tap, once the page allows it */
- if(b&&!b.disabled&&!window.__tapped){window.__tapped=1;b.click()}else setTimeout(poll,50)})();
+ if(b&&!b.disabled&&!window.__tapped){window.__tapped=1;b.click();setTimeout(poll,300)}
+ else if(window.__tapped&&b&&!b.disabled)fetch('/fake/tap?'+new URLSearchParams({l:b.textContent})).then(r=>r.text())
+  .then(t=>{if(t==='1')b.click();setTimeout(poll,300)},()=>setTimeout(poll,300));
+ else setTimeout(poll,50)})();
 """
 
 FAKE_PICKER = r"""
@@ -108,7 +111,8 @@ import re as _re  # noqa: E402
 import tempfile as _tf  # noqa: E402
 
 DRIVE_DISK = _tf.mkdtemp()
-FILES, FAKE = {}, {"drop": 0, "uploads": 0, "next": 0, "pick": [], "picks": []}
+FILES, FAKE = {}, {"drop": 0, "uploads": 0, "next": 0, "pick": [], "picks": [], "fault": [], "times": [],
+                  "tap": 0, "tapped": [], "deleted": []}
 GRANTS, PICKER_GETS = set(), []
 
 
@@ -199,6 +203,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Access-Control-Allow-Origin", "*")
             self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type")
             self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE")
+            self.send_header("Access-Control-Expose-Headers", "Retry-After")
         self.end_headers()
         self.wfile.write(body)
 
@@ -213,6 +218,15 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/picker.js":
             PICKER_GETS.append(1)
             self._send(200, FAKE_PICKER.encode("utf-8"), "text/javascript")
+        elif path == "/fake/tap":
+            from urllib.parse import parse_qs, urlsplit
+
+            lab = parse_qs(urlsplit(self.path).query).get("l", [""])[0]
+            go = bool(FAKE["tap"]) and lab == FAKE["tap"]   # only the page showing that button is tapped
+            if go:
+                FAKE["tap"] = 0
+                FAKE["tapped"].append(lab)
+            self._send(200, b"1" if go else b"0", "text/plain", cors=True)
         elif path == "/fake/pick":
             from urllib.parse import parse_qs, urlsplit
 
@@ -272,7 +286,15 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_DELETE(self):  # noqa: N802
         if self._auth():
-            FILES.pop(self.path.split("?", 1)[0].rsplit("/", 1)[1], None)
+            fid = self.path.split("?", 1)[0].rsplit("/", 1)[1]
+            if not visible(fid):
+                drive_error(self, 404, "notFound")
+                return
+            FAKE["deleted"].append(fid)
+            path = drive_path(fid)
+            FILES.pop(fid, None)
+            if os.path.isfile(path):
+                os.remove(path)
             self._send(204, cors=True)
 
     def do_POST(self):  # noqa: N802
@@ -287,6 +309,25 @@ class Handler(BaseHTTPRequestHandler):
             f = drive_new(meta)
             self._send(200, json.dumps({"id": f["id"]}).encode(), "application/json", cors=True)
         elif path == "/upload/drive/v3/files":
+            FAKE["times"].append(time.monotonic())
+            if FAKE["fault"]:   # Google says no for now
+                ft = FAKE["fault"].pop(0)
+                if ft.get("kill"):
+                    self.close_connection = True
+                    self.connection.shutdown(socket.SHUT_RDWR)
+                    return
+                self.send_response(ft["code"])
+                why = ft.get("reason", "backendError")
+                out = json.dumps({"error": {"code": ft["code"], "errors": [{"reason": why}]}}).encode()
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(out)))
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Access-Control-Expose-Headers", "Retry-After")
+                if ft.get("ra"):
+                    self.send_header("Retry-After", ft["ra"])
+                self.end_headers()
+                self.wfile.write(out)
+                return
             b = self.headers.get("Content-Type", "").split("boundary=", 1)[1].encode()
             parts = body.split(b"--" + b)
             meta = json.loads(parts[1].split(b"\r\n\r\n", 1)[1].rsplit(b"\r\n", 1)[0])
@@ -557,7 +598,9 @@ take("photo-drive-0006")
 check(wait(lambda: js(ph, "DRV.state") == "ro", 20) and js(ph, "DRV.fold") is None and queued("photo-drive-0006") is True,
       f"a view-only share: the card asks the office for Editor, the photo waits (state {js(ph, 'DRV.state')})")
 FILES[OFFICE_ID]["canAdd"] = True
-check(repick() and wait(lambda: js(ph, "DRV.n") == 5, 20), "made an Editor and chosen again: the photo goes")
+check(repick() and wait(lambda: js(ph, "DRV.n") == 5, 20),
+      f"made an Editor and chosen again: the photo goes (n {js(ph, 'DRV.n')}, state {js(ph, 'DRV.state')}, "
+      f"until {js(ph, 'DRV.until-Date.now()')})")
 
 # the share is taken back: the folder is gone for the phone; shared and chosen again, the same p-<device> is used
 FILES[OFFICE_ID]["revoked"] = True
@@ -567,7 +610,9 @@ check(wait(lambda: js(ph, "DRV.state") == "gone", 20) and queued("photo-drive-00
 FILES[OFFICE_ID]["revoked"] = False
 check(repick() and wait(lambda: js(ph, "DRV.n") == 6, 20)
       and len([f for f in FILES.values() if f["name"] == f"p-{dev}"]) == 1,
-      "shared and chosen again: the photo goes, into the same p-<device> ")
+      f"shared and chosen again: the photo goes, into the same p-<device> (n {js(ph, 'DRV.n')}, state "
+      f"{js(ph, 'DRV.state')}, fails {js(ph, 'DRV.fails')}, until {js(ph, 'DRV.until-Date.now()')}, "
+      f"p-dev {len([f for f in FILES.values() if f['name'] == f'p-{dev}'])})")
 # the office folder is put in the bin (Drive still takes uploads into it): the phone notices within 5 minutes
 FILES[OFFICE_ID]["trashed"] = True
 n0, nb = js(ph, "DRV.n"), len(bfps())
@@ -593,12 +638,52 @@ check(ajs(ph, "(()=>{const o=kept('biruni-drive-f-'+ROOM);keep('biruni-drive-f-'
               "const c=dcache();keep('biruni-drive-f-'+ROOM,o);return c})()") is None,
       "a folder kept by the older page (not chosen) is not used")
 
+# ---- step 8: Drive says not now: the phone waits longer each time; Google's Retry-After comes first ----
+def gaps():
+    t = FAKE["times"]
+    return [round(b - a, 2) for a, b in zip(t, t[1:])]
+
+
+ph.runJavaScript("DRV.BACK=200;dsoon()")
+nb = len(bfps())
+FAKE["times"], FAKE["fault"] = [], [{"code": 429, "ra": "2"}]
+take("photo-drive-0011")
+check(wait(lambda: len(bfps()) == nb + 1, 20) and len(FAKE["times"]) == 2 and gaps()[0] >= 1.9,
+      f"429 with Retry-After 2: no new try before 2 s, then one file ({gaps()})")
+check(ajs(ph, "[ddelay(1),ddelay(3),ddelay(20),ddelay(1,'5'),ddelay(1,'9999')]") is not None and
+      (lambda d: 200 <= d[0] < 300 and 800 <= d[1] < 900 and 64000 <= d[2] < 64100 and d[3] >= 5000 and d[4] == 600000)(
+          ajs(ph, "[ddelay(1),ddelay(3),ddelay(20),ddelay(1,'5'),ddelay(1,'9999')]")),
+      "the waits double from the start up to 64 s; Retry-After is kept up to 10 minutes")
+ph.runJavaScript("DRV.BACK=1500")
+FAKE["times"], FAKE["fault"] = [], [{"code": 503}, {"code": 503}, {"code": 503}]
+take("photo-drive-0012")
+check(wait(lambda: len(bfps()) == nb + 2, 45) and len(FAKE["times"]) == 4
+      and all(g >= m for g, m in zip(gaps(), (1.5, 3.0, 6.0))),
+      f"503 three times: each wait at least doubles (1.5, 3, 6 s), then one file ({gaps()})")
+FAKE["times"], FAKE["fault"] = [], [{"code": 403, "reason": "userRateLimitExceeded"}]
+take("photo-drive-0013")
+check(wait(lambda: len(bfps()) == nb + 3, 20) and js(ph, "!!DRV.fold") is True,
+      "a 403 rate limit is only a wait: the folder is kept and the photo goes")
+FAKE["times"], FAKE["fault"] = [], [{"kill": 1}]
+take("photo-drive-0014")
+check(wait(lambda: len(bfps()) == nb + 4, 20) and len(FAKE["times"]) == 2,
+      "the connection cut mid-upload: tried again, one file")
+check(wait(lambda: js(ph, "DRV.fails") == 0 and js(ph, "DRV.until") == 0, 5),
+      f"a success starts the waits over ({js(ph, 'DRV.fails')}, {js(ph, 'DRV.until')}, {js(ph, 'DRV.state')})")
+
 # a refused token: the card asks for a new link, nothing is sent
 n0 = len(bfps())
 ph.runJavaScript("DRV.tok='bad-token';DRV.exp=Date.now()+9e6")
 take("photo-drive-0004")
 check(wait(lambda: js(ph, "DRV.state") == "auth", 15) and len(bfps()) == n0 and queued("photo-drive-0004") is True,
       "a refused token: the card asks to link again, the photo waits")
+ph.runJavaScript("drivePump()")
+SEND1 = js(ph, "String(T.driveSend).replace('{n}',1)")   # in the page's own language
+check(wait(lambda: js(ph, "DRV.label") == SEND1, 10),
+      f"… its button counts the photos waiting: Send photos (1) ({js(ph, 'DRV.label')})")
+FAKE["tap"] = SEND1
+check(wait(lambda: len(bfps()) == n0 + 1, 25) and FAKE["tapped"] == [SEND1],
+      f"one tap on it: a new token and the photo goes ({FAKE['tapped']}, state {js(ph, 'DRV.state')})")
 
 ph.runJavaScript("(()=>{document.body.style.width='360px';const p=$('waitPill');"
                  "p.textContent='12 '+(T.drivePreview||'x').repeat(12);p.classList.remove('hide')})()")
@@ -624,6 +709,50 @@ check(isinstance(fit, dict) and fit["big"] > 5 * 1024 * 1024 and fit["out"] <= 5
       f"a camera photo over 5 MB is saved again under 5 MB and still opens; a small one is not touched ({fit})")
 check(isinstance(fit, dict) and fit["exif"] and fit["orient"] == 1,
       "the camera's EXIF (make, model...) goes with it, set upright since the pixels already are")
+
+# ---- step 10: the computer's receipt frees the surveyor's Drive: manual (a button), auto (at once), keep ----
+# the PC's identity key, as the bridge's QR code pins it (here made in the page itself)
+ajs(ph, "(async()=>{const kp=await crypto.subtle.generateKey({name:'ECDSA',namedCurve:'P-256'},false,['sign','verify']);"
+        "ID.sk=kp.privateKey;const raw=new Uint8Array(await crypto.subtle.exportKey('raw',kp.publicKey));"
+        "ID.pub=b64u.enc(raw);ID.pin=b64u.enc(await sha(raw)).slice(0,22);return 1})()")
+
+
+def receipt(clean, forge=False):
+    """the PC says it holds every photo uploaded so far, as a full original -> how many may now be freed"""
+    return ajs(ph, "(async()=>{const ids=(await dall()).filter(r=>r.st==='done'&&r.fid).map(r=>r.id);"
+                   "const nonce='n'+Math.random().toString(36).slice(2);DRV.rq={nonce:nonce,ids:new Set(ids)};"
+                   "const g=await IDSIGN('BRDG1|'+nonce+'|%s|'+ids.join(','));"
+                   "await driveGot({t:'dgot',nonce:nonce,clean:'%s',ids:ids,ip:g.pub,is:%s});"
+                   "return (await dall()).filter(r=>r.st==='got').length})()"
+               % (clean, clean, "(g.sig[0]==='A'?'B':'A')+g.sig.slice(1)" if forge else "g.sig"))
+
+
+def free_btn():
+    return js(ph, "(()=>{const b=document.querySelector('.dfree');return b.classList.contains('hide')?'':b.textContent})()")
+
+
+nd = ajs(ph, "dall().then(a=>a.filter(r=>r.st==='done'&&r.fid).length)")
+check(nd and receipt("manual", forge=True) == 0, f"a receipt not signed by the computer frees nothing ({nd} uploaded)")
+nb, dn = len(bfps()), js(ph, "DRV.n")
+check(receipt("manual") == nd and FAKE["deleted"] == [] and free_btn() == js(ph, f"String(T.driveFree).replace('{{n}}',{nd})"),
+      f"manual: the receipt shows the button, nothing deleted yet ({free_btn()!r})")
+ph.runJavaScript("document.querySelector('.dfree').click()")
+t_free = time.monotonic()
+check(wait(lambda: len(FAKE["deleted"]) == nd and not any(f in FILES for f in FAKE["deleted"]) and free_btn() == "", 20)
+      and js(ph, "DRV.n") == dn,
+      f"one tap: those {nd} files leave the surveyor's Drive for good, the button goes ({len(FAKE['deleted'])}, "
+      f"disk {nb}->{len(bfps())}, n {dn}->{js(ph, 'DRV.n')}, button {free_btn()!r}, {time.monotonic() - t_free:.1f} s)")
+check(ajs(ph, "dall().then(a=>a.filter(r=>r.st==='freed').length)") == nd, "… and the phone notes them as freed")
+nb = len(bfps())
+take("photo-drive-0016")
+up1 = lambda: ajs(ph, "dall().then(a=>a.filter(r=>r.st==='done'&&r.fid).length)") == 1   # noqa: E731
+check(wait(lambda: len(bfps()) == nb + 1 and up1(), 20) and receipt("auto") >= 0
+      and wait(lambda: len(FAKE["deleted"]) == nd + 1 and len(bfps()) == nb and free_btn() == "", 15),
+      "auto: the receipt deletes the copy at once, no button")
+take("photo-drive-0017")
+kp = wait(lambda: len(bfps()) == nb + 1 and up1(), 20) and receipt("keep")
+check(kp == 1 and free_btn() == "" and not wait(lambda: len(FAKE["deleted"]) > nd + 1, 2),
+      f"keep: nothing is deleted and no button shows ({kp}, {free_btn()!r}, {len(FAKE['deleted']) - nd})")
 
 check(not any("Content Security Policy" in m for m in CONSOLE), "nothing was refused by the CSP")
 print(f"\n{'FAILED ' + str(len(failures)) if failures else 'ALL PASSED'}")

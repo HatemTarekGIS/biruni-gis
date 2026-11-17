@@ -370,7 +370,7 @@ async function handleAck(m){const f=acks.get(m.id);if(!f)return;
  acks.delete(m.id);f.resolve(m.status===200&&f.kind==='preview'?202:m.status)}
 /* what the PC says, however it comes */
 function fromPc(m){if(m.t==='hello')hello(m);else if(m.t==='guide')setGuide(m.g);
- else if(m.t==='ack')handleAck(m)}
+ else if(m.t==='ack')handleAck(m);else if(m.t==='dgot'&&typeof driveGot==='function')driveGot(m)}
 function failAcks(){for(const [id,f] of acks)if(f.kind==='original'||f.line){acks.delete(id);f.reject(new Error('closed'))}}
 function drop(){const p=pc;pc=null;dc=null;linking=false;if(p)try{p.close()}catch(e){}
  for(const [k,c] of carried){try{if(c)c.close()}catch(e){}}carried.clear();if(!lineOpen())failAcks()}
@@ -461,7 +461,8 @@ async function sendRelayPreview(it){
    small preview, so the photo shows on the computer at once (202, then Drive's copy replaces it). Otherwise the line
    sends the original, unless Drive is sending it (0: skipped); one this line is sending is held from Drive. */
 const NOPREV=new Set();
-function lineFresh(){if(typeof DRV==='object')DRV.bad=0;NOPREV.clear()}
+function lineFresh(){if(typeof DRV==='object')DRV.bad=0;NOPREV.clear();
+ if(typeof dreceipts==='function')setTimeout(dreceipts,3000)}
 async function sendItem(it){
  if(lineOpen()&&typeof driveFirst==='function'&&driveFirst(it)){
   if(it.prevSent||!it.prev||NOPREV.has(it.id))return 0;
@@ -545,6 +546,14 @@ async function handle(P,data){
   fetch('pos',{method:'POST',body:JSON.stringify(p)}).catch(()=>{})}
  else if(m.t==='photo')P.cur={id:m.id,kind:m.kind==='preview'?'preview':'original',nonce:String(m.nonce||''),
   meta:m.meta,size:+m.size||0,type:String(m.type||'image/jpeg'),parts:[],got:0};
+ else if(m.t==='dhave'&&Array.isArray(m.ids)&&typeof m.nonce==='string'&&m.nonce.length<80){
+  /* which of these photos does this PC hold as full originals (receipts: the phone may free its Drive copies) */
+  const ids=m.ids.filter(x=>typeof x==='string'&&x.length<80).slice(0,200);let r={};
+  try{r=await (await fetch('drive-got',{method:'POST',body:JSON.stringify({ids:ids})})).json()}catch(x){}
+  const got=(Array.isArray(r.ids)?r.ids:[]).filter(x=>ids.includes(x)),
+   cl=['auto','manual','keep'].includes(r.clean)?r.clean:'keep';
+  const g=await IDSIGN('BRDG1|'+m.nonce+'|'+cl+'|'+got.join(','))||{};
+  try{P.send(JSON.stringify({t:'dgot',nonce:m.nonce,clean:cl,ids:got,ip:g.pub,is:g.sig}))}catch(x){}}
  else if(m.t==='end'&&P.cur&&P.cur.id===m.id){const c=P.cur;P.cur=null;let st=400;
   if(c.got===c.size){try{st=(await fetch('photo?m='+encodeURIComponent(JSON.stringify(c.meta)),{method:'POST',
     body:new Blob(c.parts,{type:c.type}),headers:{'Content-Type':c.type}})).status}catch(x){st=503}}

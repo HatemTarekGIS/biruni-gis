@@ -140,7 +140,8 @@ const DRV={on:false,tok:'',exp:0,state:'',nonce:'',frame:null,win:null,card:null
  holds(id){return this.HOLD.get(id)==='drive'}};
 DRV.ORIGIN=(()=>{try{return new URL(DRV.HELPER).origin}catch(e){return ''}})();
 function driveUA(){const u=navigator.userAgent||'';
- return {inapp:/; wv\)|FBAN|FBAV|Instagram|Line\//.test(u),
+ return {inapp:/; wv\)|FBAN|FBAV|Instagram|Line\/|TikTok|musical_ly|Snapchat|LinkedInApp|MicroMessenger|GSA\//.test(u)
+   ||(/iPad|iPhone|iPod/.test(u)&&/AppleWebKit/.test(u)&&!/Safari\//.test(u)),
   ios:/iPad|iPhone|iPod/.test(u)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1)}}
 function driveEl(tag,cls,txt){const e=document.createElement(tag);if(cls)e.className=cls;if(txt!=null)e.textContent=txt;return e}
 function driveSay(state){DRV.state=state;const c=DRV.card;if(!c)return;
@@ -154,11 +155,13 @@ function driveSay(state){DRV.state=state;const c=DRV.card;if(!c)return;
  pk.textContent=(f?T.drivePickAgain:T.drivePick)||'';
  pk.classList.toggle('hide',!(linked&&DRV.tag&&(!f||f.own||state==='pick'||state==='gone'||state==='ro')));
  fo.textContent=f?((T.driveFolder||'')+' '+DRV.fname()+(f.own?' · '+(T.driveOwn||''):'')):'';
- fo.classList.toggle('hide',!f)}
+ fo.classList.toggle('hide',!f);
+ const pop=c.querySelector('.dpop');pop.textContent=(state==='auth'&&dsendLabel())||T.driveOpen||'';
+ if(typeof dshowFree==='function'&&!DFREEING)dshowFree()}
 function dcache(){try{const c=JSON.parse(kept('biruni-drive-f-'+ROOM)||'null');
   if(c&&c.k===1&&c.t===DRV.tag&&typeof c.r==='string'&&typeof c.p==='string')return c}catch(e){}return null}
 function driveHello(){const w=DRV.win&&!DRV.win.closed?DRV.win:null,t=w||(DRV.frame&&DRV.frame.contentWindow);if(!t)return;
- let label=DRV.ok()?T.driveRelink:(DRV.state==='auth'?T.driveRelink:T.driveLink);
+ let label=DRV.ok()?T.driveRelink:(DRV.state==='auth'?dsendLabel()||T.driveRelink:T.driveLink);DRV.label=label;
  const m={v:1,type:'biruni-drive-hello',nonce:DRV.nonce,dir:document.documentElement.dir==='rtl'?'rtl':'ltr'};
  /* the window (never the frame) is where the office's folder is chosen; it gets the token so no second sign-in */
  if(w&&DRV.tag&&(!DRV.fold||DRV.wantPick)){label=T.drivePick;const n=DRV.fname();
@@ -166,6 +169,8 @@ function driveHello(){const w=DRV.win&&!DRV.win.closed?DRV.win:null,t=w||(DRV.fr
    hint:String(T.drivePickHint||'').replace('{name}',n),wrong:String(T.drivePickWrong||'').replace('{name}',n)}}
  m.label=String(label||'Google Drive').slice(0,80);
  try{t.postMessage(m,DRV.ORIGIN)}catch(e){}}
+/* once the token's hour ended a new one needs a tap (a window may only open on one): the button counts the photos */
+function dsendLabel(){return DRV.w>0&&T.driveSend?String(T.driveSend).replace('{n}',DRV.w):''}
 function driveLabel(){if(!DRV.card)return;DRV.card.querySelector('.dtitle').textContent=T.driveTitle||'Google Drive';
  DRV.card.querySelector('.dpop').textContent=T.driveOpen||'';driveSay(DRV.state);if(DRV.ready)driveHello()}
 function driveFrame(){if(DRV.frame||!DRV.card)return;const f=document.createElement('iframe');f.className='dframe';
@@ -176,13 +181,13 @@ function driveOpenWindow(){const w=window.open(DRV.HELPER+'/link/','biruni-drive
  if(!w){driveSay('blocked');return}DRV.win=w}
 function driveOpenPick(){DRV.wantPick=true;driveOpenWindow()}
 function driveToken(m){if(typeof m.token!=='string'||!m.token||m.token.length>4096||!(+m.exp>Date.now()))return;
- DRV.tok=m.token;DRV.exp=+m.exp;DRV.bad=0;driveSay(DRV.fold?'idle':'pick');driveHello();if(typeof drivePump==='function')drivePump()}
+ DRV.tok=m.token;DRV.exp=+m.exp;DRV.bad=0;dsoon();driveSay(DRV.fold?'idle':'pick');driveHello();if(typeof drivePump==='function')drivePump()}
 async function drivePicked(m){const id=String(m.id||'');
  if(!DRV.tag||!DRV.ok()||!/^[\w-]{10,128}$/.test(id)||m.name!==DRV.fname())return;
  try{const v=await dverify(id);if(v==='ro'){driveSay('ro');return}
   const p=await dfolder('p-'+DEVID,id,'biruniDev',DEVID);
   const c={t:DRV.tag,r:id,p:p,k:1,own:v==='own',v:Date.now()};keep('biruni-drive-f-'+ROOM,JSON.stringify(c));
-  DRV.fold=c;DRV.wantPick=false;DRV.bad=0;driveSay('idle');drivePump()}
+  DRV.fold=c;DRV.wantPick=false;DRV.bad=0;dsoon();driveSay('idle');drivePump()}
  catch(e){if(e instanceof DriveStop)return;driveSay(e.status===403||e.status===404||e.perm?'gone':'err')}}
 function driveDead(){DRV.tok='';DRV.exp=0;driveSay('auth');driveHello()}
 window.addEventListener('message',e=>{
@@ -204,12 +209,14 @@ function driveStart(){if(DRV.on||typeof DRIVE_ON==='undefined'||!DRIVE_ON||!DRV.
  c.appendChild(driveEl('div','dstate'));c.appendChild(driveEl('div','dfold hide'));c.appendChild(driveEl('div','dlink'));
  const kb=driveEl('button','dpick hide');kb.type='button';kb.onclick=driveOpenPick;c.appendChild(kb);
  const pb=driveEl('button','ghost dpop hide');pb.type='button';pb.onclick=driveOpenWindow;c.appendChild(pb);
+ const fb=driveEl('button','ghost dfree hide');fb.type='button';fb.onclick=()=>dfree();c.appendChild(fb);
+ DRV.clean=kept('biruni-drive-clean-'+ROOM)||'keep';
  const w=$('work');w.insertBefore(c,w.firstChild);DRV.card=c;driveLabel();
  BFP.tag(KEYB).then(t=>{DRV.tag=t;DRV.fold=dcache();driveSay(DRV.ok()&&!DRV.fold?'pick':DRV.state);drivePump()},()=>{});
  if(ua.inapp){driveSay('inapp');return}
  driveSay('unlinked');if(ua.ios)drivePopupButton();else driveFrame();
- window.addEventListener('online',()=>{if(!DRV.ready&&DRV.frame){DRV.frame.src=DRV.HELPER+'/link/'}drivePump()});
- setInterval(drivePump,15000)}
+ window.addEventListener('online',()=>{if(!DRV.ready&&DRV.frame){DRV.frame.src=DRV.HELPER+'/link/'}dsoon();drivePump()});
+ setInterval(drivePump,15000);setInterval(dreceipts,120000);dshowFree()}
 
 /* ---- the upload: one photo at a time, as one .bfp file (drive.py) in biruni-photos-<tag>/p-<device>/ ----
    Once linked with the office folder chosen, Google Drive carries EVERY original, even with the line to the computer
@@ -240,7 +247,17 @@ async function dcheck(r){if(r.ok)return r;if(r.status===401){driveDead();throw n
  const why=j&&j.error&&((j.error.errors||[])[0]||{}).reason||'';
  if(r.status===403&&/storageQuotaExceeded|quotaExceeded/.test(why)){driveSay('full');throw new DriveStop('full')}
  const e=new Error('drive '+r.status+' '+why);e.status=r.status;
- e.perm=r.status===403&&/insufficientFilePermissions|insufficientPermissions|forbidden|appNotAuthorizedToFile/.test(why);throw e}
+ e.perm=r.status===403&&/insufficientFilePermissions|insufficientPermissions|forbidden|appNotAuthorizedToFile/.test(why);
+ e.rate=r.status===403&&/rateLimitExceeded|userRateLimitExceeded/.test(why);e.ra=r.headers.get('Retry-After');throw e}
+/* a failed try waits 2, 4, 8 ... 64 s (a little random, so many phones do not come back together); Google's
+   Retry-After wins when longer (up to 10 minutes). Success, the network coming back, a new token or folder start over */
+DRV.BACK=2000;DRV.fails=0;DRV.until=0;DRV.tm=0;
+function ddelay(n,ra){let ms=Math.min(64000,DRV.BACK*Math.pow(2,Math.max(0,n-1)))+Math.floor(Math.random()*Math.min(1000,DRV.BACK/2));
+ if(ra){let s=+ra;if(!isFinite(s)){const t=Date.parse(ra);s=isFinite(t)?(t-Date.now())/1000:0}
+  if(s>0)ms=Math.max(ms,Math.min(600000,s*1000))}return ms}
+function dlater(ms){clearTimeout(DRV.tm);   /* the wait is over: a pump still busy is waited for, the time is not lost */
+ DRV.tm=setTimeout(()=>{DRV.tm=0;if(DBUSY){dlater(250);return}DRV.until=0;drivePump()},ms)}
+function dsoon(){DRV.fails=0;DRV.until=0;clearTimeout(DRV.tm);DRV.tm=0}
 const DFOLDER='application/vnd.google-apps.folder';
 const dq=s=>"'"+String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'")+"'";
 async function dfind(q){const r=await dcheck(await dapi('/drive/v3/files?spaces=drive&orderBy=createdTime&pageSize=10'
@@ -299,7 +316,7 @@ async function dupload(it){const tag=await BFP.tag(KEYB),k=await dkey();let rec=
  try{
   if(rec.tries>0){   /* the last try may have arrived without its answer: look before sending again */
    const got=await dfind("appProperties has { key='bfp' and value="+dq(it.id)+" } and "+dq(fo.p)+" in parents and trashed=false");
-   if(got.some(g=>+g.size===rec.size))return rec}
+   const g=got.find(g=>+g.size===rec.size);if(g){rec.fid=g.id;return rec}}
   rec.tries++;await dput(rec);
   const b='bfp'+rid().replace(/[^A-Za-z0-9]/g,''),meta={name:rec.name,parents:[fo.p],appProperties:{bfp:it.id}};
   const body=new Blob(['--'+b+'\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'+JSON.stringify(meta)+'\r\n--'+b
@@ -311,24 +328,67 @@ async function dupload(it){const tag=await BFP.tag(KEYB),k=await dkey();let rec=
   await dcheck(r);j=await r.json()}
  catch(e){if(e.status===404||e.perm)await dlost();   /* the share was taken back (stops), or only p-<device> went */
   throw e}
- if(+j.size!==rec.size||(j.sha256Checksum&&j.sha256Checksum!==rec.fsha))throw new Error('drive copy differs');
+ if(+j.size!==rec.size||(j.sha256Checksum&&j.sha256Checksum!==rec.fsha)){
+  try{await dapi('/drive/v3/files/'+encodeURIComponent(j.id)+'?supportsAllDrives=true',{method:'DELETE'})}catch(e){}
+  throw new Error('drive copy differs')}
  rec.fid=j.id;return rec}
-async function drivePump(){if(!DRV.on||DBUSY)return;
- if(DRV.tok&&!DRV.ok()){driveDead();return}   /* the hour ended: say so, the line takes the originals meanwhile */
- if(!DRV.go())return;DBUSY=true;
- try{const items=(await all()).filter(deligible).sort((a,b)=>a.meta.t-b.meta.t);
+async function drivePump(){if(!DRV.on)return;
+ if(DBUSY){DRV.again=true;return}   /* asked while busy (a new token, folder or photo): runs again right after */
+ DBUSY=true;   /* before any await: never two pumps at once */
+ try{try{const w=(await all()).filter(dfits).length;if(w!==DRV.w){DRV.w=w;if(DRV.state==='auth'){driveSay('auth');driveHello()}}}
+  catch(e){}
+  if(DRV.tok&&!DRV.ok()){driveDead();return}   /* the hour ended: say so, the line takes the originals meanwhile */
+  if(Date.now()<DRV.until||!DRV.go())return;
+  const items=(await all()).filter(deligible).sort((a,b)=>a.meta.t-b.meta.t);
   for(const it of items){if(!DRV.go())break;
    if(DRV.HOLD.has(it.id)||!await dstill(it.id))continue;   /* the line took it meanwhile */
    DRV.HOLD.set(it.id,'drive');driveSay('up');
    try{const rec=await dupload(it),fresh=rec.st!=='done';rec.st='done';rec.head=null;rec.at=Date.now();await dput(rec);
-    await del(it.id);if(fresh){DRV.n++;keep('biruni-drive-c-'+ROOM,String(DRV.n))}DRV.bad=0;mark(it.id,'✓');count();
+    await del(it.id);if(fresh){DRV.n++;keep('biruni-drive-c-'+ROOM,String(DRV.n))}DRV.bad=0;DRV.fails=0;DRV.until=0;mark(it.id,'✓');count();
+    clearTimeout(DRV.rt);DRV.rt=setTimeout(dreceipts,60000);   /* by then the PC has it from Drive for desktop */
     driveSay('idle')}
    catch(e){if(e instanceof DriveStop){if(e.state==='full')DRV.bad=1;break}
     if(e.status===400||e.status===413){DSKIP.add(it.id)}   /* Drive will never take it: it stays for the bridge */
-    else if(!DRV.bad)DRV.bad=Date.now();
+    else{if(!DRV.bad)DRV.bad=Date.now();DRV.fails++;const ms=ddelay(DRV.fails,e.ra);DRV.until=Date.now()+ms;dlater(ms)}
     driveSay('wait');break}
    finally{DRV.HOLD.delete(it.id)}}}
- catch(e){}finally{DBUSY=false}}
+ catch(e){}finally{DBUSY=false;if(DRV.again){DRV.again=false;setTimeout(drivePump,50)}}}
+
+/* ---- freeing the surveyor's Drive (step 10). The files are the surveyor's (drive.file), so only this phone can delete
+   them, and only those the PC says it holds as full originals: a receipt over the line, signed with the PC's identity
+   key (no pin, no receipts). The office chooses: auto (at once), manual (a button here), keep. A file goes for good,
+   not to the bin, which would still count against the surveyor's storage. The small record of it goes 30 days later */
+async function dall(){const d=await ddb();if(!d)return [];return new Promise(r=>{try{const g=d.transaction('d').objectStore('d').getAll();
+ g.onsuccess=()=>r((g.result||[]).filter(x=>x&&x.id&&x.id[0]!=='#'));g.onerror=()=>r([])}catch(e){r([])}})}
+async function ddrop(id){const d=await ddb();if(!d)return;return new Promise(r=>{try{const t=d.transaction('d','readwrite');
+ t.objectStore('d').delete(id);t.oncomplete=()=>r();t.onerror=()=>r();t.onabort=()=>r()}catch(e){r()}})}
+async function dreceipts(){if(!DRV.on||typeof lineOpen!=='function'||!lineOpen()||!ID.pin)return;
+ const now=Date.now(),a=await dall();
+ for(const r of a)if(r.st==='freed'&&now-(+r.at||0)>2592000000)await ddrop(r.id);
+ const ids=a.filter(r=>r.st==='done'&&r.fid).map(r=>r.id).slice(0,100);
+ if(!ids.length){dshowFree();return}
+ const nonce=rid();DRV.rq={nonce:nonce,ids:new Set(ids)};
+ try{lineText(JSON.stringify({t:'dhave',nonce:nonce,ids:ids}))}catch(e){}}
+async function driveGot(m){const q=DRV.rq;if(!q||!ID.pin||!m||m.nonce!==q.nonce||!Array.isArray(m.ids))return;
+ const cl=String(m.clean||''),ids=m.ids.map(String);
+ if(!['auto','manual','keep'].includes(cl)||!await IDOK(m.ip,m.is,'BRDG1|'+m.nonce+'|'+cl+'|'+ids.join(','))){
+  SIG.refused=(SIG.refused||0)+1;return}
+ DRV.rq=null;DRV.clean=cl;keep('biruni-drive-clean-'+ROOM,cl);
+ for(const id of ids){if(!q.ids.has(id))continue;const r=await dget(id);if(r&&r.st==='done'){r.st='got';await dput(r)}}
+ await dshowFree();if(cl==='auto')dfree();
+ else if(q.ids.size>=100&&ids.length)setTimeout(dreceipts,2000)}   /* more than one batch waits */
+async function dshowFree(){const c=DRV.card;if(!c)return;const n=(await dall()).filter(r=>r.st==='got').length;DRV.free=n;
+ const b=c.querySelector('.dfree');b.textContent=String(T.driveFree||'').replace('{n}',n);
+ b.classList.toggle('hide',!(n>0&&DRV.clean==='manual'&&DRV.ok()))}
+var DFREEING=false;   /* var: driveSay may look at it before this line has run */
+async function dfree(){if(DFREEING||!DRV.ok())return;DFREEING=true;
+ try{for(const r of await dall()){if(r.st!=='got'||!r.fid)continue;let res;
+   try{res=await dapi('/drive/v3/files/'+encodeURIComponent(r.fid)+'?supportsAllDrives=true',{method:'DELETE'})}catch(e){break}
+   if(res.status===204||res.status===200||res.status===404){r.st='freed';r.at=Date.now();await dput(r)}
+   else if(res.status===401){driveDead();break}
+   else if(res.status===403)continue;   /* not ours to delete (the office took it over): left there */
+   else break}}
+ finally{DFREEING=false;await dshowFree();driveSay(DRV.state)}}
 """
 
 

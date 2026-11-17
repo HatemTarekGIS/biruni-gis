@@ -362,6 +362,16 @@ class PhotoStore:
         self.blocked = read_blocked(folder)
         self.surveyor_keys = read_surveyor_keys(folder)
 
+    def originals(self, ids):
+        """Of these photo ids, those kept here as full originals (not only a preview): the phone may then free its
+        copy in the surveyor's Google Drive (drive_page.py, receipts over the line)."""
+        out = []
+        for i in ids:
+            r = self.records.get(i) if isinstance(i, str) else None
+            if r and not r.get("preview") and r.get("photo") and os.path.isfile(r["photo"]):
+                out.append(i)
+        return out
+
     def get_qr_mode(self):
         with self.lock:
             self.surveyor_keys = read_surveyor_keys(self.folder)
@@ -762,6 +772,7 @@ class PhotoServer:
                                         ensure_ascii=False).encode("utf-8")
         self._phones = set()
         self.guide_v = 0
+        self.drive_clean = "manual"   # the office's choice for the surveyors' Drive copies: auto / manual / keep
         self.guide = guide_bytes(0, [])[0]
         server = self
 
@@ -831,6 +842,17 @@ class PhotoServer:
                     if isinstance(ev, dict) and isinstance(ev.get("type"), str):
                         server.events.put(("bridge", ev))
                     self._send(200, b'{"ok":true}')
+                    return
+                if route == "drive-got" and self._local():   # the receiver page asks which originals are here
+                    try:
+                        n = min(int(self.headers.get("Content-Length") or 0), 32768)
+                        ids = json.loads(_read(self.rfile, n) or b"{}").get("ids")
+                    except (ValueError, AttributeError):
+                        self._send(400)
+                        return
+                    ids = [i for i in ids if isinstance(i, str) and len(i) < 80][:200] if isinstance(ids, list) else []
+                    self._send(200, json.dumps({"clean": server.drive_clean,
+                                                "ids": server.store.originals(ids)}).encode("utf-8"))
                     return
                 if route == "pos":
                     try:
@@ -1002,7 +1024,7 @@ def phone_texts(tr):
             "handBad": tr("This is not a hand-over code."), "handCarry": tr("Carrying {n} photos for teammates."),
             # sending through the surveyor's own Google Drive (drive_page.py)
             "driveTitle": tr("Google Drive"), "driveLink": tr("Link Google Drive"),
-            "driveRelink": tr("Link Google Drive again"), "driveOpen": tr("Open the Google Drive link"),
+            "driveRelink": tr("Link Google Drive again"), "driveSend": tr("Send photos ({n})"), "driveFree": tr("Free space in Google Drive ({n})"), "driveOpen": tr("Open the Google Drive link"),
             "driveUnlinked": tr("Link Google Drive and every photo goes to the office's Google Drive folder, locked so "
                                 "that only the office computer can open it."),
             "driveIdle": tr("Linked. Every photo goes to the office's Google Drive folder. When the computer is in "

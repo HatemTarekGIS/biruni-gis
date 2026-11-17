@@ -271,6 +271,25 @@ check(c.getresponse().status == 200, "a photo with answers is accepted")
 c.close()
 frec = fsrv.events.get(timeout=5)[1]
 check(frec["fields"] == {"pole_number": "P-17", "lamps": 3, "safe": True}, "its answers are kept, checked again")
+
+
+def drive_got(ids):
+    c = http.client.HTTPSConnection("127.0.0.1", port + 1, context=ctx, timeout=15)
+    c.request("POST", f"/{fsrv.token}/drive-got", body=json.dumps({"ids": ids}))
+    r = c.getresponse()
+    out = (r.status, json.loads(r.read() or b"null"))
+    c.close()
+    return out
+
+
+check(drive_got(["formphoto-0001", "never-came", 5]) == (200, {"clean": "manual", "ids": ["formphoto-0001"]}),
+      "receipts for Drive: only the photos held here are named, with the office's choice (manual at first)")
+fsrv.store.records["formphoto-0001"]["preview"] = True
+fsrv.drive_clean = "auto"
+check(drive_got(["formphoto-0001"]) == (200, {"clean": "auto", "ids": []}),
+      "a photo here only as a preview is not named: its Drive copy must stay")
+fsrv.store.records["formphoto-0001"]["preview"] = False
+fsrv.drive_clean = "manual"
 flyr = fd.open_layer(fsrv.store.folder, add=False)
 fd.form_columns(flyr, fsrv.store.form, [dict(frec, fields=dict(frec["fields"], old_question="x"))])
 fl = flyr.fields()

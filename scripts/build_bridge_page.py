@@ -53,6 +53,11 @@ def sign():
 if "--sign-only" in sys.argv[1:]:
     sign()
     sys.exit(0)
+from biruni.field_photos import drive_page as _dpv  # noqa: E402
+
+_test = [v for v in _dpv.TEST_VARS if os.environ.get(v)]
+if _test:   # the test's fake Drive / sign-in would be built into the published pages
+    sys.exit("NOT built: test settings are set (" + ", ".join(_test) + ")")
 texts = all_phone_texts()
 page = bridge.phone_page(texts)
 page = page.replace("<title>Biruni GIS</title>",

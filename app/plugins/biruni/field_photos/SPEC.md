@@ -12,6 +12,15 @@ The phone opens a static web page (served locally over Wi-Fi/hotspot or on GitHu
    - If the direct WebRTC channel does not open within the connection deadline (`10 s`), the page drops the stalled attempt, shows the relay-mode notice, and sends a small **encrypted preview** (in chunks of at most 24 KB to at most 2 healthy Nostr relays as ephemeral events `kind: 25050`, falling back to `ntfy.sh` if Nostr relays refuse or time out).
    - The office PC saves the preview with `"preview": True` under the photo's `photo_id` and returns a signed `preview` receipt.
    - The **encrypted full-resolution original stays on the phone** (`prevSent = true`) and is never deleted until a direct connection (Wi-Fi or direct WebRTC) delivers the original and returns a signed `original` receipt, replacing the preview file in the same record.
+4. **Google Drive (per project, off by default; `drive_page.py`, `drive.py`):**
+   - The office ticks *Receive photos through Google Drive* for the project. Biruni makes one folder `biruni-photos-<tag16>` in the Google Drive the PC syncs with Google Drive for desktop (`tag = SHA-256("biruni-drive-room-1:" + k)[:16]`). The office shares it with each surveyor's Google account as **Editor**; the surveyor's account may differ from the office's.
+   - The phone links Google Drive on a separate page, `https://drive.biruni-gis.com/link/`. Google sign-in and Google Picker run only there. The phone page loads no Google script; it receives a `drive.file` access token by `postMessage`, with the origin checked both ways. The surveyor picks the office folder once with Picker, and the phone checks its name, that it is not in the bin, and that it can add files (`canAddChildren`).
+   - Once linked, **every full original goes through Drive**, even when the direct line is open. The line then carries only the small preview at once, so the photo shows on the map. When the computer has the original from Drive, it replaces the preview in the same record. The line carries the original only when Drive cannot: not linked, no folder, Drive full, or Drive failing for 2 minutes since the line opened.
+   - Each photo is one file, `p-<device>/NNNNNN-<sha12>.bfp`: `"BFP1" | header length | header JSON | ECDSA signature | sealed photo`. The sealed photo is the same ECDH P-256 + AES-256-GCM envelope used for waiting photos. The header is signed with a per-phone ECDSA P-256 key (not extractable), certified by `HMAC(Ka, "BFP-CERT1|" + pub + "|" + dev)`.
+   - The PC reads the synced folder every 15 s (`DriveIntake`), checks the certificate and signature, opens the photo with the handover key, and saves it with `route: "drive"`.
+   - **Size:** the phone keeps every photo at 5 MB at most. A larger camera photo is saved again as JPEG, first only a little more compressed, then smaller, keeping the camera's EXIF with Orientation reset to 1. One multipart upload carries it; there are no resumable uploads.
+   - **Retries:** a failed upload waits 2, 4, 8 … 64 s, plus up to 1 s of jitter. Google's `Retry-After` wins when longer, up to 10 minutes. `429`, `5xx`, rate-limit `403` and network errors are retried. A lost answer is checked with an `appProperties` search before uploading again, so a photo is never stored twice. An ended token shows *Send photos (n)*: a new token needs one tap.
+   - **Cleanup (office choice, per project, `/field-photos/drive-clean`):** `manual` (default), `auto` or `keep`. The files belong to the surveyor's account (`drive.file`), so only the phone can delete them. Over the line, the phone asks `{t:'dhave', nonce, ids}`. The PC answers `{t:'dgot', nonce, clean, ids}`, naming only the photos it holds as full originals, signed `BRDG1|<nonce>|<clean>|<ids>` with its identity key; with no pin there are no receipts. The phone then deletes those files for good, not to the bin, either at once (`auto`) or when the surveyor taps *Free space in Google Drive (n)* (`manual`).
 
 ## What is encrypted and what third parties see
 
@@ -22,6 +31,7 @@ The phone opens a static web page (served locally over Wi-Fi/hotspot or on GitHu
 - **What public relays (`Nostr` and `ntfy.sh`) can see:**
   - Relays cannot read the photo, coordinates, notes or form answers, and cannot forge a receipt.
   - Relays **do see** the meeting topic hash, client IP addresses, ciphertext sizes and message timestamps.
+- **What Google sees (Drive route):** file names (`NNNNNN-<sha12>.bfp`), folder names, sizes, upload times, the surveyor's and the office's Google accounts, and the `appProperties` photo id. It cannot read the photo, place, notes or answers. The link page asks for `drive.file` only, so Biruni can touch only the files and folders it made or the surveyor picked.
 
 ## Limits
 
@@ -35,6 +45,7 @@ The phone opens a static web page (served locally over Wi-Fi/hotspot or on GitHu
   - In private/incognito browsing mode, closing the page erases waiting photos (the page shows a warning banner when private mode is detected).
   - On iOS Safari, script-writable browser storage may be evicted after 7 days of no user interaction.
 - **Data residency:**
+  - With Google Drive, the encrypted `.bfp` files are stored on Google's servers, which may be outside the country, until they are cleaned up. The first time Drive is turned on for a project, Biruni says so.
   - When using the bridge or relay fallback, encrypted bytes transit public relays hosted outside the country. Organizations subject to strict national data-residency regulations (such as GEOSA in Saudi Arabia) that prohibit even encrypted transit abroad must use the local Wi-Fi / hotspot mode (`"Phone nearby"`).
 
 ## Surveyor Identity, Control Panel, Device Blocking, and Daily Report
