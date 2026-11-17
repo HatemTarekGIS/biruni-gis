@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
+<meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'sha256-jsdRSTjBe225p57TSq/2DKBxdA/uB7Q9m3gZs8uQC7o=' https://fonts.googleapis.com; img-src 'self'; font-src https://fonts.gstatic.com; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Privacy policy · Biruni GIS</title>
 <link rel="icon" href="assets/logo.png">
@@ -45,7 +45,7 @@ code{font:14px Consolas,monospace;background:#F6F8FA;border:1px solid #D0D7DE;pa
 </ul>
 
 <h2>The desktop program</h2>
-<p>Biruni GIS works offline. Your projects and data are processed on your computer and are not sent to us. When the program checks for updates, it downloads a small signed file from this site, which is hosted on GitHub Pages; GitHub, as the host, can see your IP address, as with any web request.</p>
+<p>Biruni GIS works offline. Your projects and data are processed on your computer and are not sent to us. When the program checks for updates, it downloads a small signed file from this site, which is hosted on Cloudflare Pages; Cloudflare, as the host, can see your IP address, as with any web request.</p>
 
 <h2>Phone pages (field photos, live dashboard)</h2>
 <p>When you scan a Biruni QR code, your phone opens a web page on this site. To reach your computer without a server of ours, the page and the program exchange short messages through public relays (Nostr relays and ntfy.sh) and use public STUN services (Google, Cloudflare) to open a direct connection. Every message is encrypted end to end with a key that only your phone and your computer hold; the relays see only unreadable data, its size and timing, and the IP addresses that connect to them. Photos and data then travel directly between your phone and your computer, or through a teammate's device, still encrypted.</p>
@@ -64,7 +64,7 @@ code{font:14px Consolas,monospace;background:#F6F8FA;border:1px solid #D0D7DE;pa
 <p>Biruni GIS's use and transfer of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including the Limited Use requirements. Data from Google APIs is used only to provide the upload you asked for, is not used for advertising, is not transferred to anyone, and is not read by any person.</p>
 
 <h2>This website</h2>
-<p>This site is static and hosted on GitHub Pages. It sets no cookies and has no analytics. The home page loads fonts from Google Fonts, which can see your IP address.</p>
+<p>This site is static and hosted on Cloudflare Pages (the phone page at photos.biruni-gis.com and the Google Drive link page at drive.biruni-gis.com too). It sets no cookies and has no analytics. The home page loads fonts from Google Fonts, which can see your IP address.</p>
 
 <h2>Changes and contact</h2>
 <p>If this policy changes, the new version will be posted here with a new date. For questions, open an issue at <a href="https://github.com/HatemTarekGIS/biruni-gis/issues">github.com/HatemTarekGIS/biruni-gis/issues</a>.</p>
@@ -84,7 +84,7 @@ code{font:14px Consolas,monospace;background:#F6F8FA;border:1px solid #D0D7DE;pa
 </ul>
 
 <h2>برنامج سطح المكتب</h2>
-<p>يعمل البرنامج دون إنترنت، وتُعالَج مشاريعك وبياناتك على جهازك ولا تُرسل إلينا. عند البحث عن تحديثات يُنزّل البرنامج ملفاً صغيراً موقّعاً من هذا الموقع المستضاف على GitHub Pages، ويرى GitHub عنوان الـ IP كما في أي طلب على الإنترنت.</p>
+<p>يعمل البرنامج دون إنترنت، وتُعالَج مشاريعك وبياناتك على جهازك ولا تُرسل إلينا. عند البحث عن تحديثات يُنزّل البرنامج ملفاً صغيراً موقّعاً من هذا الموقع المستضاف على Cloudflare Pages، وترى Cloudflare عنوان الـ IP كما في أي طلب على الإنترنت.</p>
 
 <h2>صفحات الموبايل (صور الموقع، اللوحة الحيّة)</h2>
 <p>عند مسح رمز QR من بيروني يفتح الموبايل صفحة على هذا الموقع. وللوصول إلى جهازك دون سيرفر خاص بنا، تتبادل الصفحة والبرنامج رسائل قصيرة عبر مرحّلات عامة (Nostr وntfy.sh)، وتستعمل خدمات STUN العامة (Google وCloudflare) لفتح اتصال مباشر. كل رسالة مشفّرة من الطرف للطرف بمفتاح لا يملكه إلا موبايلك وجهازك، فلا يرى المرحّل إلا بيانات غير مقروءة وحجمها وتوقيتها وعناوين الـ IP المتصلة به. ثم تنتقل الصور والبيانات مباشرة بين موبايلك وجهازك، أو عبر جهاز زميل، وهي مشفّرة أيضاً.</p>
@@ -103,7 +103,7 @@ code{font:14px Consolas,monospace;background:#F6F8FA;border:1px solid #D0D7DE;pa
 <p>يلتزم استخدام Biruni GIS للمعلومات الواردة من واجهات جوجل البرمجية ونقلها بـ<a href="https://developers.google.com/terms/api-services-user-data-policy">سياسة بيانات مستخدمي خدمات Google API</a>، بما في ذلك متطلبات الاستخدام المحدود. تُستعمل هذه البيانات فقط لتنفيذ الرفع الذي طلبته، ولا تُستعمل للإعلانات، ولا تُنقل لأي طرف، ولا يطّلع عليها أي شخص.</p>
 
 <h2>هذا الموقع</h2>
-<p>الموقع ثابت ومستضاف على GitHub Pages، ولا يضع ملفات تعريف ارتباط (كوكيز) ولا يستعمل أدوات إحصاء. تحمّل الصفحة الرئيسية الخطوط من Google Fonts، التي ترى عنوان الـ IP.</p>
+<p>الموقع ثابت ومستضاف على Cloudflare Pages (ومعه صفحة الموبايل على photos.biruni-gis.com وصفحة ربط Google Drive على drive.biruni-gis.com)، ولا يضع ملفات تعريف ارتباط (كوكيز) ولا يستعمل أدوات إحصاء. تحمّل الصفحة الرئيسية الخطوط من Google Fonts، التي ترى عنوان الـ IP.</p>
 
 <h2>التعديلات والتواصل</h2>
 <p>إذا تغيّرت هذه السياسة تُنشر النسخة الجديدة هنا بتاريخ جديد. للاستفسار افتح بلاغاً على <a href="https://github.com/HatemTarekGIS/biruni-gis/issues">github.com/HatemTarekGIS/biruni-gis/issues</a>.</p>

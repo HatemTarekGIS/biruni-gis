@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-SpbP+E9LO7bPWzo/w+6+0ZT7jqEBFLDY1DViwNpzWgw='; style-src 'sha256-7PAR7OwUNEUe0+WmkN2l7ZWAByg9lWPsfHG+zEo1LV8='; img-src https:; connect-src 'self' https:; frame-src 'none'; base-uri 'none'; form-action 'none'"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="referrer" content="no-referrer"><title>Biruni Portal</title><style>
 :root{--teal:#0B4F4A;--teal2:#14A394;--gold:#FBBF24;--bg:#f4f6f5;--card:#fff;--ink:#14201f;--mute:#5d6b69;--line:#dfe6e4;
  --ok:#0f8a5f;--bad:#c62828;--warn:#b26a00;--font:"Segoe UI",Tahoma,"Noto Sans Arabic","Noto Sans",system-ui,sans-serif}
@@ -76,7 +76,6 @@ code{font-family:ui-monospace,Consolas,monospace;font-size:12px}
 <input type="file" id="kFile" accept=".json,.biruni-key,application/json"><input type="password" id="kPass">
 <label class="note"><input type="checkbox" id="kRemember"> <span id="kRememberL"></span></label><div class="err" id="kErr"></div>
 <div class="row"><button class="pri" id="kOk"></button><button id="kForget"></button><button id="kCancel"></button></div></div></div>
-<script src="portal.js" onerror="void 0"></script>
 <script>
 (()=>{'use strict';
 const $=id=>document.getElementById(id);

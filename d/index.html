@@ -1,4 +1,4 @@
-<!doctype html><html lang="en" dir="ltr" data-theme="biruni-light"><head><meta charset="utf-8">
+<!doctype html><html lang="en" dir="ltr" data-theme="biruni-light"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-BVRP6yqRzD7uvXkMut3a3Tv7/x/Yez4jsE6rVcaLKBg='; style-src 'sha256-uY33hA/+jIhYy2ljAIpb7iVZbOkhkjuVN6+81MkHIdQ='; img-src data: blob:; connect-src wss://relay.damus.io wss://nos.lol wss://relay.primal.net wss://nostr.mom wss://relay.nostr.band https://ntfy.sh wss://ntfy.sh; worker-src blob:; frame-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
 <meta name="referrer" content="no-referrer">
@@ -2283,7 +2283,7 @@ function recStart(){const P=X.film;if(!P)return;const cv=document.createElement(
 function recStop(){const P=X.film;if(!P||!P.rec)return;try{P.rec.mr.stop()}catch(e){}P.recB.textContent='● '+t('rec');setTimeout(()=>{if(X.film)X.film.rec=null},50)}
 const PROPS=['fill','stroke','stroke-width','opacity','fill-opacity','stroke-opacity','stroke-dasharray','font-size','font-weight','font-family','paint-order'];
 function recDraw(){const P=X.film;if(!P||!P.rec)return;const src=P.c.svg,cl=src.cloneNode(true),a=src.querySelectorAll('*'),b=cl.querySelectorAll('*');
- for(let i=0;i<a.length;i++){const cs=getComputedStyle(a[i]);let st='';for(const p of PROPS){const v=cs.getPropertyValue(p);if(v)st+=p+':'+v+';'}b[i].setAttribute('style',st)}
+ for(let i=0;i<a.length;i++){const cs=getComputedStyle(a[i]);let st='';for(const p of PROPS){const v=cs.getPropertyValue(p);if(v)st+=p+':'+v+';'}b[i].style.cssText=st}
  const r=src.getBoundingClientRect();cl.setAttribute('width',r.width);cl.setAttribute('height',r.height);
  const xml=new XMLSerializer().serializeToString(cl);const img=new Image();const cv=P.rec.cv,g=cv.getContext('2d');
  img.onload=()=>{const bg=getComputedStyle(P.c.mp).backgroundColor||'#fff';g.fillStyle=bg;g.fillRect(0,0,cv.width,cv.height);g.drawImage(img,0,0,cv.width,cv.height);
@@ -2455,7 +2455,9 @@ function saveHash(){const o={t:cfg.t||'',s:cfg.s.map(s=>({n:s.n||'',u:s.u}))};if
  const hp=new URLSearchParams(location.hash.slice(1));hp.set('m',enc(JSON.stringify(o)));
  try{history.replaceState(null,'','#'+hp.toString())}catch(e){location.hash=hp.toString()}}
 function frameUrl(u,i){const k=u.indexOf('#');return (k<0?u+'#':u+'&')+'mx='+i}
+const okSrc=u=>typeof u==='string'&&(/^https:\/\/[^\s#]+\/d\/[^\s]*#.*\bc=/.test(u)||/^https:\/\/[^\s#]+#.*\bc=/.test(u));
 function build(){
+ cfg.s=cfg.s.filter(s=>s&&okSrc(s.u));
  $('title').textContent=cfg.t||T('mx_title');
  document.title=(cfg.t||T('mx_title'))+' - Biruni GIS';
  if(wrap)wrap.remove();src.length=0;
@@ -2557,7 +2559,7 @@ function addSheet(){
  else el('p','mxNote',T('mx_noscan'),f);
  const ok=el('button','mxBtn',T('mx_add'),f);ok.type='submit';
  f.onsubmit=e=>{e.preventDefault();const u=inp.value.trim();
-  if(!/^https:\/\/[^\s#]+\/d\/[^\s]*#.*\bc=/.test(u)&&!/^https:\/\/[^\s#]+#.*\bc=/.test(u)){err.textContent=T('mx_bad');return}
+  if(!okSrc(u)){err.textContent=T('mx_bad');return}
   stop();cfg.s.push({n:nm.value.trim(),u:u});saveHash();BD.close();build()};
  BD.sheet(T('mx_add'),f);
  const sheetClose=document.getElementById('sheetClose');if(sheetClose)sheetClose.addEventListener('click',stop,{once:true})}
