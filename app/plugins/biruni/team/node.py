@@ -130,8 +130,8 @@ class Node(QObject):
         return self.store.get("rank", 99)
 
     def _me_member(self, token):
-        return {"id": self.me_id, "name": self.ident["name"], "pub": self.pub, "rank": self.my_rank(),
-                "token": token, "rights": {k: "edit" for k in self.layers}, "state": "in"}
+        return {"id": self.me_id, "name": self.ident["name"], "pub": self.pub, "xpub": self.xpub,
+                "rank": self.my_rank(), "token": token, "rights": {k: "edit" for k in self.layers}, "state": "in"}
 
     # ---- layers ---------------------------------------------------------------------------------------
     def attach_layers(self, layers):
@@ -663,6 +663,7 @@ class Node(QObject):
 
     # ---- host ---------------------------------------------------------------------------------------------
     def start_host(self, epoch=None):
+        was_member = self.store.get("role") == "member"
         self.stop_network()
         self.epoch = epoch or self.store.get("epoch", 1)
         self.store.put("epoch", self.epoch)
@@ -686,7 +687,7 @@ class Node(QObject):
         self.hub.auto_accept = not self.store.get("approve", True)
         if not self.store.get("block"):
             self._new_block()
-        if self.roster and not self.store.members():
+        if self.roster and (was_member or not self.store.members()):
             # taking over: the room's members (the old host among them) are let in again without asking; each
             # gets a new token when it says hello
             self.store.replace_members([
@@ -694,6 +695,12 @@ class Node(QObject):
                  "rights": m.get("rights") or {}, "token": None, "joined": time.time(), "seen": None,
                  "state": m.get("state") or "in"}
                 for m in self.roster if m["id"] != self.me_id and m.get("pub")])
+            box_keys = dict(self.store.get("box_keys", {}) or {})
+            for m in self.roster:
+                if m.get("id") and m.get("xpub"):
+                    box_keys[m["id"]] = m["xpub"]
+            if box_keys:
+                self.store.put("box_keys", box_keys)
         self.hub.start()
         self.role = "host"
         self.member = me
@@ -705,6 +712,56 @@ class Node(QObject):
             self.start_external()
         self.changed.emit()
         return self.hub.port
+
+    def set_host_right(self, member_id, allow):
+        """Owner only (host, rank 0): grant or revoke ``member_id``'s right to become the room's host."""
+        if self.role != "host" or self.my_rank() != 0 or self.hub is None:
+            raise PermissionError("only the room's owner can grant the host right while hosting")
+        from . import rules
+
+        grant = rules.make_host_grant(self.ident["seed"], self.me_id, member_id, allow)
+        grants = [g for g in (self.store.get(rules.HKEY) or [])
+                  if (g.get("doc") or {}).get("member") != member_id]
+        grants.append(grant)
+        self.store.put(rules.HKEY, grants)
+        self.hub._settings = (0.0, {})
+        self.hub._bump()
+
+    def can_make_host(self):
+        """True when this folder-room member is allowed to take over as host."""
+        if self.role == "host" or not self.store.get("folder_carrier"):
+            return False
+        from . import rules
+
+        return rules.may_host(self.store, self.lookup_member, self.me_id)
+
+    def make_me_host(self, carrier=None):
+        """Explicitly make this computer the room's host when using a folder carrier."""
+        from . import folder as rf
+        from . import rules
+
+        if self.role == "host" or not rules.may_host(self.store, self.lookup_member, self.me_id):
+            return "not-allowed"
+        folder = self.store.get("folder_carrier") or ""
+        if not folder or not os.path.isdir(folder) or not os.path.isdir(rf.room_dir(folder, self)):
+            return "no-folder"
+        if carrier is None:
+            cur = rf.current()
+            carrier = cur if (cur is not None and cur.node is self) else rf.FolderCarrier(self, folder)
+        old_sid = self.store.get("sid")
+        at = int(self.since or 0)
+        self.start_host(self.epoch + 1)
+        self.store.put("pigeon_only", False)
+        for k, v in (("folder_written_head", None), ("folder_written_settings", None), ("folder_snap_head", 0),
+                     ("folder_snap_at", None), ("folder_head_at", None), ("folder_file_hi", {}),
+                     ("folder_file_after", {}), ("folder_file_made", {}), ("folder_base_pkg", None),
+                     ("pigeon_seen_map", {})):
+            self.store.put(k, v)
+        carrier._marker_ok = None
+        carrier._pending = ([], [], {})
+        carrier.write_marker(at=at, prev_sid=old_sid)
+        carrier.write_takeover_welcomes()
+        return "ok"
 
     def _drain_host_outbox(self):
         """Host: put this computer's waiting changes into the stream. A conflict is kept to be chosen; a change
@@ -943,10 +1000,14 @@ class Node(QObject):
         if self.role != "host" or self.hub is None:
             return None
         from . import code as codes
+        from . import folder as rf
 
         new = codes.new_code()
         at = time.time() + wait
         self.hub.seal_new_code(new, at)
+        c = rf.carrier_for(self)
+        if c is not None:
+            c.write_rekey(self.hub.rekey)
         QTimer.singleShot(int(wait * 1000), lambda: self._switch_code(new))
         return new
 
@@ -962,8 +1023,27 @@ class Node(QObject):
         self._rekey_at = rk.get("at")
         QTimer.singleShot(max(0, int((float(rk["at"]) - time.time()) * 1000)) + 500, lambda: self._switch_code(new))
 
+    def apply_new_code(self, new_code):
+        """Member: manually switch to a new room code only if the folder holds a valid marker for its tag."""
+        from . import code as codes
+        from . import folder as rf
+
+        if not codes.normalize(new_code):
+            return False
+        new_keys = codes.RoomKeys(new_code)
+        folder = self.store.get("folder_carrier") or ""
+        if not folder:
+            return False
+        new_base = os.path.join(folder, "biruni-room-" + new_keys.tag[:16])
+        roster = rf._node_roster(self) or None
+        if rf.read_marker(new_base, new_keys.key, new_keys.tag, roster=roster) is None:
+            return False
+        self._switch_code(new_keys.code)
+        return True
+
     def _switch_code(self, new):
         from . import code as codes
+        from . import folder as rf
         from . import link
         from .session import _protect
 
@@ -982,6 +1062,7 @@ class Node(QObject):
             self._lost_since = time.time()
             self._tick.start()
             self._look_for_host()
+        rf.on_code_changed(self)
         self.changed.emit()
 
     def _on_pull(self, r):
@@ -1106,8 +1187,18 @@ class Node(QObject):
         # only hosts signed by a member of this room's roster who was not removed: the room code alone is not
         # enough to become the host (members would follow it and take its copy of the map)
         roster = self.store.members() or self.roster
+        r_check = roster if self.role == "host" else self.roster
         infos = [i for i in infos if i.get("address") and i.get("hid") != self.me_id
-                 and wire.announce_ok(self.keys.tag, i, roster if self.role == "host" else self.roster)]
+                 and wire.announce_ok(self.keys.tag, i, r_check)]
+        if self.store.get("folder_carrier"):
+            from . import rules
+
+            def _lookup(cid):
+                m = next((r for r in self.roster if r.get("id") == cid), None)
+                return m or next((r for r in r_check if r.get("id") == cid), None)
+
+            infos = [i for i in infos
+                     if (_lookup(i.get("hid")) or {}).get("host") or rules.may_host(self.store, _lookup, i.get("hid"))]
         # the host that more members reach wins (a laptop alone at home never takes the room from the office),
         # then the later epoch, then the earlier place in the join order
         infos.sort(key=lambda i: (-int(i.get("on", 0)), -int(i.get("epoch", 0)), int(i.get("rank", 99))))
@@ -1238,26 +1329,31 @@ class Node(QObject):
         self.status.emit("warn", "rejoin:" + str(why))
         self._tick.start()
 
-    def _on_resync(self, args):
-        info, hello, snap, results = args
+    def rebase(self, room_info, snap, results=()):
+        """Point layers at ``snap`` and adopt ``room_info``'s epoch, sid, settings, and roster."""
         point_layers_at(self, snap)
-        self.store.put("room_name", hello["room"].get("name", ""))
-        self.epoch = int(hello["room"].get("epoch", 1))
+        self.store.put("room_name", room_info.get("name", ""))
+        self.epoch = int(room_info.get("epoch", 1))
         self.store.put("epoch", self.epoch)
-        self.store.put("sid", hello["room"].get("sid"))   # the stream this computer now follows
-        self._keep_settings(hello["room"].get("settings"))
+        self.store.put("sid", room_info.get("sid"))   # the stream this computer now follows
+        self._keep_settings(room_info.get("settings"))
         self.since = snap["head"]
         self.store.put("since", self.since)
         # sent above: those the host took are in the new copy; conflicts are kept to be chosen, a refused change
         # is undone here, one waiting for a save stays to be sent again
-        self._on_pushed({"results": results})
-        for x in results:
-            if x.get("status") in ("ok", "merged"):
-                self.store.drop_outbox(x.get("uid"))
+        if results:
+            self._on_pushed({"results": results})
+            for x in results:
+                if x.get("status") in ("ok", "merged"):
+                    self.store.drop_outbox(x.get("uid"))
         if not self.store.get("block"):   # this computer's own ids stay its own across hosts
             self._new_block()
-        self.roster = hello["room"].get("members", [])
+        self.roster = room_info.get("members", [])
         self.store.put("roster", self.roster)
+
+    def _on_resync(self, args):
+        info, hello, snap, results = args
+        self.rebase(hello["room"], snap, results)
         self.start_member(info["address"], hello["member"])
         self.status.emit("ok", "rejoined")
 

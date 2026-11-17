@@ -14,13 +14,13 @@ from qgis.gui import QgsRubberBand, QgsVertexMarker
 from qgis.PyQt.QtCore import QObject, QPointF, QRectF, Qt, QTimer, pyqtSignal
 from qgis.PyQt.QtGui import QColor, QIcon, QKeySequence, QPainter, QPainterPath, QPen, QPixmap
 from qgis.PyQt.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
-                                 QDockWidget, QFileDialog, QFormLayout, QFrame, QGridLayout, QHBoxLayout, QLabel,
-                                 QLineEdit, QListWidget, QListWidgetItem, QMenu, QMessageBox, QPushButton,
-                                 QScrollArea, QShortcut, QStackedWidget, QTabWidget, QTreeWidget, QTreeWidgetItem,
-                                 QVBoxLayout, QWidget)
+                                 QDockWidget, QFileDialog, QFormLayout, QFrame, QGridLayout, QHBoxLayout,
+                                 QInputDialog, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMenu,
+                                 QMessageBox, QPushButton, QRadioButton, QScrollArea, QShortcut,
+                                 QStackedWidget, QTabWidget, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget)
 
 from ..i18n import tr
-from . import area, current, provenance, rules_ui, session, wire
+from . import area, current, drive_ui, provenance, rules, rules_ui, session, wire
 from .overlay import Overlay, color_of
 
 ROOMS_KEY = "biruni/team/rooms-folder"
@@ -218,6 +218,13 @@ class JoinDialog(QDialog):
         self.result_data = None
         self._cancel = False
         v = QVBoxLayout(self)
+        self.mode_net = QRadioButton(tr("On this network or direct link (host is online)"))
+        self.mode_drive = QRadioButton(tr("Through Google Drive - the host need not be online"))
+        self.mode_net.setChecked(True)
+        self.mode_net.toggled.connect(self._mode_changed)
+        self.mode_drive.toggled.connect(self._mode_changed)
+        v.addWidget(self.mode_net)
+        v.addWidget(self.mode_drive)
         form = QFormLayout()
         self.code = QLineEdit()
         self.code.setPlaceholderText("XXXX-XXXX-XXXX-XXXX")
@@ -240,6 +247,24 @@ class JoinDialog(QDialog):
         row.addWidget(pick)
         form.addRow(tr("Keep the room's map in"), row)
         v.addLayout(form)
+        self.drive_box = QFrame()
+        dv = QVBoxLayout(self.drive_box)
+        dv.setContentsMargins(0, 0, 0, 0)
+        self.drive_steps = QLabel(drive_ui.member_steps_text())
+        self.drive_steps.setWordWrap(True)
+        dv.addWidget(self.drive_steps)
+        self.offline_cb = QCheckBox(tr("I made the folder available offline"))
+        dv.addWidget(self.offline_cb)
+        drow = QHBoxLayout()
+        self.drive_folder = QLineEdit()
+        self.drive_folder.setPlaceholderText(tr("Found automatically in Google Drive (optional)"))
+        dpick = QPushButton("…")
+        dpick.clicked.connect(self._pick_drive)
+        drow.addWidget(self.drive_folder, 1)
+        drow.addWidget(dpick)
+        dv.addLayout(drow)
+        self.drive_box.setVisible(False)
+        v.addWidget(self.drive_box)
         self.state = QLabel(tr("Type the code the room's host gave you. The room is found on this network by "
                                "itself."))
         self.state.setWordWrap(True)
@@ -252,12 +277,27 @@ class JoinDialog(QDialog):
         self.bridge = _Bridge()
         self.bridge.step.connect(self._step)
         self.bridge.done.connect(self._done)
-        self.resize(460, 240)
+        self.resize(480, 320)
+
+    def _mode_changed(self):
+        drive_mode = self.mode_drive.isChecked()
+        self.drive_box.setVisible(drive_mode)
+        if drive_mode:
+            self.state.setText(tr("Type the code the room's host gave you. Biruni looks for the shared folder in "
+                                  "Google Drive."))
+        else:
+            self.state.setText(tr("Type the code the room's host gave you. The room is found on this network by "
+                                  "itself."))
 
     def _pick(self):
         d = QFileDialog.getExistingDirectory(self, tr("Keep the room's map in"), self.folder.text())
         if d:
             self.folder.setText(d)
+
+    def _pick_drive(self):
+        d = QFileDialog.getExistingDirectory(self, tr("Choose a Folder…"), self.drive_folder.text())
+        if d:
+            self.drive_folder.setText(d)
 
     def _go(self):
         if not session.codes.normalize(self.code.text()):
@@ -272,11 +312,21 @@ class JoinDialog(QDialog):
         QgsSettings().setValue(ROOMS_KEY, self.folder.text())
         self.bb.button(QDialogButtonBox.StandardButton.Ok).setEnabled(False)
         code, folder = self.code.text(), self.folder.text()
+        use_drive = self.mode_drive.isChecked()
+        drive_folder = self.drive_folder.text().strip() or None
+        offline_ok = self.offline_cb.isChecked()
 
         def run():
             try:
-                res = session.join_steps(code, folder, lambda s, a, b: self.bridge.step.emit(s, a, b),
-                                         lambda: self._cancel)
+                if use_drive:
+                    res = session.join_from_folder(
+                        code, folder, drive_folder=drive_folder,
+                        report=lambda s, a, b: self.bridge.step.emit(s, a, b),
+                        cancelled=lambda: self._cancel, offline_ok=offline_ok,
+                    )
+                else:
+                    res = session.join_steps(code, folder, lambda s, a, b: self.bridge.step.emit(s, a, b),
+                                             lambda: self._cancel)
                 self.bridge.done.emit(res, "")
             except Exception as e:  # noqa: BLE001
                 self.bridge.done.emit(None, str(e))
@@ -286,16 +336,24 @@ class JoinDialog(QDialog):
     def _step(self, step, a, b):
         if step == "finding":
             self.state.setText(tr("Looking for the room on this network and outside…"))
+        elif step == "asked":
+            self.state.setText(tr("Request placed in Google Drive. Waiting for the host to let you in…"))
         elif step == "waiting":
             self.state.setText(tr("Found. Waiting for the host to let you in…"))
         elif step == "downloading":
-            self.state.setText(tr("Copying the room's map to this computer: {a} of {b}").format(
-                a=_fmt_bytes(a), b=_fmt_bytes(b)))
+            if self.mode_drive.isChecked():
+                self.state.setText(tr("Opening the room's copy: part {a} of {b}").format(a=a, b=b))
+            else:
+                self.state.setText(tr("Copying the room's map to this computer: {a} of {b}").format(
+                    a=_fmt_bytes(a), b=_fmt_bytes(b)))
 
     def _done(self, res, err):
         if res is None:
             self.bb.button(QDialogButtonBox.StandardButton.Ok).setEnabled(True)
-            if "not-found" in err:
+            if "no-folder" in err:
+                self.state.setText(tr("The room folder was not found in Google Drive. Add a shortcut to My Drive "
+                                      "and make it available offline first."))
+            elif "not-found" in err:
                 self.state.setText(tr("The room was not found. Check the code, and that the host's computer is on "
                                       "and in the same network (or that the host allowed joining from outside)."))
             elif "refused" in err:
@@ -441,6 +499,8 @@ class HistoryDialog(QDialog):
 
 # ---- the panel ------------------------------------------------------------------------------------------
 class TeamDock(QDockWidget):
+    _pending_done = pyqtSignal(object, str, str)
+
     def __init__(self, plugin):
         super().__init__(tr("Team Room"), plugin.iface.mainWindow())
         self.plugin = plugin
@@ -453,6 +513,7 @@ class TeamDock(QDockWidget):
         self._bands = []
         self._area_bands = []
         self._areas_key = None
+        self._pending_busy = False
         self._refresh = QTimer(self)
         self._refresh.setSingleShot(True)
         self._refresh.setInterval(400)
@@ -460,12 +521,17 @@ class TeamDock(QDockWidget):
         self._live = QTimer(self)
         self._live.setInterval(1000)
         self._live.timeout.connect(self._tick)
+        self._pending_timer = QTimer(self)
+        self._pending_timer.setInterval(15000)
+        self._pending_timer.timeout.connect(self._poll_pending_joins)
+        self._pending_done.connect(self._on_pending_join_done)
         self._backup_at = time.time()
         self._build()
         self.canvas.xyCoordinates.connect(self._cursor)
         self.undo_key = QShortcut(QKeySequence("Ctrl+Alt+Z"), self.iface.mainWindow())
         self.undo_key.activated.connect(self.undo)
         self.attach(current())
+        self._refresh_pending()
 
     # ---- building -------------------------------------------------------------------------------------
     def _build(self):
@@ -492,6 +558,10 @@ class TeamDock(QDockWidget):
         b2.clicked.connect(self.join_room)
         cv.addWidget(b1)
         cv.addWidget(b2)
+        self.pending_label = QLabel()
+        self.pending_label.setWordWrap(True)
+        self.pending_label.setVisible(False)
+        cv.addWidget(self.pending_label)
         sv.addWidget(card)
         sv.addStretch(1)
         self.pages.addWidget(start)
@@ -538,8 +608,9 @@ class TeamDock(QDockWidget):
         team = QWidget()
         tv = QVBoxLayout(team)
         self.members = QTreeWidget()
-        self.members.setHeaderLabels([tr("Member"), tr("Status"), tr("Edits")])
+        self.members.setHeaderLabels([tr("Member"), tr("Status"), tr("Edits"), tr("May become the room's host")])
         self.members.setRootIsDecorated(False)
+        self.members.setColumnHidden(3, True)
         self.members.itemDoubleClicked.connect(self._go_to_member)
         self.members.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.members.customContextMenuRequested.connect(self._member_menu)
@@ -606,16 +677,46 @@ class TeamDock(QDockWidget):
         rrow.addWidget(mr)
         rrow.addWidget(nr)
         rv.addLayout(rrow)
-        # [room folder] the room's changes through a folder the office already shares (team/folder.py)
-        shf = QPushButton(tr("Use a Shared Folder…"))
+        # [room folder] the room's changes through Google Drive or another shared folder (team/folder.py)
+        sh_row = QHBoxLayout()
+        gd = QPushButton(tr("Team over Google Drive…"))
+        gd.setToolTip(tr("Share the room through Google Drive so the host and the members never need to be "
+                         "online at the same time."))
+        gd.clicked.connect(self.drive_wizard)
+        shf = QPushButton(tr("Another Shared Folder…"))
         shf.setToolTip(tr("A OneDrive, Google Drive or Dropbox folder, a network share or a USB stick: the room's "
                           "changes travel through it, sealed and signed, so the host and the members never need to be "
                           "online at the same time."))
         shf.clicked.connect(self.shared_folder)
-        rv.addWidget(shf)
+        sh_row.addWidget(gd)
+        sh_row.addWidget(shf)
+        rv.addLayout(sh_row)
         self.folder_state = QLabel()
         self.folder_state.setWordWrap(True)
         rv.addWidget(self.folder_state)
+        self.folder_warning = QLabel(drive_ui.offline_warning_text())
+        self.folder_warning.setWordWrap(True)
+        self.folder_warning.setStyleSheet("color: #B45309; font-weight: bold;")
+        self.folder_warning.setVisible(False)
+        rv.addWidget(self.folder_warning)
+        self.folder_table = QTreeWidget()
+        self.folder_table.setHeaderLabels([tr("Member"), tr("Progress"), tr("Last heard")])
+        self.folder_table.setRootIsDecorated(False)
+        self.folder_table.setMaximumHeight(120)
+        self.folder_table.setVisible(False)
+        rv.addWidget(self.folder_table)
+        self.folder_waiting = QLabel()
+        self.folder_waiting.setWordWrap(True)
+        self.folder_waiting.setVisible(False)
+        rv.addWidget(self.folder_waiting)
+        self.make_host_btn = QPushButton(tr("Make This Computer the Host…"))
+        self.make_host_btn.clicked.connect(self._make_me_host)
+        self.make_host_btn.setVisible(False)
+        rv.addWidget(self.make_host_btn)
+        self.enter_new_code_btn = QPushButton(tr("Enter the Room's New Code…"))
+        self.enter_new_code_btn.clicked.connect(self._enter_new_code)
+        self.enter_new_code_btn.setVisible(False)
+        rv.addWidget(self.enter_new_code_btn)
         leave = QPushButton(tr("Leave the room"))
         leave.clicked.connect(self.leave)
         rv.addWidget(leave)
@@ -717,6 +818,10 @@ class TeamDock(QDockWidget):
             b.clicked.connect(fn)
             tools.addWidget(b, i // 2, i % 2)
         bv.addLayout(tools)
+        self.no_box_label = QLabel()
+        self.no_box_label.setWordWrap(True)
+        self.no_box_label.setVisible(False)
+        bv.addWidget(self.no_box_label)
         v.addWidget(box)
         v.addStretch(1)
         return w
@@ -742,6 +847,7 @@ class TeamDock(QDockWidget):
         if node is None:
             self._live.stop()
             self.pages.setCurrentIndex(0)
+            self._refresh_pending()
             return
         node.changed.connect(self._refresh.start)
         node.status.connect(self._status)
@@ -775,6 +881,8 @@ class TeamDock(QDockWidget):
         self.members.clear()
         counts = n.store.counts()
         pres = n.presence
+        is_owner = host and n.my_rank() == 0
+        self.members.setColumnHidden(3, not is_owner)
         for m in n.roster:
             if m.get("state") == "out":
                 continue
@@ -787,12 +895,23 @@ class TeamDock(QDockWidget):
                 status = tr("editing") if ed else tr("online")
             else:
                 status = tr("away")
-            it = QTreeWidgetItem([m.get("name", ""), status, str(counts.get(m["id"], 0))])
+            it = QTreeWidgetItem([m.get("name", ""), status, str(counts.get(m["id"], 0)), ""])
             it.setIcon(0, QIcon(_dot(color_of(m["id"]))))
             it.setData(0, Qt.ItemDataRole.UserRole, m)
             self.members.addTopLevelItem(it)
-        for i in range(3):
+            if is_owner and m["id"] != n.me_id:
+                cb = QCheckBox()
+                cb.setToolTip(tr("May become the room's host"))
+                cb.blockSignals(True)
+                cb.setChecked(rules.may_host(n.store, n.lookup_member, m["id"]))
+                cb.blockSignals(False)
+                cb.toggled.connect(lambda on, mid=m["id"]: self._set_host_right(mid, on))
+                self.members.setItemWidget(it, 3, cb)
+        for i in range(4 if is_owner else 3):
             self.members.resizeColumnToContents(i)
+        self.make_host_btn.setVisible(n.can_make_host())
+        self.enter_new_code_btn.setVisible(not host and bool(n.store.get("folder_carrier")))
+        self._refresh_no_box_label()
         # conflicts
         self.conflicts.clear()
         cs = n.store.open_conflicts()
@@ -889,6 +1008,7 @@ class TeamDock(QDockWidget):
         elif n.external_url:
             lines.append(n.external_url + "  (" + tr("outside") + ")")
         self.addresses.setText(tr("The room's addresses (the code finds them by itself):") + "\n" + "\n".join(lines))
+        self._refresh_no_box_label()
 
     # ---- events ---------------------------------------------------------------------------------------
     def _cursor(self, pt):
@@ -915,6 +1035,7 @@ class TeamDock(QDockWidget):
                 "fields": tr("Only the host can add columns to a shared layer."),
                 "frozen": tr("The host froze editing for maintenance. You can look, not edit."),
                 "unfrozen": tr("Editing is open again."),
+                "base-too-large": tr("The room's files are over 2 GB and cannot be sent through the folder."),
                 "external-download": tr("Downloading the tunnel program from Cloudflare (once, about 60 MB)…")}
         if level == "zone":
             self._bar(tr("{name} is working in this area right now.").format(name=text), 1, 5)
@@ -1052,41 +1173,206 @@ class TeamDock(QDockWidget):
                 QMessageBox.warning(self, tr("Shared folder"), msg)
             self.refresh_folder()
 
+    def drive_wizard(self):
+        if self.node is None:
+            return
+        d = drive_ui.DriveRoomDialog(self.node, self)
+        d.exec()
+        self.refresh_folder()
+
+    def _set_host_right(self, member_id, allow):
+        if self.node is None:
+            return
+        try:
+            self.node.set_host_right(member_id, allow)
+        except PermissionError as e:
+            self._bar(str(e), 1)
+        self.refresh()
+
+    def _make_me_host(self):
+        if self.node is None or not self.node.can_make_host():
+            return
+        r = QMessageBox.question(
+            self,
+            tr("Make This Computer the Host"),
+            tr("Use this only when the host's computer is gone. Changes only that computer had are lost."),
+        )
+        if r != QMessageBox.StandardButton.Yes:
+            return
+        res = self.node.make_me_host()
+        if res == "ok":
+            self._bar(tr("This computer is now the room's host."), 2, 8)
+        elif res == "no-folder":
+            self._bar(tr("The room's folder is not available on this computer."), 1, 8)
+        else:
+            self._bar(tr("Only members chosen by the room's owner can become the host."), 1, 8)
+        self.refresh()
+
+    def _enter_new_code(self):
+        if self.node is None or self.node.role == "host":
+            return
+        code, ok = QInputDialog.getText(self, tr("Enter the Room's New Code"), tr("New room code"))
+        if not ok or not code.strip():
+            return
+        if not self.node.apply_new_code(code.strip()):
+            QMessageBox.warning(self, tr("Enter the Room's New Code"),
+                                tr("No valid room was found in the folder for that code."))
+            return
+        self._bar(tr("Switched to the room's new code."), 2, 8)
+        self.refresh()
+
+    def _missing_box_members(self):
+        n = self.node
+        if n is None or n.role != "host" or n.hub is None:
+            return []
+        box_keys = n.store.get("box_keys") or {}
+        return [m.get("name") or m["id"][:8] for m in n.hub.store.members()
+                if m.get("state") != "out" and not box_keys.get(m["id"])]
+
+    def _refresh_no_box_label(self):
+        lab = getattr(self, "no_box_label", None)
+        if lab is None:
+            return
+        missing = self._missing_box_members()
+        if missing:
+            lab.setText(tr("Give these members the new code yourself: {names}").format(names=", ".join(missing)))
+            lab.setVisible(True)
+        else:
+            lab.setVisible(False)
+
+    def _refresh_pending(self):
+        items = session.pending_joins()
+        if self.node is not None or not items:
+            self.pending_label.setVisible(False)
+            self._pending_timer.stop()
+            return
+        lines = [tr("Waiting for the host to let you in: {room}").format(room=it.get("room") or it["tag"][:8])
+                 for it in items]
+        self.pending_label.setText("\n".join(lines))
+        self.pending_label.setVisible(True)
+        if not self._pending_timer.isActive():
+            self._pending_timer.start()
+        self._poll_pending_joins()
+
+    def _poll_pending_joins(self):
+        if self.node is not None or self._pending_busy:
+            return
+        items = session.pending_joins()
+        if not items:
+            self._refresh_pending()
+            return
+        self._pending_busy = True
+
+        def run():
+            for it in items:
+                try:
+                    res = session.join_from_folder(
+                        it["code"], it["folder"], drive_folder=it.get("drive_folder") or None,
+                        offline_ok=bool(it.get("offline_ok")), poll_once=True,
+                    )
+                    if res is not None:
+                        self._pending_done.emit(res, "", it["tag"])
+                        return
+                except wire.WireError as e:
+                    if "refused" in str(e):
+                        self._pending_done.emit(None, "refused", it["tag"])
+                        return
+                except Exception:  # noqa: BLE001
+                    pass
+            self._pending_done.emit(None, "", "")
+
+        threading.Thread(target=run, daemon=True).start()
+
+    def _on_pending_join_done(self, res, err, tag):
+        self._pending_busy = False
+        if err == "refused" and tag:
+            session.remove_pending_join(tag)
+            self._bar(tr("The host did not let you in."), 1, 8)
+            self._refresh_pending()
+            return
+        if res is not None and self.node is None:
+            if current() is not None:
+                session.close_room(current())
+            node, gone = session.finish_join(res)
+            self.attach(node)
+            text = tr("You are in the room. Edit as usual: your work is shared as you go.")
+            if gone:
+                text += " " + tr("Some layers are files only the host has: {names}").format(names=", ".join(gone[:5]))
+            self._bar(text, 2, 12)
+        self._refresh_pending()
+
     def refresh_folder(self):
-        """The shared folder's line: when it last synced, how many computers write in it, what waits."""
+        """The shared folder's line, host sync table, waiting join requests, and offline warning."""
         from . import folder as rf
 
         lab = getattr(self, "folder_state", None)
         if lab is None:
             return
-        c = rf.current()
+        c = rf.carrier_for(self.node)
         if c is None or self.node is None or c.node is not self.node:
             lab.setText("")
+            self.folder_warning.setVisible(False)
+            self.folder_table.setVisible(False)
+            self.folder_waiting.setVisible(False)
+            self.enter_new_code_btn.setVisible(False)
             return
         s = c.status
         state = s.get("state") or "ok"
-        if state == "error" or s.get("error"):
-            lab.setText(tr("Shared folder: cannot be reached ({0})").format((s.get("error") or "")[:120]))
-            return
-        if state == "no-drive":
-            lab.setText(tr("Shared folder: drive or folder not found"))
-            return
-        if state == "missing":
-            lab.setText(tr("Shared folder: room folder is missing"))
-            return
-        if state == "no-marker":
-            lab.setText(tr("Shared folder: room marker is missing"))
-            return
-        if state == "host-silent":
-            lab.setText(tr("Shared folder: host has been silent for days"))
-            return
-        if state == "rejoin-needed":
-            lab.setText(tr("Shared folder: rejoin needed"))
-            return
+        host = self.node.role == "host"
+        self.folder_warning.setVisible(drive_ui.needs_offline_warning(s, self.node.store))
+        self.enter_new_code_btn.setVisible(not host and bool(self.node.store.get("folder_carrier")))
+        self.make_host_btn.setVisible(self.node.can_make_host())
+
+        if host:
+            rows = c.members_view()
+            self.folder_table.clear()
+            for r in rows:
+                heard = _fmt_age(max(0, time.time() - r["last"])) if r.get("last") else tr("never")
+                prog = tr("has {n} of {head} changes").format(n=r["seen"], head=r["head"])
+                self.folder_table.addTopLevelItem(QTreeWidgetItem([r["name"], prog, heard]))
+            self.folder_table.setVisible(bool(rows))
+            waiting = list(self.node.hub.waiting.values()) if self.node.hub else []
+            if waiting:
+                self.folder_waiting.setText(tr("Waiting to join: {names}").format(
+                    names=", ".join(r.get("name") or "?" for r in waiting)))
+                self.folder_waiting.setVisible(True)
+            else:
+                self.folder_waiting.setVisible(False)
+        else:
+            self.folder_table.setVisible(False)
+            self.folder_waiting.setVisible(False)
+
         when = time.strftime("%H:%M", time.localtime(s["last"])) if s.get("last") else "–"
-        text = tr("Shared folder: synced at {0} · {1} other computers").format(when, s.get("devices", 0))
-        if s.get("pending"):
-            text += " · " + tr("{0} files still arriving").format(s["pending"])
+        if state == "error" or s.get("error"):
+            text = tr("Shared folder: cannot be reached ({0})").format((s.get("error") or "")[:120])
+        elif state == "base-too-large":
+            text = tr("Shared folder: the room's files are over 2 GB and cannot be sent through the folder")
+        elif state == "no-drive":
+            text = tr("Google Drive is not running")
+        elif state == "missing":
+            text = tr("The room's folder is gone from this computer - nothing is sent. Ask the host.")
+        elif state == "no-marker":
+            text = tr("This folder has no room")
+        elif state == "host-silent":
+            days = max(1, int((time.time() - float(s["host_made"])) // 86400)) if s.get("host_made") else 7
+            text = tr("The host has not opened the room for {n} days").format(n=days)
+        elif state == "rejoin-needed":
+            text = tr("Fetching a fresh copy of the room")
+        elif host:
+            text = tr("Shared folder: synced at {0} · {1} other computers").format(when, s.get("devices", 0))
+            if s.get("pending"):
+                text += " · " + tr("{0} files still arriving").format(s["pending"])
+        else:
+            text = tr("Shared folder: synced at {0}").format(when)
+
+        if not host and state in ("ok", "host-silent", "rejoin-needed"):
+            heard = (_fmt_age(max(0, time.time() - s["host_made"]))
+                     if s.get("host_made") is not None else tr("never"))
+            out_n = self.node.store.outbox_count()
+            parts = [text, tr("host heard: {0}").format(heard), tr("{n} of your changes wait").format(n=out_n)]
+            if s.get("pending"):
+                parts.append(tr("{0} files still arriving").format(s["pending"]))
+            text = " · ".join(parts)
         lab.setText(text)
 
     def time_machine(self):
@@ -1114,24 +1400,7 @@ class TeamDock(QDockWidget):
         HistoryDialog(self.iface.mainWindow(), n, key, lyr.selectedFeatureIds()[0], self.canvas).exec()
 
     def _show_qr(self):
-        from ..gps.browser import qr_png
-        from ..vendor import ensure_vendor
-
-        ensure_vendor()
-        code = session.room_code(self.node)
-        pm = QPixmap()
-        pm.loadFromData(qr_png(code, 8))
-        d = QDialog(self)
-        d.setWindowTitle(tr("Room code"))
-        v = QVBoxLayout(d)
-        img = QLabel()
-        img.setPixmap(pm)
-        img.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        v.addWidget(img)
-        lab = QLabel(code)
-        lab.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        v.addWidget(lab)
-        d.exec()
+        drive_ui.show_qr(self.node, self)
 
     def _screen_source(self):
         """What the map shows while a change is made: the images (top first) and the scale."""
@@ -1374,9 +1643,13 @@ class TeamDock(QDockWidget):
             return
         new = self.node.change_code()
         if new:
-            QMessageBox.information(self, tr("Change the room code"), tr(
-                "The new code is:\n\n{c}\n\nThe room switches to it in 20 seconds. Give it to members who were "
-                "not connected.").format(c=new))
+            msg = tr("The new code is:\n\n{c}\n\nThe room switches to it in 20 seconds. Give it to members who "
+                     "were not connected.").format(c=new)
+            missing = self._missing_box_members()
+            if missing:
+                msg += "\n\n" + tr("Give these members the new code yourself: {names}").format(
+                    names=", ".join(missing))
+            QMessageBox.information(self, tr("Change the room code"), msg)
 
     def _freeze_toggled(self, on):
         if self.node and self.node.hub:
@@ -1485,6 +1758,7 @@ class TeamDock(QDockWidget):
 
     def shutdown(self):
         self._live.stop()
+        self._pending_timer.stop()
         self.overlay.clear()
         self._clear_areas()
         try:

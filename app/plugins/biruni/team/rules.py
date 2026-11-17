@@ -39,7 +39,7 @@ RULES = ("keep", "last", "authority", "max", "min", "sum", "ask")
 RULE_LABELS = {"keep": "Keep the current value and ask the author", "last": "The last change wins",
                "authority": "The higher rank wins", "max": "The larger number", "min": "The smaller number",
                "sum": "Add both changes", "ask": "Never join by itself: ask"}
-CKEY, GKEY = "constitution", "number_grants"
+CKEY, GKEY, HKEY = "constitution", "number_grants", "host_grants"
 
 
 # ---- signing ------------------------------------------------------------------------------------------------
@@ -125,6 +125,32 @@ def next_number(docs, used):
 
 def left(docs, used):
     return sum(d["hi"] - d["lo"] + 1 for d in docs) - sum(1 for u in used if in_ranges(u, docs))
+
+
+def make_host_grant(seed_hex, admin_id, member_id, allow):
+    """Owner-signed grant deciding whether ``member_id`` may become the room's host."""
+    doc = {"kind": "host", "member": str(member_id), "allow": bool(allow), "by": str(admin_id),
+           "ts": round(time.time(), 3)}
+    return {"doc": doc, "sig": _sign(seed_hex, doc)}
+
+
+def may_host(store, lookup, member_id):
+    """True when ``member_id`` has rank 0, or the newest owner-signed host grant allows it."""
+    who = lookup(member_id)
+    if who is not None:
+        if who.get("state") == "out":
+            return False
+        if int(who.get("rank", 99)) == 0:
+            return True
+    valid = []
+    for g in store.get(HKEY) or []:
+        d = _verify(g, lookup)
+        if d is not None and d.get("kind") == "host" and d.get("member") == member_id:
+            valid.append(d)
+    if not valid:
+        return False
+    newest = max(enumerate(valid), key=lambda p: (float(p[1].get("ts") or 0), p[0]))[1]
+    return bool(newest.get("allow"))
 
 
 # ---- the field decision -------------------------------------------------------------------------------------

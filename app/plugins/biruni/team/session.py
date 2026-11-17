@@ -17,8 +17,9 @@ import time
 
 from qgis.core import (QgsCoordinateReferenceSystem, QgsProject, QgsRectangle, QgsSettings, QgsVectorLayer)
 
+from ..i18n import tr
 from ..secure import crypto
-from . import code as codes
+from . import cloudfs, code as codes
 from . import features, set_current, wire
 from .hub import BLOCK, own_block
 from .node import Node, download_snapshot
@@ -28,6 +29,8 @@ from .store import Store
 PROP = "biruni/team-layer"
 IDENT_KEY = "biruni/team/identity"
 NAME_KEY = "biruni/team/name"
+PENDING_KEY = "biruni/team/pending-joins"
+JOIN_POLL = 15
 
 
 def _protect(text):
@@ -213,6 +216,202 @@ def join_steps(code, parent, report, cancelled=lambda: False, address=None):
             "name": base}
 
 
+def save_pending_join(code, parent_folder, drive_folder=None, room_name="", offline_ok=False):
+    """Remember a folder join waiting for host approval across restarts (code protected via DPAPI)."""
+    keys = codes.RoomKeys(code)
+    s = QgsSettings()
+    try:
+        items = json.loads(s.value(PENDING_KEY, "[]") or "[]")
+        if not isinstance(items, list):
+            items = []
+    except ValueError:
+        items = []
+    items = [it for it in items if isinstance(it, dict) and it.get("tag") != keys.tag]
+    items.append({
+        "tag": keys.tag,
+        "code": _protect(keys.code),
+        "folder": parent_folder,
+        "drive_folder": drive_folder or "",
+        "room": room_name or "",
+        "offline_ok": bool(offline_ok),
+        "ts": time.time(),
+    })
+    s.setValue(PENDING_KEY, json.dumps(items))
+
+
+def pending_joins():
+    """Return pending folder joins with decrypted room codes."""
+    s = QgsSettings()
+    try:
+        items = json.loads(s.value(PENDING_KEY, "[]") or "[]")
+        if not isinstance(items, list):
+            return []
+    except ValueError:
+        return []
+    out = []
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        code = _unprotect(it.get("code", "") or "")
+        if not codes.normalize(code):
+            continue
+        out.append(dict(it, code=codes.RoomKeys(code).code))
+    return out
+
+
+def remove_pending_join(tag):
+    """Remove a pending folder join by room tag."""
+    s = QgsSettings()
+    try:
+        items = json.loads(s.value(PENDING_KEY, "[]") or "[]")
+        if not isinstance(items, list):
+            return
+    except ValueError:
+        return
+    kept = [it for it in items if isinstance(it, dict) and it.get("tag") != tag]
+    if kept:
+        s.setValue(PENDING_KEY, json.dumps(kept))
+    else:
+        s.remove(PENDING_KEY)
+
+
+def _find_join_drive_folder(keys, drive_folder):
+    from ..field_photos import drive
+    from . import folder as rf
+
+    candidates = [drive_folder] if drive_folder else cloudfs.find_room(keys.tag, drive.suggest_roots())
+    for cand in candidates:
+        if not cand:
+            continue
+        base = os.path.join(cand, "biruni-room-" + keys.tag[:16])
+        if os.path.basename(os.path.normpath(cand)) == "biruni-room-" + keys.tag[:16]:
+            base = cand
+            cand = os.path.dirname(os.path.normpath(cand))
+        marker = rf.read_marker(base, keys.key, keys.tag)
+        if marker is not None:
+            return cand, base, marker
+    return None, None, None
+
+
+def join_from_folder(code, rooms_parent, drive_folder=None, report=lambda *a: None,
+                     cancelled=lambda: False, offline_ok=False, poll_once=False):
+    """Worker thread: request to join a room through a synced folder and unpack the welcome + base package."""
+    from . import folder as rf
+
+    keys = codes.RoomKeys(code)
+    ident = identity()
+    box_priv, _xpub = wire.box_key(ident["seed"])
+    drive_folder, base, marker = _find_join_drive_folder(keys, drive_folder)
+    if drive_folder is None or marker is None:
+        raise wire.WireError("no-folder")
+
+    save_pending_join(keys.code, rooms_parent, drive_folder=drive_folder,
+                      room_name=marker.get("name", ""), offline_ok=offline_ok)
+    _req_path, _req_n = rf.write_join_request(base, keys, ident)
+    last_write = time.time()
+    report("asked", 0, 0)
+
+    while True:
+        if cancelled():
+            raise wire.WireError("cancelled")
+        marker = rf.read_marker(base, keys.key, keys.tag)
+        if marker is not None:
+            host_dir = os.path.join(base, "d-" + marker["maker"])
+            if os.path.isdir(host_dir):
+                try:
+                    entries = os.listdir(host_dir)
+                except OSError:
+                    entries = []
+                _hn, _fn, hbody, *_ = rf._pick_head(
+                    host_dir, entries, keys.key, keys.tag, roster=None,
+                    trusted_pub=marker["pub"], check_placeholder=True,
+                )
+                if hbody is not None:
+                    fmap = {str(k): str(v) for k, v in (hbody.get("files") or {}).items()
+                            if isinstance(k, str)}
+                    prefix = ident["id"][:16]
+                    welcomes = []
+                    for fname in fmap:
+                        m = rf._WELCOME_RE.match(fname)
+                        if m and m.group(1) == prefix:
+                            welcomes.append((int(m.group(2)), fname))
+                    welcomes.sort(key=lambda x: -x[0])
+                    for _wn, wname in welcomes:
+                        wpath = os.path.join(host_dir, wname)
+                        if cloudfs.placeholder(wpath) is True:
+                            continue
+                        try:
+                            if os.path.getsize(wpath) > rf.MAX_READ:
+                                continue
+                            wblob = rf._read(wpath)
+                        except OSError:
+                            continue
+                        if len(wblob) > rf.MAX_READ or rf._sha(wblob) != fmap[wname]:
+                            continue
+                        try:
+                            wbody = rf.unseal_welcome(wblob, box_priv, ident["id"],
+                                                      marker["pub"], marker["maker"], keys.tag)
+                        except Exception:  # noqa: BLE001
+                            continue
+                        if wbody.get("kind") == "refused":
+                            remove_pending_join(keys.tag)
+                            raise wire.WireError("refused:")
+                        if wbody.get("kind") == "welcome" and wbody.get("base"):
+                            base_info = wbody["base"]
+                            parts = base_info.get("parts") or []
+                            parts_ready = True
+                            for p in parts:
+                                pname = p["name"]
+                                ppath = os.path.join(host_dir, pname)
+                                if fmap.get(pname) != p["sha"] or cloudfs.placeholder(ppath) is True:
+                                    parts_ready = False
+                                    break
+                                try:
+                                    if os.path.getsize(ppath) < int(p.get("size") or 0):
+                                        parts_ready = False
+                                        break
+                                except OSError:
+                                    parts_ready = False
+                                    break
+                            if parts_ready:
+                                from ..project import safe_name
+
+                                room = wbody["room_info"]
+                                base_name = safe_name(room.get("name") or "Room") or "Room"
+                                folder, n = os.path.join(rooms_parent, base_name), 2
+                                while os.path.exists(folder) and os.listdir(folder):
+                                    folder, n = os.path.join(rooms_parent, f"{base_name} ({n})"), n + 1
+                                os.makedirs(folder, exist_ok=True)
+                                sub = rf._unique_data_dir(folder)
+                                try:
+                                    snap = rf.extract_base(host_dir, base_info, sub, report=report)
+                                except ValueError as e:
+                                    raise wire.WireError(str(e)) from None
+                                remove_pending_join(keys.tag)
+                                return {
+                                    "code": keys.code,
+                                    "address": None,
+                                    "hello": {"member": wbody["member"], "room": room},
+                                    "snap": snap,
+                                    "folder": folder,
+                                    "name": base_name,
+                                    "left_out": base_info.get("left_out") or [],
+                                    "drive_folder": drive_folder,
+                                    "offline_ok": bool(offline_ok),
+                                }
+        if poll_once:
+            return None
+        report("waiting", 0, 0)
+        if time.time() - last_write >= rf.REFRESH:
+            rf.write_join_request(base, keys, ident)
+            last_write = time.time()
+        end = time.monotonic() + JOIN_POLL
+        while time.monotonic() < end:
+            if cancelled():
+                raise wire.WireError("cancelled")
+            time.sleep(min(0.25, max(0.01, end - time.monotonic())))
+
+
 def finish_join(res):
     """Main thread: the room's map in its folder, then follow the room."""
     prj = QgsProject.instance()
@@ -252,11 +451,32 @@ def finish_join(res):
     st.put("block_n", 1)
     st.put("roster", room.get("members", []))
     st.set_versions([tuple(v) for v in snap["versions"]])
-    node = Node(st, codes.RoomKeys(res["code"]), identity())
+    left_out = res.get("left_out") or []
+    if left_out:
+        st.put("folder_left_out", left_out)
+    keys = codes.RoomKeys(res["code"])
+    remove_pending_join(keys.tag)
+    node = Node(st, keys, identity())
     node.attach_layers(layers)
-    node.start_member(res["address"], res["hello"]["member"])
-    node.was_connected = True
-    set_current(node)
+    if res.get("address") is None:
+        from . import folder as rf
+
+        node.role = "member"
+        node.member = res["hello"]["member"]
+        st.put("role", "member")
+        st.put("rank", node.member.get("rank", 99))
+        st.put("pigeon_only", True)
+        if res.get("offline_ok"):
+            st.put("folder_offline_ok", True)
+        node.state = "reconnecting"
+        node._apply_rights(node.member.get("rights") or {})
+        node._tick.start()
+        set_current(node)
+        rf.use_folder(node, res["drive_folder"])
+    else:
+        node.start_member(res["address"], res["hello"]["member"])
+        node.was_connected = True
+        set_current(node)
     try:
         from qgis.utils import iface
         ext = room.get("extent")
@@ -265,7 +485,17 @@ def finish_join(res):
             iface.mapCanvas().refresh()
     except Exception:  # noqa: BLE001
         pass
-    return node, gone or []
+    why_map = {"raster": tr("raster"), "too large": tr("too large")}
+    by_name = {x["name"]: why_map.get(x["why"], x["why"]) for x in left_out}
+    skipped = []
+    seen_names = set()
+    for g in gone or []:
+        seen_names.add(g)
+        skipped.append(f"{g} ({by_name[g]})" if g in by_name else g)
+    for x in left_out:
+        if x["name"] not in seen_names:
+            skipped.append(f"{x['name']} ({by_name[x['name']]})")
+    return node, skipped
 
 
 # ---- coming back -----------------------------------------------------------------------------------------
@@ -307,6 +537,7 @@ def reopen(prj=None):
             node.start_host()
     else:
         node.role = "member"
+        node.member = next((m for m in node.roster if m.get("id") == node.me_id), None)
         node.state = "reconnecting"
         node._lost_since = time.time()
         node._tick.start()

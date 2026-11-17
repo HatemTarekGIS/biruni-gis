@@ -357,7 +357,7 @@ def _host_take(node, body, rep):
     mine = results.setdefault(maker, {})
     for op in body.get("ops") or []:
         op = dict(op)
-        if op.get("author") != maker:      # a member's pack carries only its own changes
+        if op.get("author") != maker and not op.get("replay"):  # a member's pack carries its own changes or replays
             rep["refused"].append("a change of someone else")
             continue
         if st.has(str(op.get("uid", ""))):

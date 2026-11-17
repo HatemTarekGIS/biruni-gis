@@ -47,6 +47,7 @@ GATHER = 0.12              # seconds a pull waits after news for the changes of 
 FLUSH_GAP = 0.15           # seconds between two writes to the disk: changes arriving meanwhile are written together
 MAX_POINTERS = 40          # pointers of others sent to one member
 MAX_EXTRA = 300 << 20      # other local files of the map sent to members, at most
+MAX_BASE_EXTRA = 100 << 20  # vector extra files sent in a folder base package, at most
 
 
 class _Job:
@@ -63,7 +64,7 @@ class _Job:
         self.done.set()
 
 
-ROOM_SETTINGS = ("approve", "default_rights", "external", "constitution", "number_grants")  # [I06] rules.py
+ROOM_SETTINGS = ("approve", "default_rights", "external", "constitution", "number_grants", "host_grants")  # [I06] rules.py
 
 
 def room_settings(store):
@@ -136,6 +137,7 @@ class Hub(QObject):
         self.auto_accept = False
         self.open_door = True
         self.snapshot = None            # (seq, folder, files)
+        self.base_pkg = None            # (seq, folder, info) for folder base packages
         self._snap_time = 0.0
         self._old_snaps = {}            # folder -> time of its last download (kept while someone downloads it)
         self.commit_now = lambda key: None   # set by the node: save the host's own edits on that layer now
@@ -202,6 +204,9 @@ class Hub(QObject):
             shutil.rmtree(folder, ignore_errors=True)
         self._old_snaps = {}
         self.snapshot = None
+        if self.base_pkg:
+            shutil.rmtree(self.base_pkg[1], ignore_errors=True)
+            self.base_pkg = None
 
     def where(self):
         now = time.time()
@@ -268,6 +273,11 @@ class Hub(QObject):
                 self.jobs.put(_Job("ask", req))
             return {"status": "waiting"}
         self.waiting.pop(cid, None)
+        m = self._admit(cid, name, pub, msg)
+        return self._welcome(m)
+
+    def _admit(self, cid, name, pub, msg):
+        self.waiting.pop(cid, None)
         members = self.store.members()
         rank = max([m["rank"] for m in members] + [self.me.get("rank", 0)]) + 1
         default = self.store.get("default_rights", "edit")
@@ -278,7 +288,42 @@ class Hub(QObject):
         self._keep_box_key(cid, msg)
         self._members_changed()
         self.jobs.put(_Job("note", {}))
-        return self._welcome(m)
+        return m
+
+    def folder_join(self, req):
+        """A join request arrived through the shared folder (already unsealed and signature-verified).
+
+        Returns 'ok', 'waiting', or 'refused'.
+        """
+        cid = str(req.get("maker") or req.get("id") or "")[:64]
+        name = str(req.get("name") or "")[:80]
+        pub = str(req.get("pub") or "")[:128]
+        if not cid or not pub:
+            return "refused"
+        for m in self.store.members():
+            if m["id"] == cid:
+                if m["pub"] != pub or m.get("state") == "out":
+                    return "refused"
+                m["name"] = name or m["name"]
+                m["seen"] = time.time()
+                m["state"] = "in"
+                self.store.save_member(m)
+                self._keep_box_key(cid, req)
+                self._members_changed()
+                return "ok"
+        if self.decided.get(cid) == "refused":
+            return "refused"
+        if not self.open_door:
+            return "refused"
+        if self.decided.get(cid) != "ok" and not self.auto_accept:
+            if cid not in self.waiting:
+                ask = {"id": cid, "name": name, "pub": pub,
+                       "fingerprint": crypto.fingerprint(bytes.fromhex(pub)), "ts": time.time()}
+                self.waiting[cid] = ask
+                self.jobs.put(_Job("ask", ask))
+            return "waiting"
+        self._admit(cid, name, pub, req)
+        return "ok"
 
     def settings(self):
         """The room's settings for the members, read again every few seconds: every pull carries them, and a
@@ -344,11 +389,15 @@ class Hub(QObject):
     def roster(self):
         if self._roster is not None and self._roster[0] == self.roster_v:
             return self._roster[1]
+        box_keys = self.store.get("box_keys", {}) or {}
         out = [{"id": self.me["id"], "name": self.me["name"], "rank": self.me.get("rank", 0), "host": True,
-                "pub": self.me.get("pub"), "rights": {k: "edit" for k in self.layers}, "state": "in"}]
+                "pub": self.me.get("pub"), "xpub": self.me.get("xpub"),
+                "rights": {k: "edit" for k in self.layers}, "state": "in"}]
         for m in self.store.members():
             if m["id"] != self.me["id"]:
-                out.append({k: m.get(k) for k in ("id", "name", "rank", "rights", "pub", "state")})
+                d = {k: m.get(k) for k in ("id", "name", "rank", "rights", "pub", "state")}
+                d["xpub"] = box_keys.get(m["id"])
+                out.append(d)
         self._roster = (self.roster_v, out)
         return out
 
@@ -954,21 +1003,7 @@ class Hub(QObject):
                 "theirs": cur, "other": other, "ver": self.store.version(op["layer"], int(op["fid"]))}
 
     # ---- the room's files for a new member ------------------------------------------------------------
-    def make_snapshot(self):
-        head = self.store.head()
-        # made again at most every SNAPSHOT_AGE: copying the room's files freezes the host's window, and a
-        # joiner gets the changes made since from the stream anyway
-        if self.snapshot and os.path.isdir(self.snapshot[1]) and (
-                self.snapshot[0] == head or time.time() - self._snap_time < SNAPSHOT_AGE):
-            return self._snapshot_info()
-        self._snap_time = time.time()
-        if self.snapshot:   # kept while someone still downloads it (deleting it stranded slow joiners)
-            self._old_snaps[self.snapshot[1]] = time.time()
-        for folder, used in list(self._old_snaps.items()):
-            if time.time() - used > SNAPSHOT_AGE:
-                shutil.rmtree(folder, ignore_errors=True)
-                del self._old_snaps[folder]
-        folder = tempfile.mkdtemp(prefix="biruni-room-")
+    def _copy_shared_gpkgs(self, folder):
         files, sources = {}, {}
         for key, lyr in self.layers.items():
             path = lyr.dataProvider().dataSourceUri().split("|")[0]
@@ -984,6 +1019,24 @@ class Hub(QObject):
                 files[name] = os.path.getsize(os.path.join(folder, name))
         layer_files = {key: sources[lyr.dataProvider().dataSourceUri().split("|")[0]]
                        for key, lyr in self.layers.items()}
+        return files, layer_files
+
+    def make_snapshot(self):
+        head = self.store.head()
+        # made again at most every SNAPSHOT_AGE: copying the room's files freezes the host's window, and a
+        # joiner gets the changes made since from the stream anyway
+        if self.snapshot and os.path.isdir(self.snapshot[1]) and (
+                self.snapshot[0] == head or time.time() - self._snap_time < SNAPSHOT_AGE):
+            return self._snapshot_info()
+        self._snap_time = time.time()
+        if self.snapshot:   # kept while someone still downloads it (deleting it stranded slow joiners)
+            self._old_snaps[self.snapshot[1]] = time.time()
+        for folder, used in list(self._old_snaps.items()):
+            if time.time() - used > SNAPSHOT_AGE:
+                shutil.rmtree(folder, ignore_errors=True)
+                del self._old_snaps[folder]
+        folder = tempfile.mkdtemp(prefix="biruni-room-")
+        files, layer_files = self._copy_shared_gpkgs(folder)
         extra = self._extra_files(folder, files)
         with open(os.path.join(folder, "versions.json"), "w", encoding="utf-8") as f:
             json.dump({"head": head, "versions": self.store.all_versions(), "layer_files": layer_files,
@@ -995,14 +1048,68 @@ class Hub(QObject):
         self.snapshot = (head, folder, files)
         return self._snapshot_info()
 
-    def _extra_files(self, folder, files):
-        """The map's other layers that are files on this computer, copied when small enough: {layer id: name}."""
+    def base_left_out(self):
+        """Non-shared local layers omitted from a folder base package (without copying files)."""
+        from qgis.core import QgsMapLayer, QgsProject
         from . import snapshot
+
         shared = {lyr.id() for lyr in self.layers.values()}
+        total, left_out = 0, []
+        for lid, paths in snapshot.local_files(shared).items():
+            lyr = QgsProject.instance().mapLayer(lid)
+            if lyr is not None and lyr.type() == QgsMapLayer.LayerType.RasterLayer:
+                left_out.append({"name": lyr.name(), "why": "raster"})
+                continue
+            size = sum(os.path.getsize(p) for p in paths)
+            if total + size > MAX_BASE_EXTRA:
+                if lyr is not None:
+                    left_out.append({"name": lyr.name(), "why": "too large"})
+                continue
+            total += size
+        return left_out
+
+    def make_base(self):
+        """Vectors-only base package directory for folder joins (cached separately from self.snapshot)."""
+        head = self.store.head()
+        if self.base_pkg and os.path.isdir(self.base_pkg[1]) and self.base_pkg[0] == head:
+            return self.base_pkg[2]
+        if self.base_pkg:
+            shutil.rmtree(self.base_pkg[1], ignore_errors=True)
+            self.base_pkg = None
+        folder = tempfile.mkdtemp(prefix="biruni-base-")
+        files, layer_files = self._copy_shared_gpkgs(folder)
+        left_out = []
+        extra = self._extra_files(folder, files, vectors_only=True, left_out=left_out)
+        with open(os.path.join(folder, "versions.json"), "w", encoding="utf-8") as f:
+            json.dump({"head": head, "versions": self.store.all_versions(), "layer_files": layer_files,
+                       "extra": extra}, f)
+        files["versions.json"] = os.path.getsize(os.path.join(folder, "versions.json"))
+        from . import snapshot
+        snapshot.write_qlr(os.path.join(folder, "map.qlr"))
+        files["map.qlr"] = os.path.getsize(os.path.join(folder, "map.qlr"))
+        info = {"dir": folder, "head": head, "files": files, "layer_files": layer_files,
+                "extra": extra, "left_out": left_out}
+        self.base_pkg = (head, folder, info)
+        return info
+
+    def _extra_files(self, folder, files, vectors_only=False, left_out=None):
+        """The map's other layers that are files on this computer, copied when small enough: {layer id: name}."""
+        from qgis.core import QgsMapLayer, QgsProject
+        from . import snapshot
+
+        shared = {lyr.id() for lyr in self.layers.values()}
+        limit = MAX_BASE_EXTRA if vectors_only else MAX_EXTRA
         total, out = 0, {}
         for lid, paths in snapshot.local_files(shared).items():
+            lyr = QgsProject.instance().mapLayer(lid) if vectors_only else None
+            if vectors_only and lyr is not None and lyr.type() == QgsMapLayer.LayerType.RasterLayer:
+                if left_out is not None:
+                    left_out.append({"name": lyr.name(), "why": "raster"})
+                continue
             size = sum(os.path.getsize(p) for p in paths)
-            if total + size > MAX_EXTRA:
+            if total + size > limit:
+                if vectors_only and left_out is not None and lyr is not None:
+                    left_out.append({"name": lyr.name(), "why": "too large"})
                 continue
             sub = os.path.join(folder, "files", hashlib.sha1(lid.encode()).hexdigest()[:10])
             os.makedirs(sub, exist_ok=True)
