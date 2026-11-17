@@ -446,6 +446,35 @@ check(wait(lambda: bool(got4.extend(e[1] for e in drain() if e[0] == "photo" and
 check(wait(lambda: js("$('waitPill').classList.contains('hide')") is True, 10),
       "the waiting counter hides again once all photos reach the PC")
 
+# ---- Google Drive carries the original: over the open line only the preview goes; the original replaces it later --
+js(r"""(async()=>{window._df=driveFirst;driveFirst=()=>true;
+ const b=new Uint8Array(40000);for(let i=0;i<b.length;i++)b[i]=i%251;b.set([0xff,0xd8,0xff,0xe0]);b.set([0xff,0xd9],b.length-2);
+ const meta={id:'bridgephoto-0010',lat:24.716,lon:46.679,acc:3,t:Date.now(),note:'drive first',device:'test'};
+ await put({id:meta.id,blob:new Blob([b],{type:'image/jpeg'}),meta:meta,room:ROOM});await flush()})();1""")
+got5 = []
+check(wait(lambda: bool(got5.extend(e[1] for e in drain() if e[0] == "photo" and e[1]["id"] == "bridgephoto-0010")
+                        or got5), 60) and bool(got5[0].get("preview"))
+      and os.path.getsize(got5[0].get("photo", "")) < 40000,
+      "with Google Drive first: the line sends only the preview, and the PC shows it at once")
+
+
+def p10():
+    js("all().then(a=>{const x=a.find(y=>y.id==='bridgephoto-0010');window._p10=x?(x.prevSent?'prev':'wait'):'gone'});1")
+    wait(lambda: False, 0.2)
+    return js("window._p10")
+
+
+check(wait(lambda: p10() == "prev", 10), "the phone keeps the original for Google Drive, marked 'preview sent'")
+js("flush();1")
+wait(lambda: False, 3)
+check(len([e for e in drain() if e[0] == "photo" and e[1]["id"] == "bridgephoto-0010"]) == 1,
+      "the next round sends nothing more over the line")
+js("driveFirst=window._df;flush();1")
+check(wait(lambda: any(e[0] == "photo" and e[1]["id"] == "bridgephoto-0010" and not e[1].get("preview")
+                       and os.path.getsize(e[1].get("photo", "")) == 40000 for e in drain()), 60),
+      "when Drive cannot carry it, the line sends the original, and it replaces the preview")
+check(wait(lambda: p10() == "gone", 10), "… and the phone lets it go")
+
 js("window.BIRUNI_INCOGNITO=true;checkPrivate();setLang('ar');1")
 check(wait(lambda: js("!$('privWarn').classList.contains('hide')&&$('privWarn').textContent.includes('التصفح الخفي')") is True, 5),
       "private browsing mode shows a clear warning banner")

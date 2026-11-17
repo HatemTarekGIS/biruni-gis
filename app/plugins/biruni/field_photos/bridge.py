@@ -371,7 +371,7 @@ async function handleAck(m){const f=acks.get(m.id);if(!f)return;
 /* what the PC says, however it comes */
 function fromPc(m){if(m.t==='hello')hello(m);else if(m.t==='guide')setGuide(m.g);
  else if(m.t==='ack')handleAck(m)}
-function failAcks(){for(const [id,f] of acks)if(f.kind==='original'){acks.delete(id);f.reject(new Error('closed'))}}
+function failAcks(){for(const [id,f] of acks)if(f.kind==='original'||f.line){acks.delete(id);f.reject(new Error('closed'))}}
 function drop(){const p=pc;pc=null;dc=null;linking=false;if(p)try{p.close()}catch(e){}
  for(const [k,c] of carried){try{if(c)c.close()}catch(e){}}carried.clear();if(!lineOpen())failAcks()}
 function dropVia(){const v=VIA;VIA=null;if(v&&v.pc)try{v.pc.close()}catch(e){}if(!lineOpen())failAcks()}
@@ -383,8 +383,8 @@ async function connect(){if(!BK||linking||lineOpen())return;
  linking=true;if(!RELAY)say(false,'connecting');const my=sid=rid();
  try{pc=new RTCPeerConnection({iceServers:BR.ice});const ch=dc=pc.createDataChannel('photos',{ordered:true});
   ch.binaryType='arraybuffer';const me=pc;
-  ch.onopen=()=>{linking=false;RELAY=false;backoff=4000;dropVia();ch.send(JSON.stringify({t:'hi',ua:dev}));say(true,'connected');flush();
-   tellPos(true)};
+  ch.onopen=()=>{linking=false;RELAY=false;backoff=4000;dropVia();ch.send(JSON.stringify({t:'hi',ua:dev}));say(true,'connected');
+   lineFresh();flush();if(typeof drivePump==='function')drivePump();tellPos(true)};
   ch.onclose=()=>{if(pc===me){drop();say(false,RELAY?'relayMode':'lost');later()}};
   ch.onmessage=e=>{if(typeof e.data!=='string')return;let m;try{m=JSON.parse(e.data)}catch(x){return}
    if(m.t==='fwd'&&m.to){const c=carried.get(m.to);   /* the PC answers a teammate this phone carries */
@@ -413,7 +413,8 @@ async function help(){if(VIA||direct()||!SIG.up())return;
      if(m.t==='hello'&&m.e&&!v.key){if(!await IDOK(m.ip,m.is,'BRH1|'+v.kp.pub+'|'+m.e)){SIG.refused=(SIG.refused||0)+1;
        if(VIA===v)dropVia();return}   /* the teammate swapped the PC's key: refused */
       v.key=await E2E.key(v.kp.kp,m.e);v.ready=true;backoff=4000;hello(m);
-      say(true,'connected');if(T.via)toast(T.via);flush();tellPos(true)}return}
+      say(true,'connected');if(T.via)toast(T.via);lineFresh();flush();if(typeof drivePump==='function')drivePump();
+      tellPos(true)}return}
     if(!v.key)return;const p=await E2E.open(v.key,e.data);if(p[0]===0)fromPc(JSON.parse(dec.decode(p.slice(1))))}).catch(()=>{})};
   v.pc.oniceconnectionstatechange=()=>{if(VIA===v&&v.pc.iceConnectionState==='failed')dropVia()};
   await v.pc.setLocalDescription(await v.pc.createOffer());await gathered(v.pc,3000);
@@ -451,23 +452,34 @@ async function sendRelayPreview(it){
  const buf=new Uint8Array(await pblob.arrayBuffer()),cs=BR.chunkSize||24576,k=Math.max(1,Math.ceil(buf.length/cs)),nonce=rid();
  const pmeta=Object.assign({},it.meta,{preview:true});
  const done=new Promise((resolve,reject)=>{acks.set(it.id,{kind:'preview',nonce:nonce,resolve:resolve,reject:reject});
-  setTimeout(()=>{if(acks.delete(it.id))reject(new Error('timeout'))},60000)});
+  setTimeout(()=>{const f=acks.get(it.id);if(f&&f.nonce===nonce){acks.delete(it.id);reject(new Error('timeout'))}},60000)});
  for(let i=0;i<k;i++){const slice=buf.slice(i*cs,(i+1)*cs);
   const ok=await SIG.sendChunk({t:'rchunk',id:it.id,nonce:nonce,i:i,k:k,meta:pmeta,d:b64u.enc(slice)});
   if(!ok){acks.delete(it.id);throw new Error('relay-down')}}
  return await done}
-/* a photo on its way to Google Drive is not sent here too (0: skipped); one this line is sending is held from Drive */
-async function sendItem(it){if(DRV.holds(it.id))return 0;const own=lineOpen()&&!DRV.HOLD.has(it.id);
+/* With Google Drive linked and the office folder chosen, Drive carries every original: the line sends only the
+   small preview, so the photo shows on the computer at once (202, then Drive's copy replaces it). Otherwise the line
+   sends the original, unless Drive is sending it (0: skipped); one this line is sending is held from Drive. */
+const NOPREV=new Set();
+function lineFresh(){if(typeof DRV==='object')DRV.bad=0;NOPREV.clear()}
+async function sendItem(it){
+ if(lineOpen()&&typeof driveFirst==='function'&&driveFirst(it)){
+  if(it.prevSent||!it.prev||NOPREV.has(it.id))return 0;
+  let st=0;try{st=await sendLine(it,it.prev,'preview')}catch(e){if(!lineOpen())throw e}
+  if(st===202)return 202;NOPREV.add(it.id);return 0}   /* a refused preview never deletes the photo Drive will carry */
+ if(DRV.holds(it.id))return 0;const own=lineOpen()&&!DRV.HOLD.has(it.id);
  if(own)DRV.HOLD.set(it.id,'line');try{return await sendItem1(it)}finally{if(own)DRV.HOLD.delete(it.id)}}
+async function sendLine(it,blob,kind){
+ const buf=new Uint8Array(await blob.arrayBuffer()),nonce=rid(),meta=kind==='preview'?Object.assign({},it.meta,{preview:true}):it.meta;
+ const done=new Promise((resolve,reject)=>{acks.set(it.id,{kind:kind,nonce:nonce,line:true,resolve:resolve,reject:reject});
+  setTimeout(()=>{const f=acks.get(it.id);if(f&&f.nonce===nonce){acks.delete(it.id);reject(new Error('timeout'))}},
+   kind==='preview'?60000:180000)});
+ lineText(JSON.stringify({t:'photo',id:it.id,kind:kind,nonce:nonce,meta:meta,size:buf.length,type:blob.type||'image/jpeg'}));
+ for(let o=0;o<buf.length;o+=16384){while(lineBuffered()>1048576){if(!lineOpen())throw new Error('closed');
+   await sleep(25)}lineBin(buf.slice(o,o+16384))}
+ lineText(JSON.stringify({t:'end',id:it.id}));return await done}
 async function sendItem1(it){
- if(lineOpen()){
-  const buf=new Uint8Array(await it.blob.arrayBuffer()),nonce=rid();
-  const done=new Promise((resolve,reject)=>{acks.set(it.id,{kind:'original',nonce:nonce,resolve:resolve,reject:reject});
-   setTimeout(()=>{if(acks.delete(it.id))reject(new Error('timeout'))},180000)});
-  lineText(JSON.stringify({t:'photo',id:it.id,kind:'original',nonce:nonce,meta:it.meta,size:buf.length,type:it.blob.type||'image/jpeg'}));
-  for(let o=0;o<buf.length;o+=16384){while(lineBuffered()>1048576){if(!lineOpen())throw new Error('closed');
-    await sleep(25)}lineBin(buf.slice(o,o+16384))}
-  lineText(JSON.stringify({t:'end',id:it.id}));return await done}
+ if(lineOpen())return await sendLine(it,it.blob,'original');
  if(RELAY&&SIG.up())return await sendRelayPreview(it);
  throw new Error('closed')}
 async function alive(){if(lineOpen())return true;if(RELAY&&SIG.up())return true;connect();return false}

@@ -1003,12 +1003,14 @@ def phone_texts(tr):
             # sending through the surveyor's own Google Drive (drive_page.py)
             "driveTitle": tr("Google Drive"), "driveLink": tr("Link Google Drive"),
             "driveRelink": tr("Link Google Drive again"), "driveOpen": tr("Open the Google Drive link"),
-            "driveUnlinked": tr("When the computer cannot be reached, photos go to the office's Google Drive folder, "
-                                "locked so that only the office computer can open them."),
-            "driveIdle": tr("Linked. Photos go here when the computer cannot be reached."),
+            "driveUnlinked": tr("Link Google Drive and every photo goes to the office's Google Drive folder, locked so "
+                                "that only the office computer can open it."),
+            "driveIdle": tr("Linked. Every photo goes to the office's Google Drive folder. When the computer is in "
+                            "reach, it shows a small copy at once."),
+            "drivePreview": tr("{n} shown on the computer, original going to Google Drive"),
             "driveAuth": tr("The link to Google Drive has ended. Tap to link again."),
             "driveUp": tr("Sending to Google Drive…"), "driveWait": tr("Google Drive is busy - trying again soon."),
-            "driveFull": tr("Your Google Drive is full. Photos wait on this phone."),
+            "driveFull": tr("Your Google Drive is full. Photos wait on this phone until the computer is in reach."),
             "driveErr": tr("Google Drive could not be linked."), "driveDenied": tr("Google Drive was not allowed."),
             "driveInApp": tr("To use Google Drive, open this page in Chrome or Safari."),
             "drivePopupBlocked": tr("The browser blocked the Google Drive window. Allow pop-ups for this page."),
@@ -1528,6 +1530,10 @@ async function all(){let a=[];if(db){try{a=await tx('readonly',s=>s.getAll())||[
 async function sealWaiting(){if(!PCKEY)return;const a=await all();
  for(const x of a)if(x.meta&&!x.meta.sealed)await put(x)}
 async function del(id){mem=mem.filter(x=>x.id!==id);if(db){try{await tx('readwrite',s=>s.delete(id))}catch(e){}}}
+/* the preview arrived: mark the photo, only if it is still waiting (Google Drive may have taken it meanwhile) */
+async function prevDone(id){if(db){try{const x=await tx('readonly',s=>s.get(id));
+   if(x){x.prevSent=true;x.prev=null;await tx('readwrite',s=>s.put(x));return true}}catch(e){}}
+ const m=mem.find(x=>x.id===id);if(m){m.prevSent=true;m.prev=null;return true}return false}
 function setPrivate(on){privMode=!!on;const b=$('privWarn');if(!b)return;
  b.textContent=T.incognito||'Private browsing is on: closing this page will erase waiting photos. Open the link in a normal browser tab.';
  b.classList.toggle('hide',!privMode)}
@@ -1549,7 +1555,8 @@ async function count(){const a=await all(),n=a.length,p=a.filter(x=>x.prevSent).
  $('nSent').textContent=sent;$('nWait').textContent=n;
  const wTxt=(T.waitingPhotos||'{n} photos waiting').replace('{n}',n-p),
   pTxt=(T.previewSent||'{n} arrived as preview, original waiting for Wi-Fi').replace('{n}',p),
-  wt=p?(p===n?pTxt:wTxt+' · '+pTxt):(T.waitingPhotos||'{n} photos waiting').replace('{n}',n);
+  dTxt=(T.drivePreview||'').replace('{n}',p),
+  wt=p?(p===n?(typeof DRV==='object'&&DRV.on&&DRV.go()&&dTxt?dTxt:pTxt):wTxt+' · '+pTxt):(T.waitingPhotos||'{n} photos waiting').replace('{n}',n);
  if($('waitPill')){$('waitPill').textContent=wt;$('waitPill').classList.toggle('hide',!n)}
  $('lWait').textContent=n?wt:bare(T.queued);
  $('handInfo').textContent=c?T.handCarry.replace('{n}',c):'';
@@ -1734,15 +1741,16 @@ function handReceive(h,ch){ch.binaryType='arraybuffer';let cur=null,q=Promise.re
 async function flush(){if(busy)return;busy=true;
  let arrived=0;try{const allItems=(await all()).sort((a,b)=>a.meta.t-b.meta.t),
    rOnly=typeof relayOnly==='function'&&relayOnly(),items=rOnly?allItems.filter(x=>!x.prevSent&&!x.carried):allItems;
-  for(const it of items){
+  let tried=0;for(const it of items){
    const st=await sendItem(it);
    if(!st)continue;   /* 0: another way (Google Drive) is sending this one */
+   tried++;
    if(st===200){await del(it.id);sent++;arrived++;mark(it.id,'✓')}
-   else if(st===202){it.prevSent=true;it.prev=null;await put(it);mark(it.id,'◐')}
+   else if(st===202){if(await prevDone(it.id))mark(it.id,'◐')}
    else if(st===403){await del(it.id);mark(it.id,'✗');status(false,'blocked')}
    else if(st===400||st===413){await del(it.id);mark(it.id,'✗')}
    else throw new Error(st);count()}
-  const ok=items.length?true:await alive();
+  const ok=tried?true:await alive();
   if(ok&&!rOnly)status(true,'connected');else if(!ok)offline()}catch(e){offline()}
  if(arrived){toast(T.arrived.replace('{n}',arrived));if(navigator.vibrate)navigator.vibrate([20,40,20])}
  busy=false;count()}
@@ -1797,7 +1805,7 @@ $('file').onchange=async()=>{const f=$('file').files[0];$('file').value='';if(!f
  const meta={id:uid(),lat:p.lat,lon:p.lon,acc:p.acc,alt:p.alt,heading:p.heading,compass:pending.compass,
   t:pending.at,fix_age:Math.max(0,Math.round((pending.at-p.t)/1000)),kind:kind,note:$('note').value.trim(),device:dev,device_id:DEVID,surveyor:who.slice(0,40),by:who.slice(0,40),sk:SURVKEY||undefined,f:pending.f,avg_n:p.n,avg_sd:p.sd,level:p.level,unit:p.unit};
  const it={id:meta.id,blob:blob,meta:meta,room:ROOM};pending=null;await put(it);thumb(it,'⏳');$('note').value='';afterShot();
- toast(T.kept);count();flush()};
+ toast(T.kept);count();flush();if(typeof drivePump==='function')drivePump()};
 $('langBtn').onclick=()=>{const box=$('langs');box.textContent='';Object.keys(ALL).forEach(k=>{const b=document.createElement('button');
  b.type='button';b.textContent=NAMES[k]||k;b.lang=k.replace('_','-');b.classList.toggle('sel',k===LANG);
  b.onclick=()=>{keep('biruni-lang',k);setLang(k);$('sheet').classList.add('hide')};box.appendChild(b)});
@@ -1806,5 +1814,5 @@ $('sheet').onclick=e=>{if(e.target===$('sheet'))$('sheet').classList.add('hide')
 setLang(pick(kept('biruni-lang'))||pick(HASHL)||pick(DEF)||pick(navigator.language)||'en');
 try{const g=JSON.parse(kept('biruni-guide-'+ROOM)||'null');if(g)setGuide(g)}catch(e){}
 {const e=document.createElement('div');e.className='empty';e.textContent=T.none;$('list').appendChild(e)}
-(async()=>{db=await openDb();await checkPrivate();await sealWaiting();if(typeof driveStart==='function')driveStart();const w=await all();w.filter(it=>!it.carried).slice(-9).forEach(it=>thumb(it,'⏳'));count();flush()})();
+(async()=>{db=await openDb();await checkPrivate();await sealWaiting();if(typeof driveStart==='function')driveStart();const w=await all();w.filter(it=>!it.carried).slice(-9).forEach(it=>thumb(it,it.prevSent?'◐':'⏳'));count();flush()})();
 </script></body></html>"""

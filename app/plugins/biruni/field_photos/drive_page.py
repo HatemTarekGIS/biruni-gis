@@ -132,7 +132,7 @@ else{$('ui').hidden=false;showWho();post({type:'biruni-drive-ready',mode:MODE});
 # ---- the phone page's side (bridge.phone_page puts it before PHONE_JS; it needs BOOT_JS's DRIVE_ON) ---------------
 DRIVE_JS = r"""
 /* ---- Google Drive: the card, the link (a frame or a window of the link page), the token in memory only ---- */
-const DRV={on:false,tok:'',exp:0,state:'',nonce:'',frame:null,win:null,card:null,ready:false,n:0,tag:'',fold:null,
+const DRV={on:false,tok:'',exp:0,state:'',nonce:'',frame:null,win:null,card:null,ready:false,n:0,tag:'',fold:null,bad:0,
  HELPER:'__DRIVE_HELPER__',API:'__DRIVE_API__',HOLD:new Map(),
  ok(){return !!this.tok&&Date.now()<this.exp-300000},
  go(){return this.ok()&&!!this.fold},
@@ -176,13 +176,13 @@ function driveOpenWindow(){const w=window.open(DRV.HELPER+'/link/','biruni-drive
  if(!w){driveSay('blocked');return}DRV.win=w}
 function driveOpenPick(){DRV.wantPick=true;driveOpenWindow()}
 function driveToken(m){if(typeof m.token!=='string'||!m.token||m.token.length>4096||!(+m.exp>Date.now()))return;
- DRV.tok=m.token;DRV.exp=+m.exp;driveSay(DRV.fold?'idle':'pick');driveHello();if(typeof drivePump==='function')drivePump()}
+ DRV.tok=m.token;DRV.exp=+m.exp;DRV.bad=0;driveSay(DRV.fold?'idle':'pick');driveHello();if(typeof drivePump==='function')drivePump()}
 async function drivePicked(m){const id=String(m.id||'');
  if(!DRV.tag||!DRV.ok()||!/^[\w-]{10,128}$/.test(id)||m.name!==DRV.fname())return;
  try{const v=await dverify(id);if(v==='ro'){driveSay('ro');return}
   const p=await dfolder('p-'+DEVID,id,'biruniDev',DEVID);
   const c={t:DRV.tag,r:id,p:p,k:1,own:v==='own'};keep('biruni-drive-f-'+ROOM,JSON.stringify(c));
-  DRV.fold=c;DRV.wantPick=false;driveSay('idle');drivePump()}
+  DRV.fold=c;DRV.wantPick=false;DRV.bad=0;driveSay('idle');drivePump()}
  catch(e){if(e instanceof DriveStop)return;driveSay(e.status===403||e.status===404||e.perm?'gone':'err')}}
 function driveDead(){DRV.tok='';DRV.exp=0;driveSay('auth');driveHello()}
 window.addEventListener('message',e=>{
@@ -212,8 +212,10 @@ function driveStart(){if(DRV.on||typeof DRIVE_ON==='undefined'||!DRIVE_ON||!DRV.
  setInterval(drivePump,15000)}
 
 /* ---- the upload: one photo at a time, as one .bfp file (drive.py) in biruni-photos-<tag>/p-<device>/ ----
-   A photo goes to Drive only while the line to the computer is closed (the bridge sends it otherwise), and never
-   both: DRV.HOLD says which way has it. The phone's own key (ECDSA P-256, not extractable), the numbering and the
+   Once linked with the office folder chosen, Google Drive carries EVERY original, even with the line to the computer
+   open; the line then sends only the small preview, at once (bridge.js sendItem). The line carries the original only
+   when Drive cannot (driveFirst false: not linked, no folder, full, too big, or failing for DFALL since the line
+   opened). DRV.HOLD says which way has an original ('drive' or 'line'), so it never goes both. The phone's own key (ECDSA P-256, not extractable), the numbering and the
    files' header bytes are kept in the database biruni-drive, so a retry uploads the very same bytes. */
 const DMAX=5*1024*1024;   /* step 8 adds resumable uploads for larger photos */
 let DDB=null,DKEY=null,DBUSY=false;const DSKIP=new Set();
@@ -270,8 +272,11 @@ async function dlost(){const c=DRV.fold,ck='biruni-drive-f-'+ROOM;if(!c)throw ne
  catch(e){if(e instanceof DriveStop)throw e;
   if(e.status===403||e.status===404||e.perm){keep(ck,null);DRV.fold=null;driveSay(e.ro?'ro':'gone');throw new DriveStop('gone')}
   throw e}}
-function deligible(it){return it&&it.meta&&it.meta.sealed&&!it.carried&&it.blob&&it.blob.size<=DMAX&&!DRV.HOLD.has(it.id)
- &&!DSKIP.has(it.id)}
+const DFALL=120000;   /* Drive failing this long while the line is open: the line takes the originals */
+function dfits(it){return !!(it&&it.meta&&it.meta.sealed&&!it.carried&&it.blob&&it.blob.size<=DMAX&&!DSKIP.has(it.id))}
+function deligible(it){return dfits(it)&&!DRV.HOLD.has(it.id)}
+function driveFirst(it){return DRV.on&&DRV.go()&&!(DRV.bad&&(DRV.bad===1||Date.now()-DRV.bad>DFALL))&&dfits(it)}
+async function dstill(id){return (await all()).some(x=>x.id===id)}
 async function dupload(it){const tag=await BFP.tag(KEYB),k=await dkey();let rec=await dget(it.id);
  if(rec&&rec.room===tag&&rec.st==='done')return rec;   /* sent before; only leaving the queue was missed */
  if(!rec||rec.room!==tag||!rec.head){const body=new Uint8Array(await it.blob.arrayBuffer()),n=dnext();
@@ -298,14 +303,19 @@ async function dupload(it){const tag=await BFP.tag(KEYB),k=await dkey();let rec=
   throw e}
  if(+j.size!==rec.size||(j.sha256Checksum&&j.sha256Checksum!==rec.fsha))throw new Error('drive copy differs');
  rec.fid=j.id;return rec}
-async function drivePump(){if(!DRV.on||DBUSY||!DRV.go()||(typeof lineOpen==='function'&&lineOpen()))return;DBUSY=true;
+async function drivePump(){if(!DRV.on||DBUSY)return;
+ if(DRV.tok&&!DRV.ok()){driveDead();return}   /* the hour ended: say so, the line takes the originals meanwhile */
+ if(!DRV.go())return;DBUSY=true;
  try{const items=(await all()).filter(deligible).sort((a,b)=>a.meta.t-b.meta.t);
-  for(const it of items){if(!DRV.go()||(typeof lineOpen==='function'&&lineOpen()))break;
+  for(const it of items){if(!DRV.go())break;
+   if(DRV.HOLD.has(it.id)||!await dstill(it.id))continue;   /* the line took it meanwhile */
    DRV.HOLD.set(it.id,'drive');driveSay('up');
-   try{const rec=await dupload(it);rec.st='done';rec.head=null;rec.at=Date.now();await dput(rec);
-    await del(it.id);DRV.n++;keep('biruni-drive-c-'+ROOM,String(DRV.n));mark(it.id,'✓');count();driveSay('idle')}
-   catch(e){if(e instanceof DriveStop)break;
+   try{const rec=await dupload(it),fresh=rec.st!=='done';rec.st='done';rec.head=null;rec.at=Date.now();await dput(rec);
+    await del(it.id);if(fresh){DRV.n++;keep('biruni-drive-c-'+ROOM,String(DRV.n))}DRV.bad=0;mark(it.id,'✓');count();
+    driveSay('idle')}
+   catch(e){if(e instanceof DriveStop){if(e.state==='full')DRV.bad=1;break}
     if(e.status===400||e.status===413){DSKIP.add(it.id)}   /* Drive will never take it: it stays for the bridge */
+    else if(!DRV.bad)DRV.bad=Date.now();
     driveSay('wait');break}
    finally{DRV.HOLD.delete(it.id)}}}
  catch(e){}finally{DBUSY=false}}

@@ -563,7 +563,14 @@ FILES[OFFICE_ID]["revoked"] = False
 check(repick() and wait(lambda: js(ph, "DRV.n") == 6, 20)
       and len([f for f in FILES.values() if f["name"] == f"p-{dev}"]) == 1,
       "shared and chosen again: the photo goes, into the same p-<device>")
+# the line showed photo 5 as a preview first (Drive is the main way): Drive's copy replaces it in the same record
+store.save({"id": "photo-drive-0005", "lat": 24.7, "lon": 46.7, "t": 1, "preview": True},
+           b"\xff\xd8\xff\xe0small preview\xff\xd9")
+check((store.records.get("photo-drive-0005") or {}).get("preview") is True, "the preview from the line is on the computer")
 r3 = drive.DriveIntake([DRIVE_DISK], store, pc, k, queue.Queue()).scan()
+p5 = store.records.get("photo-drive-0005") or {}
+check(not p5.get("preview") and p5.get("route") == "drive" and os.path.getsize(p5.get("photo", "")) > 3000,
+      f"Drive's original replaces the preview: full size, route drive ({p5.get('preview')}, {p5.get('route')})")
 check(r3["new"] == 3 and not r3["refused"], f"the computer takes in those three too ({r3})")
 check(ajs(ph, "(()=>{const o=kept('biruni-drive-f-'+ROOM);keep('biruni-drive-f-'+ROOM,JSON.stringify({t:DRV.tag,r:'x',p:'y'}));"
               "const c=dcache();keep('biruni-drive-f-'+ROOM,o);return c})()") is None,
