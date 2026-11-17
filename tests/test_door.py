@@ -126,6 +126,56 @@ door.forget()
 v = door.check_door(dead + "p/", site=dead, public_hex=PUB, timeout=2)
 check(v["state"] == "offline", "no network: offline, not refused")
 
+check(door.site_of("https://biruni-gis.com/d/#x=1") == door.SITE
+      and door.site_of("https://photos.biruni-gis.com/p/#k=abc") == "https://photos.biruni-gis.com/"
+      and door.site_of("https://biruni-gis.com.evil.example/p/") is None
+      and door.site_of("http://192.168.1.5:8000/p/") is None
+      and door.site_of(None) is None,
+      "site_of matches known Biruni sites and rejects lookalikes")
+
+# ---- two-site check (door.SITES picks the right release.json per origin) -------------------------------------------
+door.write_release(SITE_DIR, SEED, version="main-t1")
+PHOTOS_DIR = os.path.join(TMP, "photos")
+os.makedirs(os.path.join(PHOTOS_DIR, "p"))
+with open(os.path.join(PHOTOS_DIR, "p", "index.html"), "w", encoding="utf-8") as f:
+    f.write("<!doctype html><title>photos-site</title><script>/* photos */</script>")
+door.write_release(PHOTOS_DIR, SEED, version="photos-t1")
+
+
+class PhotosH(http.server.SimpleHTTPRequestHandler):
+    def __init__(self, *a, **k):
+        super().__init__(*a, directory=PHOTOS_DIR, **k)
+
+    def log_message(self, *a):
+        pass
+
+
+srv2 = http.server.ThreadingHTTPServer(("127.0.0.1", 0), PhotosH)
+threading.Thread(target=srv2.serve_forever, daemon=True).start()
+PHOTOS_SITE = f"http://127.0.0.1:{srv2.server_address[1]}/"
+old_sites = door.SITES
+try:
+    door.SITES = (SITE, PHOTOS_SITE)
+    door.forget()
+    v_main = door.check_door(SITE + "d/", public_hex=PUB, timeout=3)
+    v_photos = door.check_door(PHOTOS_SITE + "p/#k=abc", public_hex=PUB, timeout=3)
+    v_other = door.check_door("http://127.0.0.1:9/p/", public_hex=PUB, timeout=3)
+    check(v_main["state"] == "ok" and v_main["version"] == "main-t1" and v_main["page"] == "d/index.html",
+          f"two sites: main site uses main release.json ({v_main})")
+    check(v_photos["state"] == "ok" and v_photos["version"] == "photos-t1" and v_photos["page"] == "p/index.html",
+          f"two sites: photos site uses photos release.json ({v_photos})")
+    check(v_other["state"] == "other", "two sites: unknown origin returns other")
+    with open(os.path.join(PHOTOS_DIR, "p", "index.html"), "a", encoding="utf-8") as f:
+        f.write("<!-- edited -->")
+    door.forget()
+    check(door.check_door(PHOTOS_SITE + "p/", public_hex=PUB, timeout=3)["state"] == "changed"
+          and door.check_door(SITE + "d/", public_hex=PUB, timeout=3)["state"] == "ok",
+          "two sites: changing one site fails only that site")
+finally:
+    door.SITES = old_sites
+    door.forget()
+    srv2.shutdown()
+
 # ---- the gate --------------------------------------------------------------------------------------------------------
 asked = []
 door.ask_owner = lambda parent, v: asked.append(v["state"]) or False

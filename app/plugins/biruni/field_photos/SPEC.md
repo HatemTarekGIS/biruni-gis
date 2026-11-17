@@ -1,6 +1,6 @@
 # field_photos — photos from the team's phones to this PC
 
-The phone opens a static web page (served locally over Wi-Fi/hotspot or on GitHub Pages via `bridge.py`), takes photos with GPS or indoor room coordinates, compass direction, kind, note and form answers, and sends them to the office PC.
+The phone opens a static web page (served locally over Wi-Fi/hotspot or from `https://photos.biruni-gis.com/p/` via `bridge.py`; the old `https://biruni-gis.com/p/` forwards there), takes photos with GPS or indoor room coordinates, compass direction, kind, note and form answers, and sends them to the office PC.
 
 ## How photos travel
 

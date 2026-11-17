@@ -71,7 +71,12 @@ for name in ("index.html", "privacy.html"):
         shutil.copy2(os.path.join(ROOT, "docs", "site", name), dst)
 
 rewritten = csp.apply_site(TMP)
-check(len(rewritten) >= 8, f"csp.apply_site() rewrote {len(rewritten)} HTML files")
+check(len(rewritten) >= 10, f"csp.apply_site() rewrote {len(rewritten)} HTML files")
+
+PHOTOS = TMP + "-photos"
+HELPER_DIR = TMP + "-drive-helper"
+rewritten_photos = csp.apply_site(PHOTOS, csp.photos_policies(), keep=("p/index.html",))
+check(len(rewritten_photos) == 3, f"csp.apply_site(photos) rewrote {len(rewritten_photos)} HTML files")
 
 
 # ---- static checks -------------------------------------------------------------------------------------------------
@@ -131,65 +136,103 @@ class _PageAudit(HTMLParser):
 
 BAD_SCRIPT_TOKENS = {"'unsafe-inline'", "'unsafe-eval'", "'unsafe-hashes'", "*", "https:", "data:", "blob:"}
 
-html_files = []
-for root, dirs, names in os.walk(TMP):
-    dirs[:] = sorted(d for d in dirs if d != ".git")
-    for name in sorted(names):
-        if name.lower().endswith(".html"):
-            html_files.append(os.path.join(root, name))
+def audit_folder(folder, label, drive_frame_rel=None):
+    html_files = []
+    for root, dirs, names in os.walk(folder):
+        dirs[:] = sorted(d for d in dirs if d != ".git")
+        for name in sorted(names):
+            if name.lower().endswith(".html"):
+                html_files.append(os.path.join(root, name))
 
-for path in html_files:
-    rel = os.path.relpath(path, TMP).replace(os.sep, "/")
+    for path in html_files:
+        rel = os.path.relpath(path, folder).replace(os.sep, "/")
+        with open(path, "r", encoding="utf-8", newline="") as f:
+            html = f.read()
+        audit = _PageAudit(html)
+        audit.feed(html)
+        audit.close()
+
+        one_meta = len(audit.csp_metas) == 1
+        before_res = (one_meta and (audit.first_resource_pos is None
+                                    or audit.csp_metas[0][0] < audit.first_resource_pos))
+        check(one_meta and before_res, f"{label} {rel}: exactly one CSP meta before any <script>, <style> or <link>")
+
+        policy = audit.csp_metas[0][1] if one_meta else ""
+        directives = [d.strip() for d in policy.split(";") if d.strip()]
+        dmap = {}
+        for d in directives:
+            parts = d.split()
+            dmap[parts[0].lower()] = parts[1:]
+
+        check(
+            dmap.get("default-src") == ["'none'"]
+            and dmap.get("base-uri") == ["'none'"]
+            and dmap.get("form-action") == ["'none'"],
+            f"{label} {rel}: default-src 'none', base-uri 'none', form-action 'none'",
+        )
+
+        script_tokens = dmap.get("script-src", [])
+        check(
+            not any(tok in BAD_SCRIPT_TOKENS for tok in script_tokens),
+            f"{label} {rel}: script-src has no unsafe or wildcard tokens",
+        )
+
+        style_tokens = dmap.get("style-src", [])
+        hashes_ok = (all(h in script_tokens for h in audit.script_hashes)
+                     and all(h in style_tokens for h in audit.style_hashes))
+        check(
+            hashes_ok,
+            f"{label} {rel}: all inline script ({len(audit.script_hashes)}) "
+            f"and style ({len(audit.style_hashes)}) hashes in policy",
+        )
+
+        frame_tokens = dmap.get("frame-src", [])
+        if rel != drive_frame_rel:
+            check(
+                frame_tokens in (["'none'"], ["'self'"]) and not any("drive.biruni-gis.com" in t for t in frame_tokens),
+                f"{label} {rel}: frame-src is 'none' or 'self' without drive.biruni-gis.com ({frame_tokens})",
+            )
+        else:
+            check(
+                any("drive.biruni-gis.com" in t for t in frame_tokens),
+                f"{label} {rel}: keeps drive.biruni-gis.com in frame-src",
+            )
+
+
+audit_folder(TMP, "site")
+audit_folder(PHOTOS, "photos", drive_frame_rel="p/index.html")
+
+
+def read_text(path):
     with open(path, "r", encoding="utf-8", newline="") as f:
-        html = f.read()
-    audit = _PageAudit(html)
-    audit.feed(html)
-    audit.close()
+        return f.read()
 
-    one_meta = len(audit.csp_metas) == 1
-    before_res = (one_meta and (audit.first_resource_pos is None
-                                or audit.csp_metas[0][0] < audit.first_resource_pos))
-    check(one_meta and before_res, f"{rel}: exactly one CSP meta before any <script>, <style> or <link>")
 
-    policy = audit.csp_metas[0][1] if one_meta else ""
-    directives = [d.strip() for d in policy.split(";") if d.strip()]
-    dmap = {}
-    for d in directives:
-        parts = d.split()
-        dmap[parts[0].lower()] = parts[1:]
-
-    check(
-        dmap.get("default-src") == ["'none'"]
-        and dmap.get("base-uri") == ["'none'"]
-        and dmap.get("form-action") == ["'none'"],
-        f"{rel}: default-src 'none', base-uri 'none', form-action 'none'",
-    )
-
-    script_tokens = dmap.get("script-src", [])
-    check(
-        not any(tok in BAD_SCRIPT_TOKENS for tok in script_tokens),
-        f"{rel}: script-src has no unsafe or wildcard tokens",
-    )
-
-    style_tokens = dmap.get("style-src", [])
-    hashes_ok = (all(h in script_tokens for h in audit.script_hashes)
-                 and all(h in style_tokens for h in audit.style_hashes))
-    check(
-        hashes_ok,
-        f"{rel}: all inline script ({len(audit.script_hashes)}) and style ({len(audit.style_hashes)}) hashes in policy",
-    )
-
-    frame_tokens = dmap.get("frame-src", [])
-    if rel != "p/index.html":
-        check(
-            frame_tokens in (["'none'"], ["'self'"]) and not any("drive.biruni-gis.com" in t for t in frame_tokens),
-            f"{rel}: frame-src is 'none' or 'self' without drive.biruni-gis.com ({frame_tokens})",
-        )
-    else:
-        check(
-            any("drive.biruni-gis.com" in t for t in frame_tokens),
-            f"{rel}: keeps drive.biruni-gis.com in frame-src",
-        )
+check(
+    read_text(os.path.join(TMP, "_headers")) == (
+        "/*\n"
+        "  Content-Security-Policy: frame-ancestors 'self'\n"
+        "  X-Content-Type-Options: nosniff\n"
+    ),
+    "main site _headers sets frame-ancestors 'self' and nosniff",
+)
+check(
+    read_text(os.path.join(PHOTOS, "_headers")) == (
+        "/*\n"
+        "  Content-Security-Policy: frame-ancestors 'none'\n"
+        "  X-Content-Type-Options: nosniff\n"
+        "  Referrer-Policy: no-referrer\n"
+    ),
+    "photos site _headers sets frame-ancestors 'none', nosniff, and no-referrer",
+)
+check(
+    read_text(os.path.join(HELPER_DIR, "_headers")) == (
+        "/*\n"
+        "  Content-Security-Policy: frame-ancestors https://photos.biruni-gis.com\n"
+        "  X-Content-Type-Options: nosniff\n"
+    ),
+    "drive helper _headers sets frame-ancestors https://photos.biruni-gis.com and nosniff",
+)
 
 
 # ---- unit checks ---------------------------------------------------------------------------------------------------
@@ -259,6 +302,10 @@ threading.Thread(target=srv.serve_forever, daemon=True).start()
 PORT = srv.server_address[1]
 BASE_URL = f"http://127.0.0.1:{PORT}"
 
+srv_photos = ThreadingHTTPServer(("127.0.0.1", 0), partial(QuietHandler, directory=PHOTOS))
+threading.Thread(target=srv_photos.serve_forever, daemon=True).start()
+PHOTOS_URL = f"http://127.0.0.1:{srv_photos.server_address[1]}"
+
 
 def wait(cond, seconds):
     end = time.monotonic() + seconds
@@ -279,6 +326,18 @@ class CspPage(QWebEnginePage):
         self.console.append(message)
 
 
+class MovedPage(CspPage):
+    def __init__(self, profile):
+        super().__init__(profile)
+        self.blocked = []
+
+    def acceptNavigationRequest(self, url, nav_type, is_main_frame):  # noqa: N802
+        if url.host() != "127.0.0.1":
+            self.blocked.append(url.toString())
+            return False
+        return True
+
+
 def run_js(page, expr):
     box = {}
     page.runJavaScript(expr, lambda v: box.update(v=v))
@@ -287,22 +346,23 @@ def run_js(page, expr):
 
 
 profile = QWebEngineProfile.defaultProfile()
-routes = ["/", "/r/", "/v/", "/s/", "/d/", "/portal/", "/privacy.html"]
+routes = [(BASE_URL, r, "site") for r in ("/", "/v/", "/s/", "/d/", "/portal/", "/privacy.html")]
 if has_paper:
-    routes.append("/paper/")
+    routes.append((BASE_URL, "/paper/", "site"))
+routes.extend((PHOTOS_URL, r, "photos") for r in ("/", "/r/"))
 
 print("NOTE skipping /m/ in dynamic check (needs internet)", flush=True)
 
-for route in routes:
+for base, route, label in routes:
     pg = CspPage(profile)
     loaded = {"ok": False}
     pg.loadFinished.connect(lambda ok, d=loaded: d.update(ok=ok))
-    pg.load(QUrl(BASE_URL + route))
+    pg.load(QUrl(base + route))
     wait(lambda d=loaded: d["ok"], 15)
     wait(lambda: False, 3.0)
 
     csp_msgs = [m for m in pg.console if re.search(r"Content Security Policy", m)]
-    check(not csp_msgs, f"dynamic {route}: no Content Security Policy console errors ({csp_msgs[:2]})")
+    check(not csp_msgs, f"dynamic {label} {route}: no Content Security Policy console errors ({csp_msgs[:2]})")
 
     run_js(
         pg,
@@ -312,11 +372,27 @@ for route in routes:
     wait(lambda: False, 0.3)
     check(
         run_js(pg, "typeof window._inj") == "undefined",
-        f"dynamic {route}: injected inline script blocked (window._inj undefined)",
+        f"dynamic {label} {route}: injected inline script blocked (window._inj undefined)",
     )
     pg.deleteLater()
 
+for src_path, want_target in (
+    ("/p/#k=abc&i=xyz", "https://photos.biruni-gis.com/p/#k=abc&i=xyz"),
+    ("/r/#u=1", "https://photos.biruni-gis.com/r/#u=1"),
+):
+    mpg = MovedPage(profile)
+    mpg.load(QUrl(BASE_URL + src_path))
+    wait(lambda p=mpg: bool(p.blocked), 10)
+    wait(lambda: False, 0.2)
+    csp_msgs = [m for m in mpg.console if re.search(r"Content Security Policy", m)]
+    check(
+        mpg.blocked == [want_target] and not csp_msgs,
+        f"moved {src_path} forwards to {want_target} without CSP errors (got {mpg.blocked})",
+    )
+    mpg.deleteLater()
+
 srv.shutdown()
+srv_photos.shutdown()
 shutil.rmtree(WORK, ignore_errors=True)
 
 print(f"\n{'FAILED ' + str(len(failures)) if failures else 'ALL PASSED'}", flush=True)

@@ -42,7 +42,7 @@ FIELDS = (("photo_id", QMetaType.Type.QString), ("photo", QMetaType.Type.QString
           ("avg_n", QMetaType.Type.Int), ("avg_sd_m", QMetaType.Type.Double),
           ("level_id", QMetaType.Type.Int), ("unit_id", QMetaType.Type.QString),
           ("surveyor", QMetaType.Type.QString), ("device_id", QMetaType.Type.QString))
-ROOM_URL = "https://biruni-gis.com/r/"
+ROOM_URL = "https://photos.biruni-gis.com/r/"
 TEAM_LAYER = "field_team_track"
 TEAM_FIELDS = (("device", QMetaType.Type.QString), ("name", QMetaType.Type.QString),
                ("seen", QMetaType.Type.QString), ("accuracy_m", QMetaType.Type.Double),

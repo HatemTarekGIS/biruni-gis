@@ -385,8 +385,13 @@ check(g2["v"] > g["v"] and len(g2["indoor"]["units"]) == 4 and g2["items"][0]["n
 check(fs.clean_meta({"id": "abcdef12-0100", "lat": 24.7, "lon": 46.6, "level": 2, "unit": "L2-201"})["unit"] == "L2-201"
       and fs.clean_meta({"id": "abcdef12-0100", "lat": 24.7, "lon": 46.6, "level": 2.5})["level"] is None,
       "a photo keeps its level and room")
+from biruni.field_photos import bridge  # noqa: E402
+
 check(fd.room_url("L1-101", "101 مكتب", 1).startswith(fd.ROOM_URL + "#u=L1-101&n=") and "&l=1" in fd.room_url("L1-101", "x", 1),
       "a room code's address")
+check(fd.ROOM_URL.startswith("https://photos.biruni-gis.com/")
+      and bridge.PAGE_URL.startswith("https://photos.biruni-gis.com/"),
+      "ROOM_URL and bridge.PAGE_URL share the https://photos.biruni-gis.com origin")
 pdf_path = os.path.join(work, "room_codes.pdf")
 check(fd.room_labels_pdf(units, pdf_path) == 3 and os.path.getsize(pdf_path) > 5000,
       "room codes for every room but the corridor, as a PDF to print")

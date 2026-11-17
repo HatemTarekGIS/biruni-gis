@@ -1,9 +1,9 @@
 """Content-Security-Policy builder and validator for the public Biruni site pages.
 
-Every page on biruni-gis.com (except p/index.html, which keeps bridge.with_csp) gets a strict
-<meta http-equiv="Content-Security-Policy"> right after <meta charset="utf-8">. Inline scripts and
-styles are allowed only by their exact SHA-256 hash; inline event handlers and stray external scripts
-or stylesheets are refused.
+Every page on biruni-gis.com and photos.biruni-gis.com (except the photos site's p/index.html, which keeps
+bridge.with_csp) gets a strict <meta http-equiv="Content-Security-Policy"> right after <meta charset="utf-8">.
+Inline scripts and styles are allowed only by their exact SHA-256 hash; inline event handlers and stray external
+scripts or stylesheets are refused.
 """
 import base64
 import hashlib
@@ -239,6 +239,8 @@ def site_policies():
     return {
         "index.html": dict(site_docs),
         "privacy.html": dict(site_docs),
+        "404.html": {},
+        "p/index.html": {},
         "r/index.html": {},
         "v/index.html": {},
         "m/index.html": {
@@ -268,12 +270,22 @@ def site_policies():
     }
 
 
-def apply_site(folder):
-    """Apply site_policies() to every *.html under `folder` (except .git and p/index.html).
+def photos_policies():
+    """Return a dict mapping each photos-site HTML path (except p/index.html) to its add_csp() keyword arguments."""
+    return {
+        "index.html": {},
+        "r/index.html": {},
+        "404.html": {},
+    }
 
-    Raises ValueError if an HTML file has no entry in site_policies(). Returns the list of rewritten file paths.
+
+def apply_site(folder, policies=None, keep=()):
+    """Apply `policies` (default site_policies()) to every *.html under `folder` (except .git and `keep`).
+
+    Raises ValueError if an HTML file has no entry in `policies`. Returns the list of rewritten file paths.
     """
-    policies = site_policies()
+    policies = site_policies() if policies is None else policies
+    keep_set = set(keep)
     rewritten = []
     for root, dirs, names in os.walk(folder):
         dirs[:] = sorted(d for d in dirs if d != ".git")
@@ -282,7 +294,7 @@ def apply_site(folder):
                 continue
             path = os.path.join(root, name)
             rel = os.path.relpath(path, folder).replace(os.sep, "/")
-            if rel == "p/index.html":
+            if rel in keep_set:
                 continue
             if rel not in policies:
                 raise ValueError(f"no CSP policy defined for {rel}")

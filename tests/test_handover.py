@@ -242,17 +242,27 @@ check(other.handover.public != srv.handover.public and post(other, carried[0]["m
 other.stop()
 check(post(srv, {"id": "x", "sealed": 1, "t": 1}, b"\x01" + os.urandom(120)) == 400, "damaged bytes are refused")
 
-# ---- 4. the page opens without internet (GitHub Pages) -------------------------------------------------------------
+# ---- 4. the page opens without internet (photos site) --------------------------------------------------------------
 out = os.path.join(work, "site")
+photos = out + "-photos"
 r = subprocess.run([sys.executable, os.path.join(HERE, "..", "scripts", "build_bridge_page.py"), out], capture_output=True, text=True)
-sw = open(os.path.join(out, "p", "sw.js"), encoding="utf-8").read() if os.path.isfile(os.path.join(out, "p", "sw.js")) else ""
+sw_path = os.path.join(photos, "p", "sw.js")
+sw = open(sw_path, encoding="utf-8").read() if os.path.isfile(sw_path) else ""
+sw_gone_path = os.path.join(out, "p", "sw.js")
+sw_gone = open(sw_gone_path, encoding="utf-8").read() if os.path.isfile(sw_gone_path) else ""
 check("caches.match" in sw and "serviceWorker.register('sw.js')" in bridge_page,
       "the phone page keeps itself on the phone, to open in the field without internet")
+check("unregister" in sw_gone, "the old p/sw.js unregisters itself")
 if node and sw:
     p = os.path.join(work, "sw.js")
     with open(p, "w", encoding="utf-8") as f:
         f.write(sw)
     check(subprocess.run([node, "--check", p]).returncode == 0, "… its script has no syntax error")
+if node and sw_gone:
+    pg_path = os.path.join(work, "sw-gone.js")
+    with open(pg_path, "w", encoding="utf-8") as f:
+        f.write(sw_gone)
+    check(subprocess.run([node, "--check", pg_path]).returncode == 0, "… the old sw.js has no syntax error")
 
 srv.stop()
 print(f"\n{'FAILED: ' + str(len(failures)) if failures else 'ALL PASSED'}", flush=True)

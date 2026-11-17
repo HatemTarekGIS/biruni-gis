@@ -3,8 +3,8 @@ directly (WebRTC) - no tunnel, no program to download, no account, no server of 
 
 How it works
   * Biruni keeps a random 32-byte key for this Windows user. The QR code holds the phone
-    page's address on GitHub Pages with the key after "#" - the part of an address a
-    browser never sends to any server.
+    page's address (PAGE_URL, https://photos.biruni-gis.com/p/) with the key after "#" - the
+    part of an address a browser never sends to any server.
   * Both sides derive a meeting name from the key and publish small encrypted messages
     (AES-GCM with the key) on several independent public relays at once: Nostr relays
     (ephemeral events, not kept) and ntfy.sh (sent with caching off). The relays see only
@@ -35,7 +35,7 @@ import sys
 import threading
 import urllib.parse
 
-PAGE_URL = "https://biruni-gis.com/p/"
+PAGE_URL = "https://photos.biruni-gis.com/p/"
 RELAYS = ("wss://relay.damus.io", "wss://nos.lol", "wss://relay.primal.net", "wss://nostr.mom",
           "wss://relay.nostr.band")
 NTFY = "https://ntfy.sh/"
@@ -593,7 +593,7 @@ function serve(ch,end,pc){ch.binaryType='arraybuffer';const P={send:s=>ch.send(s
 """
 
 
-# ---- the phone page opens without internet once it was opened with it (GitHub Pages) -------------------------
+# ---- the phone page opens without internet once it was opened with it ---------------------------------------
 SW_JS = r"""/* Biruni phone page: kept on the phone, so it opens in the field without internet (the network first, this
    copy when there is none). */
 const C='biruni-p-1';
@@ -603,6 +603,27 @@ self.addEventListener('fetch',e=>{const r=e.request;if(r.method!=='GET'||new URL
  e.respondWith(fetch(r).then(res=>{if(res.ok){const c=res.clone();caches.open(C).then(x=>x.put(r,c))}return res})
   .catch(()=>caches.match(r,{ignoreSearch:true})))});
 """
+
+SW_GONE_JS = r"""/* Old service worker left behind on biruni-gis.com/p/: drops its cache and unregisters itself. */
+self.addEventListener('install',()=>self.skipWaiting());
+self.addEventListener('activate',e=>e.waitUntil(
+ caches.keys().then(ks=>Promise.all(ks.filter(k=>k.startsWith('biruni-p-')).map(k=>caches.delete(k))))
+  .then(()=>self.registration.unregister())
+));
+"""
+
+
+def moved_page(target):
+    """Tiny forwarding HTML page left at an old URL; preserves query and #fragment."""
+    t = json.dumps(target).replace("</", "<\\/")
+    return (
+        '<!doctype html><html><head><meta charset="utf-8">'
+        '<meta name="robots" content="noindex">'
+        '<meta name="referrer" content="no-referrer">'
+        "<title>Biruni GIS</title>"
+        f"<script>location.replace({t}+location.search+location.hash)</script>"
+        "</head><body></body></html>"
+    )
 
 
 def _core():
@@ -615,7 +636,7 @@ def receiver_page():
 
 
 def phone_page(all_texts):
-    """The page published on GitHub Pages: the photo page of server.py with every language
+    """The page published at PAGE_URL: the photo page of server.py with every language
     in it, sending over the bridge."""
     from .server import PAGE
 
@@ -636,10 +657,9 @@ def _origin(url):
 
 
 def with_csp(page, connect=(), frames=()):
-    """The phone page with a Content-Security-Policy in a <meta> (GitHub Pages sends no headers): only its own
-    inline script and style run (by their SHA-256), and it talks only to the relays and ntfy (plus `connect`, and may
-    frame only `frames`). The key is in the page's memory, so nothing else - an injected script, a stray site - may
-    load or receive anything."""
+    """The phone page with a Content-Security-Policy in a <meta>: only its own inline script and style run (by their
+    SHA-256), and it talks only to the relays and ntfy (plus `connect`, and may frame only `frames`). The key is in
+    the page's memory, so nothing else - an injected script, a stray site - may load or receive anything."""
     def sha(tag):
         body = page.split(f"<{tag}>", 1)[1].split(f"</{tag}>", 1)[0]
         return "'sha256-" + base64.b64encode(hashlib.sha256(body.encode("utf-8")).digest()).decode() + "'"

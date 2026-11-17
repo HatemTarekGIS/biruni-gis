@@ -1,15 +1,16 @@
 """The door check («حجر الباب»): this PC never hands out a link or QR code to a phone page that Biruni did not
 release.
 
-Every page phones open (the bridge's p/, the dashboard's d/, the live map's s/, …) is a static file on the
-vendor's GitHub Pages site. If that site were changed - a stolen GitHub account, a wrong push - every office
-would hand its phones a changed page, silently. So:
+Every page phones open (the bridge's p/, the dashboard's d/, the live map's s/, …) is a static file on one of
+the vendor's public sites (SITES: biruni-gis.com and photos.biruni-gis.com). If a site were changed - a stolen
+account, a wrong push - every office would hand its phones a changed page, silently. So:
 
-  * When the pages are built (scripts/build_bridge_page.py), ``write_release`` lists every file of the site
+  * When the pages are built (scripts/build_bridge_page.py), ``write_release`` lists every file of each site
     with its SHA-256 in ``release.json`` and signs it (``release.sig``, Ed25519 hex) with the same key that signs
     Biruni's updates (_secrets/update-signing.key; its public half is version.UPDATE_KEY, shipped in Biruni).
-  * Before a link to such a page is shown, ``check_door`` fetches the live page and the live ``release.json``,
-    checks the signature against the shipped key and the page's SHA-256 against the list.
+  * Before a link to such a page is shown, ``check_door`` picks the site from ``SITES`` (or ``site``), fetches the
+    live page (using the directory URL for ``index.html`` pages) and the live ``release.json``, checks the signature
+    against the shipped key and the page's SHA-256 against the list.
     ok -> the link is shown; changed / not signed -> it is not, unless the owner says "show anyway";
     offline -> it is shown, marked "not checked" (phones that already opened the page use their own copy).
 
@@ -28,6 +29,7 @@ import urllib.error
 import urllib.request
 
 SITE = "https://biruni-gis.com/"
+SITES = (SITE, "https://photos.biruni-gis.com/")
 FORMAT = "biruni-release"
 RELEASE, SIG = "release.json", "release.sig"
 TTL = 300                 # a verdict is reused this many seconds
@@ -88,6 +90,15 @@ def shipped_key():
         return ""
 
 
+def site_of(url):
+    """The Biruni site prefix that ``url`` starts with, or None when not on any known site."""
+    u = str(url or "")
+    for s in SITES:
+        if u.startswith(s):
+            return s
+    return None
+
+
 def rel_of(url, site=SITE):
     """The file a page URL serves, relative to the site ("p/index.html"), or None when not on the site."""
     u = str(url or "").split("#", 1)[0].split("?", 1)[0]
@@ -146,11 +157,13 @@ class _Offline(Exception):
     pass
 
 
-def check_door(page_url, site=SITE, public_hex=None, timeout=TIMEOUT, fetch=None, fresh=False):
+def check_door(page_url, site=None, public_hex=None, timeout=TIMEOUT, fetch=None, fresh=False):
     """Is the page this link opens one that Biruni released?
     -> {"state": "ok" | "changed" | "unsigned" | "offline" | "other", "page": rel, "why": text, "version": …}
-    "other": the link is not on the vendor site (a page of this PC, a LAN address): nothing to check."""
-    rel = rel_of(page_url, site)
+    "other": the link is not on a vendor site (a page of this PC, a LAN address): nothing to check.
+    ``site`` defaults to the matching prefix in SITES."""
+    site = site or site_of(page_url)
+    rel = rel_of(page_url, site) if site else None
     if rel is None:
         return {"state": "other", "page": None, "why": "", "version": None}
     key = (site, rel)
@@ -172,8 +185,10 @@ def check_door(page_url, site=SITE, public_hex=None, timeout=TIMEOUT, fetch=None
             with _lock:
                 _rel_cache[site] = (now, rel_list)
         v["version"] = rel_list.get("version")
+        # Cloudflare Pages answers /p/index.html with a 308 redirect; fetch the directory URL instead.
+        fetch_rel = rel[:-len("index.html")] if rel == "index.html" or rel.endswith("/index.html") else rel
         try:
-            page = fetch(site + rel, timeout)
+            page = fetch(site + fetch_rel, timeout)
         except urllib.error.HTTPError as e:
             raise _Offline(str(e)) if e.code != 404 else _Unsigned("the page is not on the site") from e
         except Exception as e:  # noqa: BLE001

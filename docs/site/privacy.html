@@ -45,7 +45,7 @@ code{font:14px Consolas,monospace;background:#F6F8FA;border:1px solid #D0D7DE;pa
 </ul>
 
 <h2>The desktop program</h2>
-<p>Biruni GIS works offline. Your projects and data are processed on your computer and are not sent to us. When the program checks for updates, it downloads a small signed file from this site, which is hosted on GitHub Pages; GitHub, as the host, can see your IP address, as with any web request.</p>
+<p>Biruni GIS works offline. Your projects and data are processed on your computer and are not sent to us. When the program checks for updates, it downloads a small signed file from this site, which is hosted on Cloudflare Pages; Cloudflare, as the host, can see your IP address, as with any web request.</p>
 
 <h2>Phone pages (field photos, live dashboard)</h2>
 <p>When you scan a Biruni QR code, your phone opens a web page on this site. To reach your computer without a server of ours, the page and the program exchange short messages through public relays (Nostr relays and ntfy.sh) and use public STUN services (Google, Cloudflare) to open a direct connection. Every message is encrypted end to end with a key that only your phone and your computer hold; the relays see only unreadable data, its size and timing, and the IP addresses that connect to them. Photos and data then travel directly between your phone and your computer, or through a teammate's device, still encrypted.</p>
@@ -54,14 +54,17 @@ code{font:14px Consolas,monospace;background:#F6F8FA;border:1px solid #D0D7DE;pa
 <p>If you choose to link a Google account, the phone page asks Google for the <code>drive.file</code> permission only. This lets Biruni GIS create files in your Drive and open only the files and folders it created or that you pick yourself. It cannot see the rest of your Drive.</p>
 <ul>
 <li>Photos and their details are encrypted on your phone before upload. Google stores them but cannot read them; only your Biruni GIS program, which holds the key, can.</li>
-<li>The access token Google gives the page stays in your phone's browser and is used only to upload to your Drive. It is never sent to us or to anyone else.</li>
+<li>The photos go into a folder your office shares with your Google account (named <code>biruni-photos-…</code>). You pick it once yourself. The office's computer syncs that folder and opens the photos; the office's Google account can see the encrypted files there.</li>
+<li>The access token Google gives the page stays in your phone's browser. It is used only to upload your photos, check the shared folder, and delete the photos you uploaded once the office has them. It is never sent to us or to anyone else.</li>
+<li>To sign you in faster next time, the link page asks Google for your account's email address and keeps it in your phone's browser only.</li>
+<li>Your office chooses whether the uploaded photos are kept in your Drive or deleted once its computer has them, either at once or when you tap <em>Free space</em>. Deleted photos are removed for good, not moved to the bin.</li>
 <li>We never see your Google account, your files, or your password. You sign in on Google's own page.</li>
 <li>You can remove the link at any time at <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>, and delete the files from your Drive.</li>
 </ul>
 <p>Biruni GIS's use and transfer of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including the Limited Use requirements. Data from Google APIs is used only to provide the upload you asked for, is not used for advertising, is not transferred to anyone, and is not read by any person.</p>
 
 <h2>This website</h2>
-<p>This site is static and hosted on GitHub Pages. It sets no cookies and has no analytics. The home page loads fonts from Google Fonts, which can see your IP address.</p>
+<p>This site is static and hosted on Cloudflare Pages (the phone page at photos.biruni-gis.com and the Google Drive link page at drive.biruni-gis.com too). It sets no cookies and has no analytics. The home page loads fonts from Google Fonts, which can see your IP address.</p>
 
 <h2>Changes and contact</h2>
 <p>If this policy changes, the new version will be posted here with a new date. For questions, open an issue at <a href="https://github.com/HatemTarekGIS/biruni-gis/issues">github.com/HatemTarekGIS/biruni-gis/issues</a>.</p>
@@ -81,7 +84,7 @@ code{font:14px Consolas,monospace;background:#F6F8FA;border:1px solid #D0D7DE;pa
 </ul>
 
 <h2>برنامج سطح المكتب</h2>
-<p>يعمل البرنامج دون إنترنت، وتُعالَج مشاريعك وبياناتك على جهازك ولا تُرسل إلينا. عند البحث عن تحديثات يُنزّل البرنامج ملفاً صغيراً موقّعاً من هذا الموقع المستضاف على GitHub Pages، ويرى GitHub عنوان الـ IP كما في أي طلب على الإنترنت.</p>
+<p>يعمل البرنامج دون إنترنت، وتُعالَج مشاريعك وبياناتك على جهازك ولا تُرسل إلينا. عند البحث عن تحديثات يُنزّل البرنامج ملفاً صغيراً موقّعاً من هذا الموقع المستضاف على Cloudflare Pages، وترى Cloudflare عنوان الـ IP كما في أي طلب على الإنترنت.</p>
 
 <h2>صفحات الموبايل (صور الموقع، اللوحة الحيّة)</h2>
 <p>عند مسح رمز QR من بيروني يفتح الموبايل صفحة على هذا الموقع. وللوصول إلى جهازك دون سيرفر خاص بنا، تتبادل الصفحة والبرنامج رسائل قصيرة عبر مرحّلات عامة (Nostr وntfy.sh)، وتستعمل خدمات STUN العامة (Google وCloudflare) لفتح اتصال مباشر. كل رسالة مشفّرة من الطرف للطرف بمفتاح لا يملكه إلا موبايلك وجهازك، فلا يرى المرحّل إلا بيانات غير مقروءة وحجمها وتوقيتها وعناوين الـ IP المتصلة به. ثم تنتقل الصور والبيانات مباشرة بين موبايلك وجهازك، أو عبر جهاز زميل، وهي مشفّرة أيضاً.</p>
@@ -90,14 +93,17 @@ code{font:14px Consolas,monospace;background:#F6F8FA;border:1px solid #D0D7DE;pa
 <p>إذا اخترت ربط حساب جوجل، تطلب صفحة الموبايل من جوجل صلاحية <code>drive.file</code> فقط. تسمح هذه الصلاحية لبيروني بإنشاء ملفات في الدرايف الخاص بك، وبفتح الملفات والمجلدات التي أنشأها هو أو التي تختارها أنت فقط، ولا يرى باقي الدرايف.</p>
 <ul>
 <li>تُشفَّر الصور وبياناتها على موبايلك قبل الرفع. يخزّنها جوجل لكنه لا يستطيع قراءتها، ولا يقرؤها إلا برنامج بيروني الذي يملك المفتاح.</li>
-<li>تصريح الدخول الذي يعطيه جوجل للصفحة يبقى في متصفح موبايلك ويُستعمل للرفع إلى الدرايف الخاص بك فقط، ولا يُرسل إلينا ولا إلى أي طرف آخر.</li>
+<li>تُرفع الصور إلى مجلد يشاركه مكتبك مع حسابك في جوجل (اسمه <code>biruni-photos-…</code>)، وتختاره أنت مرة واحدة. يزامن كمبيوتر المكتب هذا المجلد ويفتح الصور، ويستطيع حساب المكتب في جوجل رؤية الملفات المشفّرة فيه.</li>
+<li>تصريح الدخول الذي يعطيه جوجل للصفحة يبقى في متصفح موبايلك. يُستعمل فقط لرفع صورك، والتحقق من المجلد المشترك، وحذف الصور التي رفعتها بعد أن تصل إلى المكتب، ولا يُرسل إلينا ولا إلى أي طرف آخر.</li>
+<li>لتسجيل دخولك أسرع في المرة القادمة، تطلب صفحة الربط من جوجل عنوان البريد الإلكتروني لحسابك، وتحتفظ به في متصفح موبايلك فقط.</li>
+<li>يختار مكتبك إن كانت الصور المرفوعة تبقى في الدرايف الخاص بك، أو تُحذف بعد أن تصل إلى كمبيوتر المكتب، إما فورًا أو عندما تضغط <em>إخلاء المساحة</em>. والصور المحذوفة تُحذف نهائيًا، ولا تُنقل إلى سلة المهملات.</li>
 <li>لا نرى حسابك في جوجل ولا ملفاتك ولا كلمة المرور؛ تسجيل الدخول يتم على صفحة جوجل نفسها.</li>
 <li>يمكنك إلغاء الربط في أي وقت من <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>، وحذف الملفات من الدرايف.</li>
 </ul>
 <p>يلتزم استخدام Biruni GIS للمعلومات الواردة من واجهات جوجل البرمجية ونقلها بـ<a href="https://developers.google.com/terms/api-services-user-data-policy">سياسة بيانات مستخدمي خدمات Google API</a>، بما في ذلك متطلبات الاستخدام المحدود. تُستعمل هذه البيانات فقط لتنفيذ الرفع الذي طلبته، ولا تُستعمل للإعلانات، ولا تُنقل لأي طرف، ولا يطّلع عليها أي شخص.</p>
 
 <h2>هذا الموقع</h2>
-<p>الموقع ثابت ومستضاف على GitHub Pages، ولا يضع ملفات تعريف ارتباط (كوكيز) ولا يستعمل أدوات إحصاء. تحمّل الصفحة الرئيسية الخطوط من Google Fonts، التي ترى عنوان الـ IP.</p>
+<p>الموقع ثابت ومستضاف على Cloudflare Pages (ومعه صفحة الموبايل على photos.biruni-gis.com وصفحة ربط Google Drive على drive.biruni-gis.com)، ولا يضع ملفات تعريف ارتباط (كوكيز) ولا يستعمل أدوات إحصاء. تحمّل الصفحة الرئيسية الخطوط من Google Fonts، التي ترى عنوان الـ IP.</p>
 
 <h2>التعديلات والتواصل</h2>
 <p>إذا تغيّرت هذه السياسة تُنشر النسخة الجديدة هنا بتاريخ جديد. للاستفسار افتح بلاغاً على <a href="https://github.com/HatemTarekGIS/biruni-gis/issues">github.com/HatemTarekGIS/biruni-gis/issues</a>.</p>
