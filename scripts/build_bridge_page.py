@@ -49,6 +49,7 @@ page = bridge.phone_page(texts)
 page = page.replace("<title>Biruni GIS</title>",
                     '<title>Biruni GIS</title><meta name="robots" content="noindex">'
                     '<meta name="referrer" content="no-referrer">')
+page = bridge.with_csp(page)   # only its own script runs, and it talks only to the relays
 os.makedirs(os.path.join(out, "p"), exist_ok=True)
 with open(os.path.join(out, "p", "index.html"), "w", encoding="utf-8", newline="\n") as f:
     f.write(page)

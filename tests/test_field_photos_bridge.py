@@ -239,13 +239,22 @@ check(wait(lambda: any(e[0] == "bridge" and e[1].get("type") == "relays" and e[1
 # ---- the phone ----------------------------------------------------------------------------------------------
 
 
+CSP_REFUSED = []
+
+
 class Phone(QWebEnginePage):
     def javaScriptConsoleMessage(self, level, message, line, source):  # noqa: N802
         print("phone js:", message, line, flush=True)
+        if "Content Security Policy" in message:
+            CSP_REFUSED.append(message)
 
 
+csp_page = bridge.with_csp(page)   # as published (scripts/build_bridge_page.py)
+check('http-equiv="Content-Security-Policy"' in csp_page and "'unsafe-inline'" not in csp_page
+      and f"ws://127.0.0.1:{RELAY_PORT}" in csp_page.split("connect-src", 1)[1].split(";", 1)[0],
+      "the published page carries a CSP: its own script only, the relays only")
 phone = Phone(profile)
-phone.setHtml(page, QUrl(f"https://phone.invalid/p/#k={key}&i={bridge.pin(key)}&l=ar"))
+phone.setHtml(csp_page, QUrl(f"https://phone.invalid/p/#k={key}&i={bridge.pin(key)}&l=ar"))
 result = {}
 
 
@@ -609,6 +618,9 @@ c.request("GET", "/wrong/bridge")
 check(c.getresponse().status == 404, "the receiver page needs the token")
 c.close()
 
+check(not CSP_REFUSED, "the whole trip ran under the page's CSP, nothing refused " + " | ".join(CSP_REFUSED)[:400])
+js("(()=>{const s=document.createElement('script');s.textContent='window._injected=1';document.head.append(s);return 1})()")
+check(wait(lambda: CSP_REFUSED, 5) and js("window._injected===1") is False, "… and a script slipped into the page is refused")
 host.stop()
 check(wait(lambda: not host.running(), 10), "the hidden receiver ends when the photos stop")
 srv.stop()

@@ -24,13 +24,16 @@ carries. No server of ours, and none of anyone's, is in the way: where others re
 server, the team is its own relay.
 """
 import base64
+import hashlib
 import json
 import os
 import queue
+import re
 import secrets
 import subprocess
 import sys
 import threading
+import urllib.parse
 
 PAGE_URL = "https://biruni-gis.com/p/"
 RELAYS = ("wss://relay.damus.io", "wss://nos.lol", "wss://relay.primal.net", "wss://nostr.mom",
@@ -590,6 +593,33 @@ def phone_page(all_texts):
     return (page.replace("__LANG__", "en").replace("__DEFLANG__", "").replace("__DIR__", "ltr")
             .replace("__TEXTS__", json.dumps(all_texts, ensure_ascii=False, sort_keys=True).replace("</", "<\\/"))
             .replace("__KINDS__", "[]").replace("__FORM__", "[]").replace("__PCKEY__", ""))
+
+
+def _origin(url):
+    p = urllib.parse.urlsplit(url)
+    return f"{p.scheme}://{p.netloc}"
+
+
+def with_csp(page, connect=(), frames=()):
+    """The phone page with a Content-Security-Policy in a <meta> (GitHub Pages sends no headers): only its own
+    inline script and style run (by their SHA-256), and it talks only to the relays and ntfy (plus `connect`, and may
+    frame only `frames`). The key is in the page's memory, so nothing else - an injected script, a stray site - may
+    load or receive anything."""
+    def sha(tag):
+        body = page.split(f"<{tag}>", 1)[1].split(f"</{tag}>", 1)[0]
+        return "'sha256-" + base64.b64encode(hashlib.sha256(body.encode("utf-8")).digest()).decode() + "'"
+
+    assert page.count("<script>") == 1 and page.count("<style>") == 1 and "<script " not in page, "one inline script"
+    nt = _origin(NTFY)
+    conn = list(dict.fromkeys([*RELAYS, nt, re.sub(r"^http", "ws", nt), *map(_origin, connect)]))
+    frame = " ".join(map(_origin, frames)) or "'none'"
+    csp = "; ".join([
+        "default-src 'none'", f"script-src {sha('script')}", f"style-src {sha('style')}",
+        "img-src 'self' blob:", "media-src blob:", f"connect-src {' '.join(conn)}", "worker-src 'self'",
+        "manifest-src 'self'", f"frame-src {frame}",
+        "base-uri 'none'", "form-action 'none'"])
+    meta = f'<meta http-equiv="Content-Security-Policy" content="{csp}">'
+    return page.replace('<meta charset="utf-8">', '<meta charset="utf-8">' + meta, 1)
 
 
 # ---- the hidden receiver process ---------------------------------------------------------
