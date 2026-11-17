@@ -237,7 +237,8 @@ class Handler(BaseHTTPRequestHandler):
                 drive_error(self, 404, "notFound")
                 return
             f = FILES[fid]
-            self._send(200, json.dumps({"id": fid, "name": f["name"], "mimeType": f["mimeType"], "trashed": False,
+            self._send(200, json.dumps({"id": fid, "name": f["name"], "mimeType": f["mimeType"],
+                                        "trashed": bool(f.get("trashed")),
                                         "ownedByMe": f.get("own", True),
                                         "capabilities": {"canAddChildren": writable(fid)}}).encode(),
                        "application/json", cors=True)
@@ -563,6 +564,18 @@ FILES[OFFICE_ID]["revoked"] = False
 check(repick() and wait(lambda: js(ph, "DRV.n") == 6, 20)
       and len([f for f in FILES.values() if f["name"] == f"p-{dev}"]) == 1,
       "shared and chosen again: the photo goes, into the same p-<device>")
+# the office folder is put in the bin (Drive still takes uploads into it): the phone notices within 5 minutes
+FILES[OFFICE_ID]["trashed"] = True
+n0, nb = js(ph, "DRV.n"), len(bfps())
+ph.runJavaScript("DRV.fold.v=Date.now()-DCHECK-1")
+take("photo-drive-0008")
+check(wait(lambda: js(ph, "DRV.state") == "gone", 20) and js(ph, "DRV.fold") is None and len(bfps()) == nb
+      and queued("photo-drive-0008") is True,
+      f"the office folder in the bin: the card says it cannot be reached, nothing goes into the bin (state {js(ph, 'DRV.state')})")
+FILES[OFFICE_ID]["trashed"] = False
+check(repick() and wait(lambda: js(ph, "DRV.n") == n0 + 1, 20), "taken out of the bin and chosen again: the photo goes")
+check(js(ph, "DRV.fold.v") > 0, "a freshly chosen folder is not checked again at once")
+
 # the line showed photo 5 as a preview first (Drive is the main way): Drive's copy replaces it in the same record
 store.save({"id": "photo-drive-0005", "lat": 24.7, "lon": 46.7, "t": 1, "preview": True},
            b"\xff\xd8\xff\xe0small preview\xff\xd9")
@@ -571,7 +584,7 @@ r3 = drive.DriveIntake([DRIVE_DISK], store, pc, k, queue.Queue()).scan()
 p5 = store.records.get("photo-drive-0005") or {}
 check(not p5.get("preview") and p5.get("route") == "drive" and os.path.getsize(p5.get("photo", "")) > 3000,
       f"Drive's original replaces the preview: full size, route drive ({p5.get('preview')}, {p5.get('route')})")
-check(r3["new"] == 3 and not r3["refused"], f"the computer takes in those three too ({r3})")
+check(r3["new"] == 4 and not r3["refused"], f"the computer takes in those three too ({r3})")
 check(ajs(ph, "(()=>{const o=kept('biruni-drive-f-'+ROOM);keep('biruni-drive-f-'+ROOM,JSON.stringify({t:DRV.tag,r:'x',p:'y'}));"
               "const c=dcache();keep('biruni-drive-f-'+ROOM,o);return c})()") is None,
       "a folder kept by the older page (not chosen) is not used")

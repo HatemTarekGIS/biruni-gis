@@ -181,7 +181,7 @@ async function drivePicked(m){const id=String(m.id||'');
  if(!DRV.tag||!DRV.ok()||!/^[\w-]{10,128}$/.test(id)||m.name!==DRV.fname())return;
  try{const v=await dverify(id);if(v==='ro'){driveSay('ro');return}
   const p=await dfolder('p-'+DEVID,id,'biruniDev',DEVID);
-  const c={t:DRV.tag,r:id,p:p,k:1,own:v==='own'};keep('biruni-drive-f-'+ROOM,JSON.stringify(c));
+  const c={t:DRV.tag,r:id,p:p,k:1,own:v==='own',v:Date.now()};keep('biruni-drive-f-'+ROOM,JSON.stringify(c));
   DRV.fold=c;DRV.wantPick=false;DRV.bad=0;driveSay('idle');drivePump()}
  catch(e){if(e instanceof DriveStop)return;driveSay(e.status===403||e.status===404||e.perm?'gone':'err')}}
 function driveDead(){DRV.tok='';DRV.exp=0;driveSay('auth');driveHello()}
@@ -266,6 +266,16 @@ async function dverify(id){const r=await dapi('/drive/v3/files/'+encodeURICompon
  await dcheck(r);const j=await r.json();
  if(j.name!==DRV.fname()||j.mimeType!==DFOLDER||j.trashed){const e=new Error('not the folder');e.status=404;throw e}
  if(j.capabilities&&j.capabilities.canAddChildren===false)return 'ro';return j.ownedByMe?'own':'ok'}
+/* Drive takes uploads into a folder in the bin without a word, and Drive for desktop never shows them: look at the
+   office folder again every 5 minutes; in the bin, deleted or no longer shared, it is gone (the line takes the
+   originals until it is chosen again) */
+const DCHECK=300000;
+async function dfresh(){const c=DRV.fold,ck='biruni-drive-f-'+ROOM;if(!c||Date.now()-(+c.v||0)<DCHECK)return;
+ let v;try{v=await dverify(c.r)}catch(e){if(e instanceof DriveStop)throw e;
+  if(e.status===403||e.status===404||e.perm){keep(ck,null);DRV.fold=null;driveSay('gone');throw new DriveStop('gone')}
+  throw e}
+ if(v==='ro'){keep(ck,null);DRV.fold=null;driveSay('ro');throw new DriveStop('ro')}
+ c.v=Date.now();keep(ck,JSON.stringify(c))}
 async function dlost(){const c=DRV.fold,ck='biruni-drive-f-'+ROOM;if(!c)throw new DriveStop('pick');
  try{const v=await dverify(c.r);if(v==='ro'){const e=new Error('ro');e.perm=true;e.ro=true;throw e}
   c.p=await dfolder('p-'+DEVID,c.r,'biruniDev',DEVID);keep(ck,JSON.stringify(c))}
@@ -285,7 +295,7 @@ async function dupload(it){const tag=await BFP.tag(KEYB),k=await dkey();let rec=
   const f=await BFP.pack(h,body,k.kp.privateKey);
   rec={id:it.id,room:tag,n:n,name:f.name,head:f.head,size:f.bytes.length,fsha:await BFP.sha(f.bytes),st:'q',tries:0,at:Date.now()};
   await dput(rec)}
- const fo=await dfolders(tag);let j;
+ const fo=await dfolders(tag);await dfresh();let j;
  try{
   if(rec.tries>0){   /* the last try may have arrived without its answer: look before sending again */
    const got=await dfind("appProperties has { key='bfp' and value="+dq(it.id)+" } and "+dq(fo.p)+" in parents and trashed=false");
