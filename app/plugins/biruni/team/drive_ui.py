@@ -11,7 +11,7 @@ from ..field_photos import drive
 from ..i18n import tr
 from ..project import safe_name
 from . import folder as rf
-from . import session
+from . import rules, session
 
 def member_steps_text():
     return tr(
@@ -160,13 +160,18 @@ class DriveRoomDialog(QDialog):
         clean = safe_name(room_name) or "Room"
         return f"Biruni Team - {clean}"
 
+    def _finish_host_folder(self, parent):
+        rf.create_room_folder(self.node, parent)
+        if self.node.my_rank() == 0 and self.node.store.get(rules.PKEY) is None:
+            self.node.set_peer_apply(True)
+        rf.use_folder(self.node, parent)
+        self.refresh()
+
     def _setup_host_parent(self, root):
         parent = os.path.join(root, self._folder_name())
         if not os.path.isdir(parent):
             os.mkdir(parent)
-        rf.create_room_folder(self.node, parent)
-        rf.use_folder(self.node, parent)
-        self.refresh()
+        self._finish_host_folder(parent)
         return parent
 
     def create_folder(self):
@@ -190,9 +195,7 @@ class DriveRoomDialog(QDialog):
             return
         try:
             if os.path.basename(os.path.normpath(d)) == self._folder_name():
-                rf.create_room_folder(self.node, d)
-                rf.use_folder(self.node, d)
-                self.refresh()
+                self._finish_host_folder(d)
             else:
                 self._setup_host_parent(d)
         except (OSError, rf.FolderError) as e:

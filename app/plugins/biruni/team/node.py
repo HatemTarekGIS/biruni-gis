@@ -29,7 +29,7 @@ from qgis.PyQt.QtCore import QObject, QTimer, pyqtSignal
 from ..edit_journal import _field_dict, _field_from
 from ..i18n import tr
 from ..secure import crypto
-from . import features, wire
+from . import area, features, lww, peer, rules, wire
 from .hub import Hub, own_block, sign_body
 
 LIVE_MS = 1500          # quiet time after a change before it is saved and sent
@@ -118,6 +118,7 @@ class Node(QObject):
         self._pres_timer = QTimer(self)
         self._pres_timer.setInterval(PRESENCE_MS)
         self._pres_timer.timeout.connect(self._presence_tick)
+        self._areas = area.Checker()
 
     # ---- who we are -----------------------------------------------------------------------------------
     @property
@@ -369,6 +370,8 @@ class Node(QObject):
         if pend.pop(key, None) is not None:
             self.store.put("pending_commit", pend)
         self._flush_deferred(key)
+        if self.store.get("peer_wait"):
+            peer.retry(self)
 
     def _recover_pending(self):
         """A save the power cut between writing the file and queueing the changes: what reached the file is
@@ -448,6 +451,15 @@ class Node(QObject):
         src = self._source()
         if src and kind != "field":
             op["src"] = src
+        if kind != "field" and rules.peer_apply(self.store, self.lookup_member):
+            reg_set = lww.make_set(kind, base, state)
+            regs = self.store.regs(key, int(fid))
+            if "*" in reg_set or "del" in reg_set:
+                top = max(regs.values(), default=lww.ZERO)
+            else:
+                top = max((lww.eff(regs, r) for r in reg_set), default=lww.ZERO)
+            op["set"] = reg_set
+            op["hlc"] = peer.stamp(self, top)
         op["sig"] = crypto.sign(bytes.fromhex(self.ident["seed"]), sign_body(op)).hex()
         return op
 
@@ -466,6 +478,9 @@ class Node(QObject):
     def _send(self, ops):
         if not ops:
             return
+        for op in ops:
+            if op.get("kind") != "field" and op.get("hlc") is not None:
+                peer.own(self, op)
         if self.role == "host" and self.hub is not None:
             for op in ops:
                 if op["kind"] == "field":
@@ -551,7 +566,9 @@ class Node(QObject):
         if self.store.has(e["uid"]):
             if e["author"] == self.me_id:
                 self.store.drop_outbox(e["uid"])
+            peer.unwait(self.store, [e["uid"]])
             return
+        mode_on = rules.peer_apply(self.store, self.lookup_member)
         if lyr is not None and e["kind"] == "field":
             st = e.get("state") or {}
             fd = st.get("field") or {}
@@ -575,13 +592,30 @@ class Node(QObject):
                 self._save_deferred()
                 self.commit_soon(key)
                 return
-            if e["kind"] == "del":
-                features.delete_stored(lyr, fid)
+            if mode_on:
+                regs = self.store.regs(key, fid)
+                live = features.stored_state(lyr, fid)
+                dead = self.store.dead(key, fid)
+                hlc, _ = lww.delta(e)
+                live2, regs2, dead2, _ch = lww.apply(regs, live, dead, e)
+                if live2 != live:
+                    if live2 is None:
+                        features.delete_stored(lyr, fid)
+                    else:
+                        features.write_state(lyr, fid, live2)
+                    lyr.triggerRepaint()
+                self.store.put_regs(key, fid, regs2)
+                self.store.put_dead(key, fid, dead2)
+                peer.observe(self, hlc)
             else:
-                features.write_state(lyr, fid, e["state"] or {})
-            lyr.triggerRepaint()
+                if e["kind"] == "del":
+                    features.delete_stored(lyr, fid)
+                else:
+                    features.write_state(lyr, fid, e["state"] or {})
+                lyr.triggerRepaint()
         self.store.append(e)
         self._note(e)
+        peer.unwait(self.store, [e["uid"]])
 
     def _flush_deferred(self, key):
         waiting = self.deferred.pop(key, [])
@@ -611,15 +645,19 @@ class Node(QObject):
 
     def _apply_run(self, run):
         done, changes, seen = [], {}, set()
+        mode_on = rules.peer_apply(self.store, self.lookup_member)
         fids = {}
         for e in run:
             fids.setdefault(e["layer"], set()).add(int(e["fid"]))
         current = {key: features.stored_states(self.layers[key], f) for key, f in fids.items()}
+        live_map, regs_map, dead_map, lww_dirty = {}, {}, {}, {}
+        observed, unwait_uids = [], []
         for e in run:
             key, fid = e["layer"], int(e["fid"])
             if e["uid"] in seen or self.store.has(e["uid"]):
                 if e["author"] == self.me_id:
                     self.store.drop_outbox(e["uid"])
+                unwait_uids.append(e["uid"])
                 continue
             lyr = self.layers[key]
             waiting = [w for w in self.deferred.get(key, []) if int(w["fid"]) == fid]
@@ -630,22 +668,44 @@ class Node(QObject):
                 continue
             ch = changes.setdefault(key, {})
             old = ch[fid][0] if fid in ch else current[key].get(fid)
-            ch[fid] = (old, None if e["kind"] == "del" else (e["state"] or {}))
+            if mode_on:
+                k = (key, fid)
+                if k not in live_map:
+                    live_map[k] = current[key].get(fid)
+                    regs_map[k] = self.store.regs(key, fid)
+                    dead_map[k] = self.store.dead(key, fid)
+                hlc, _ = lww.delta(e)
+                live2, regs2, dead2, _ch = lww.apply(regs_map[k], live_map[k], dead_map[k], e)
+                live_map[k], regs_map[k], dead_map[k] = live2, regs2, dead2
+                lww_dirty[k] = (key, fid, regs2, dead2)
+                observed.append(hlc)
+                ch[fid] = (old, live2)
+            else:
+                ch[fid] = (old, None if e["kind"] == "del" else (e["state"] or {}))
             seen.add(e["uid"])
             done.append(e)
+            unwait_uids.append(e["uid"])
         for key, ch in changes.items():
             lyr = self.layers[key]
-            if not features.write_states(lyr, ch):
-                for fid, (_old, new) in ch.items():   # one the file refused must not stop the others
+            todo = {fid: (a, b) for fid, (a, b) in ch.items() if a != b}
+            if todo and not features.write_states(lyr, todo):
+                for fid, (_old, new) in todo.items():   # one the file refused must not stop the others
                     if new is None:
                         features.delete_stored(lyr, fid)
                     else:
                         features.write_state(lyr, fid, new)
-            lyr.triggerRepaint()
+            if todo:
+                lyr.triggerRepaint()
+        if lww_dirty:
+            self.store.save_lww(list(lww_dirty.values()))
+        for hlc in observed:
+            peer.observe(self, hlc)
         if done:
             self.store.append_many(done)
             for e in done:
                 self._note(e)
+        if unwait_uids:
+            peer.unwait(self.store, unwait_uids)
 
     def _note(self, e):
         """Remember where someone worked (their work area on the map) and tell the window."""
@@ -712,6 +772,7 @@ class Node(QObject):
         me["rank"] = self.my_rank() if self.roster else 0
         self.store.put("rank", me["rank"])
         self.hub = Hub(self.store, self.keys, self.layers, me, self.epoch, self)
+        self.hub.wall = lambda: peer.wall(self)
         self.hub.announce = lambda info: wire.sign_announce(self.ident["seed"], self.keys.tag, info)
         self.hub.commit_now = self.commit_soon
         self.hub.applied = self._note
@@ -759,6 +820,14 @@ class Node(QObject):
                   if (g.get("doc") or {}).get("member") != member_id]
         grants.append(grant)
         self.store.put(rules.HKEY, grants)
+        self.hub._settings = (0.0, {})
+        self.hub._bump()
+
+    def set_peer_apply(self, on):
+        """Owner only (host, rank 0): turn direct peer-apply mode on or off."""
+        if self.role != "host" or self.my_rank() != 0 or self.hub is None:
+            raise PermissionError("only the room's owner can change peer-apply mode while hosting")
+        self.store.put(rules.PKEY, rules.make_peer_apply(self.ident["seed"], self.me_id, bool(on)))
         self.hub._settings = (0.0, {})
         self.hub._bump()
 
@@ -826,9 +895,13 @@ class Node(QObject):
                 left = True
                 continue
             if isinstance(r, dict):
+                if r.get("status") == "future":
+                    left = True
+                    self.status.emit("warn", "clock-ahead")
+                    continue
                 if r.get("conflicts"):
                     self._keep_conflict(dict(r, layer=r.get("layer", op["layer"]), fid=r.get("fid", op["fid"])))
-                if r.get("status") == "refused":
+                if r.get("status") == "refused" and op.get("hlc") is None:
                     self._revert(op["uid"])
             self.store.drop_outbox(op["uid"])
         if left:
@@ -1179,6 +1252,9 @@ class Node(QObject):
         self.last_ok = time.time()
         for x in r.get("results", []):
             st = x.get("status")
+            if st == "future":
+                self.status.emit("warn", "clock-ahead")
+                continue
             if st == "held":                       # waits for the host's answer: not sent again meanwhile
                 self._sent_ok.add(x["uid"])
                 if not self._held_said:
@@ -1192,7 +1268,9 @@ class Node(QObject):
                 self._keep_conflict(x)
             if st in ("conflict", "refused"):
                 if st == "refused":
-                    self._revert(x.get("uid"))
+                    op = self.store.outbox_op(x.get("uid")) if x.get("uid") else None
+                    if not op or op.get("hlc") is None:
+                        self._revert(x.get("uid"))
                     self.status.emit("warn", "refused:" + str(x.get("why", "")))
                 self.store.drop_outbox(x.get("uid"))
         self.changed.emit()
@@ -1366,10 +1444,11 @@ class Node(QObject):
                         break
                     seq = page[-1]["seq"]
                     missing = set(client.call("have", {"token": token, "uids": [e["uid"] for e in page]})["missing"])
-                    replay = [{"uid": e["uid"], "layer": e["layer"], "fid": e["fid"], "kind": e["kind"],
-                               "base_ver": max(0, (e["ver"] or 1) - 1), "base": e["prev"], "state": e["state"],
-                               "author": e["author"], "name": e["name"], "ts": e["ts"], "sig": e["sig"],
-                               "src": e.get("src"), "replay": True}
+                    replay = [dict({"uid": e["uid"], "layer": e["layer"], "fid": e["fid"], "kind": e["kind"],
+                                    "base_ver": max(0, (e["ver"] or 1) - 1), "base": e["prev"], "state": e["state"],
+                                    "author": e["author"], "name": e["name"], "ts": e["ts"], "sig": e["sig"],
+                                    "src": e.get("src"), "replay": True},
+                                   **({"hlc": e["lww"]["hlc"], "set": e["lww"]["set"]} if e.get("lww") else {}))
                               for e in page if e["uid"] in missing and e["kind"] != "field" and ":n:" not in e["uid"]]
                     for part in by_size(replay):
                         client.call("push", {"token": token, "ops": part}, timeout=120)
@@ -1646,7 +1725,8 @@ def download_snapshot(client, token, folder, progress, cancelled=lambda: False):
         v = json.load(f)
     files = {k: n for k, n in (v.get("layer_files") or {}).items() if safe_relative(n)}
     extra = {k: n for k, n in (v.get("extra") or {}).items() if safe_relative(n)}
-    return {"folder": sub, "head": v["head"], "versions": v["versions"], "layer_files": files, "extra": extra}
+    return {"folder": sub, "head": v["head"], "versions": v["versions"], "layer_files": files, "extra": extra,
+            "lww": v.get("lww")}
 
 
 def point_layers_at(node, snap):
@@ -1666,3 +1746,6 @@ def point_layers_at(node, snap):
         lyr.triggerRepaint()
     node.store.con.execute("DELETE FROM versions")
     node.store.set_versions([tuple(v) for v in snap["versions"]])
+    node.store.lww_load(snap.get("lww"))
+    node.store.put("peer_wait", {})
+    node.store.put("peer_refused", [])

@@ -451,6 +451,9 @@ def finish_join(res):
     st.put("block_n", 1)
     st.put("roster", room.get("members", []))
     st.set_versions([tuple(v) for v in snap["versions"]])
+    st.lww_load(snap.get("lww"))
+    st.put("peer_wait", {})
+    st.put("peer_refused", [])
     left_out = res.get("left_out") or []
     if left_out:
         st.put("folder_left_out", left_out)

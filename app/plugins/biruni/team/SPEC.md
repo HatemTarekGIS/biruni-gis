@@ -55,3 +55,23 @@ time.
   - The read-only form and the shape guard are a courtesy, and the host's decision is the guarantee.
   - Only the owner, while hosting, sets locks.
   - Renaming a locked field drops its lock.
+
+## Direct peer apply (`lww.py`, `peer.py`, `rules.py`, `hub.py`, `folder.py`)
+
+- **Mode:** `peer_apply` (`rules.PKEY`) is an owner-signed room setting (`rules.make_peer_apply` / `rules.peer_apply`).
+  Off by default for existing and LAN rooms; turned on automatically only when the owner creates the folder in the
+  Google Drive wizard.
+- **LWW & HLC:** Every field (`"a:<field>"`), the whole geometry (`"g"`), and the tombstone (`"del"`) are LWW
+  registers stamped `(l, c, author, uid)` with `l` in ms and `c` as HLC counter. A feature is alive iff it has no
+  tombstone or `max(non-del stamps) > tombstone`; dead values live in `lww_dead` so a newer edit revives all last
+  values.
+- **Future clocks:** Ops with `l > wall_ms + 300_000` wait in `peer_wait` (`"future"`) without advancing HLC.
+- **Host authority:** Peers verify signatures (`Hub._signed`) and `rules.check_op` before applying. The host decides
+  the authoritative stream and publishes `<uid>:x` corrections stamped `[l, c+1]` when refusing an op peers may have
+  applied (or when refusing held deletes).
+- **Limits:**
+  - A correction is stamped just after the refused op, so an older in-flight legitimate edit of the same field loses
+    to it.
+  - A clock that is behind loses until that computer reads a teammate's edit, which lifts it through the HLC.
+  - A removed member's undelivered work is dropped, as today.
+  - Computers on an older version follow the host only.

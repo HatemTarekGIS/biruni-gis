@@ -29,10 +29,13 @@ CREATE TABLE IF NOT EXISTS conflicts (id INTEGER PRIMARY KEY, uid TEXT, layer TE
     name TEXT, other TEXT, ts REAL, data TEXT, resolved INTEGER DEFAULT 0);
 CREATE TABLE IF NOT EXISTS members (id TEXT PRIMARY KEY, name TEXT, pub TEXT, rank INTEGER, rights TEXT,
     token TEXT, joined REAL, seen REAL, state TEXT);
+CREATE TABLE IF NOT EXISTS lww (layer TEXT, fid INTEGER, reg TEXT, l INTEGER, c INTEGER, author TEXT,
+    uid TEXT, PRIMARY KEY (layer, fid, reg));
+CREATE TABLE IF NOT EXISTS lww_dead (layer TEXT, fid INTEGER, state TEXT, PRIMARY KEY (layer, fid));
 """
 OP_COLS = ("seq", "uid", "epoch", "author", "name", "ts", "layer", "fid", "kind", "state", "prev", "ver", "sig", "note",
-           "src")
-JSON_COLS = ("state", "prev", "src")
+           "src", "lww")
+JSON_COLS = ("state", "prev", "src", "lww")
 
 
 class Store:
@@ -47,6 +50,8 @@ class Store:
         cols = {r[1] for r in self.con.execute("PRAGMA table_info(ops)")}
         if "src" not in cols:   # a room made before: what was on the screen when a change was made (provenance)
             self.con.execute("ALTER TABLE ops ADD COLUMN src TEXT")
+        if "lww" not in cols:   # HLC and register set for direct peer apply
+            self.con.execute("ALTER TABLE ops ADD COLUMN lww TEXT")
 
     def close(self):
         with self._lock:
@@ -134,6 +139,8 @@ class Store:
                 d[k] = json.loads(d[k]) if d[k] else None
             if d["src"] is None:
                 del d["src"]
+            if d["lww"] is None:
+                del d["lww"]
             out.append(d)
         return out
 
@@ -243,3 +250,109 @@ class Store:
                                  (m["id"], m["name"], m.get("pub"), m["rank"], json.dumps(m.get("rights") or {}),
                                   m.get("token"), m.get("joined"), m.get("seen"), m.get("state")))
             self.con.execute("COMMIT")
+
+    # ---- LWW registers (direct peer apply) ------------------------------------------------------------
+    def regs(self, layer, fid):
+        """{reg: (l, c, author, uid)} for one feature."""
+        with self._lock:
+            rows = self.con.execute(
+                "SELECT reg, l, c, author, uid FROM lww WHERE layer=? AND fid=?", (layer, int(fid))
+            ).fetchall()
+        return {r[0]: (int(r[1]), int(r[2]), r[3], r[4]) for r in rows}
+
+    def put_regs(self, layer, fid, regs):
+        fid = int(fid)
+        with self._lock:
+            self.con.execute("BEGIN")
+            try:
+                self.con.execute("DELETE FROM lww WHERE layer=? AND fid=?", (layer, fid))
+                if regs:
+                    self.con.executemany(
+                        "INSERT INTO lww (layer, fid, reg, l, c, author, uid) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        [(layer, fid, reg, int(s[0]), int(s[1]), s[2], s[3]) for reg, s in regs.items()],
+                    )
+                self.con.execute("COMMIT")
+            except Exception:
+                self.con.execute("ROLLBACK")
+                raise
+
+    def dead(self, layer, fid):
+        """Last known state dict of a dead feature, or None."""
+        with self._lock:
+            row = self.con.execute(
+                "SELECT state FROM lww_dead WHERE layer=? AND fid=?", (layer, int(fid))
+            ).fetchone()
+        return json.loads(row[0]) if row and row[0] else None
+
+    def put_dead(self, layer, fid, state):
+        fid = int(fid)
+        with self._lock:
+            if state is None:
+                self.con.execute("DELETE FROM lww_dead WHERE layer=? AND fid=?", (layer, fid))
+            else:
+                self.con.execute(
+                    "INSERT OR REPLACE INTO lww_dead (layer, fid, state) VALUES (?, ?, ?)",
+                    (layer, fid, json.dumps(state)),
+                )
+
+    def save_lww(self, items):
+        """Save many (layer, fid, regs, dead) updates in one transaction."""
+        if not items:
+            return
+        with self._lock:
+            self.con.execute("BEGIN")
+            try:
+                for layer, fid, regs, dead in items:
+                    fid = int(fid)
+                    self.con.execute("DELETE FROM lww WHERE layer=? AND fid=?", (layer, fid))
+                    if regs:
+                        self.con.executemany(
+                            "INSERT INTO lww (layer, fid, reg, l, c, author, uid) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                            [(layer, fid, reg, int(s[0]), int(s[1]), s[2], s[3]) for reg, s in regs.items()],
+                        )
+                    if dead is None:
+                        self.con.execute("DELETE FROM lww_dead WHERE layer=? AND fid=?", (layer, fid))
+                    else:
+                        self.con.execute(
+                            "INSERT OR REPLACE INTO lww_dead (layer, fid, state) VALUES (?, ?, ?)",
+                            (layer, fid, json.dumps(dead)),
+                        )
+                self.con.execute("COMMIT")
+            except Exception:
+                self.con.execute("ROLLBACK")
+                raise
+
+    def lww_dump(self):
+        """JSON-serializable snapshot of lww and lww_dead tables."""
+        with self._lock:
+            regs = self.con.execute("SELECT layer, fid, reg, l, c, author, uid FROM lww").fetchall()
+            dead = self.con.execute("SELECT layer, fid, state FROM lww_dead").fetchall()
+        return {
+            "regs": [list(r) for r in regs],
+            "dead": [[r[0], r[1], json.loads(r[2]) if r[2] else None] for r in dead],
+        }
+
+    def lww_load(self, d):
+        """Replace lww and lww_dead tables from a dump dict."""
+        d = d or {}
+        regs = d.get("regs") or []
+        dead = d.get("dead") or []
+        with self._lock:
+            self.con.execute("BEGIN")
+            try:
+                self.con.execute("DELETE FROM lww")
+                self.con.execute("DELETE FROM lww_dead")
+                if regs:
+                    self.con.executemany(
+                        "INSERT INTO lww (layer, fid, reg, l, c, author, uid) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        [(r[0], int(r[1]), r[2], int(r[3]), int(r[4]), r[5], r[6]) for r in regs],
+                    )
+                if dead:
+                    self.con.executemany(
+                        "INSERT INTO lww_dead (layer, fid, state) VALUES (?, ?, ?)",
+                        [(r[0], int(r[1]), json.dumps(r[2])) for r in dead if r[2] is not None],
+                    )
+                self.con.execute("COMMIT")
+            except Exception:
+                self.con.execute("ROLLBACK")
+                raise

@@ -8046,5 +8046,10 @@
  "Only the host can change columns of a shared layer.": "Solo el anfitrión puede cambiar las columnas de una capa compartida.",
  "Locked Fields": "Campos bloqueados",
  "Ticked fields can only be changed by the room's owner. Members can still fill a new feature's numbering field from their granted range.": "Los campos marcados solo pueden ser modificados por el propietario de la sala. Los miembros aún pueden rellenar el campo de numeración de un nuevo elemento desde su rango asignado.",
- "Only the room's owner can lock fields, while hosting the room.": "Solo el propietario de la sala puede bloquear campos mientras la hospeda."
+ "Only the room's owner can lock fields, while hosting the room.": "Solo el propietario de la sala puede bloquear campos mientras la hospeda.",
+ "Teammates' edits appear at once; on conflict the newest save wins": "Los cambios del equipo aparecen al instante; en conflicto gana el guardado más reciente",
+ "{0} applied from teammates": "{0} aplicados de compañeros",
+ "{0} waiting: a teammate's clock is ahead": "{0} en espera: el reloj de un compañero está adelantado",
+ "This computer's clock is ahead. Fix the date and time; your edits wait until then.": "El reloj de este equipo está adelantado. Corrige la fecha y la hora; tus cambios esperarán hasta entonces.",
+ "This room uses \"newest save wins\" for every field; these rules apply only when that is off.": "Esta sala usa «el guardado más reciente gana» para cada campo; estas reglas solo se aplican cuando está desactivado."
 }

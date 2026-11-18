@@ -43,6 +43,13 @@ class RulesDialog(QDialog):
                       tr("Only the room's admin can change these rules, while hosting the room."))
         note.setWordWrap(True)
         lay.addWidget(note)
+        if rules.peer_apply(node.store, node.lookup_member):
+            pnote = QLabel(tr(
+                'This room uses "newest save wins" for every field; these rules apply only when that is off.'
+            ))
+            pnote.setWordWrap(True)
+            pnote.setStyleSheet("color: #B45309; font-weight: bold;")
+            lay.addWidget(pnote)
         self.layer = QComboBox()
         for key in sorted(node.layers):
             self.layer.addItem(_layer_name(node, key), key)

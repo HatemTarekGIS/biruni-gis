@@ -51,7 +51,7 @@ RULES = ("keep", "last", "authority", "max", "min", "sum", "ask")
 RULE_LABELS = {"keep": "Keep the current value and ask the author", "last": "The last change wins",
                "authority": "The higher rank wins", "max": "The larger number", "min": "The smaller number",
                "sum": "Add both changes", "ask": "Never join by itself: ask"}
-CKEY, GKEY, HKEY, FKEY = "constitution", "number_grants", "host_grants", "field_locks"
+CKEY, GKEY, HKEY, FKEY, PKEY = ("constitution", "number_grants", "host_grants", "field_locks", "peer_apply")
 
 
 # ---- signing ------------------------------------------------------------------------------------------------
@@ -186,6 +186,117 @@ def locked_fields(store, lookup, key):
         return []
     fields = d.get("fields")
     return [str(f) for f in fields] if isinstance(fields, list) else []
+
+
+def make_peer_apply(seed_hex, admin_id, on):
+    """Owner-signed setting deciding whether members apply each other's ops directly (LWW)."""
+    doc = {"kind": "peer_apply", "on": bool(on), "by": str(admin_id), "ts": round(time.time(), 3)}
+    return {"doc": doc, "sig": _sign(seed_hex, doc)}
+
+
+def peer_apply(store, lookup):
+    """True when the room has an owner-signed peer_apply setting with on=True."""
+    signed = store.get(PKEY)
+    if not isinstance(signed, dict):
+        return False
+    d = _verify(signed, lookup)
+    return bool(d and d.get("kind") == "peer_apply" and d.get("on"))
+
+
+def _rights_refuse(member, key, op):
+    """Why ``member`` may not make ``op`` on layer ``key`` (or ""): "view only", "cannot delete", etc."""
+    if op.get("kind") == "field":
+        return "only the host changes fields"
+    right = (member.get("rights") or {}).get(key, "edit")
+    if right == "view":
+        return "view only"
+    if right == "nodelete" and op.get("kind") == "del":
+        return "cannot delete"
+    if right == "data" and op.get("kind") == "del":
+        return "data entry only: cannot delete"
+    return ""
+
+
+def _area_refuse(member, cur, after, layer, areas):
+    """"outside your area" when the feature is not inside the member's area before or after the change."""
+    from . import area
+
+    a = area.of(member.get("rights"))
+    if a is None or areas is None or layer is None:
+        return ""
+    for st in (cur, after):
+        if st is not None and not areas.inside(a, layer, st):
+            return "outside your area"
+    return ""
+
+
+def _data_refuse(member, key, cur, result):
+    """Enforce data-entry right: cannot add features, and shape cannot change."""
+    from . import features
+
+    if (member.get("rights") or {}).get(key, "edit") != "data":
+        return "", result
+    if cur is None:
+        return "data entry only: cannot add features", result
+    if not features.same_geometry(result.get("g"), cur.get("g")):
+        return "data entry only: the shape cannot change", result
+    return "", dict(result, g=cur.get("g"))
+
+
+def _locked_check(member, cur, result, locked, grants_fn):
+    """Enforce owner-locked fields: refuse changes to existing features; clear ungranted values on new ones."""
+    if int(member.get("rank", 99)) == 0 or not locked:
+        return result, ""
+    ra = result.get("a") or {}
+    if cur is not None:
+        ca = cur.get("a") or {}
+        for f in locked:
+            if f in ra and ra[f] != ca.get(f):
+                return result, "locked field: " + f
+        return result, ""
+    changed = None
+    member_grants = None
+    for f in locked:
+        if f not in ra:
+            continue
+        v = ra[f]
+        if v is None or v == "":
+            continue
+        if member_grants is None:
+            member_grants = grants_fn() if callable(grants_fn) else grants_fn
+        if not in_ranges(v, [d for d in member_grants if d["field"] == f]):
+            if changed is None:
+                changed = dict(ra)
+            changed[f] = None
+    if changed is not None:
+        return dict(result, a=changed), ""
+    return result, ""
+
+
+def check_op(store, lookup, member, key, op, cur, result=None, layer=None, areas=None):
+    """Judge an op against membership, rights, work area, data-entry rules, and locked fields -> (why, result)."""
+    if result is None and op.get("kind") != "del":
+        result = op.get("state") or {}
+    if not member or member.get("state") == "out":
+        return "removed", result
+    why = _rights_refuse(member, key, op)
+    if why:
+        return why, result
+    after = None if op.get("kind") == "del" else result
+    why = _area_refuse(member, cur, after, layer, areas)
+    if why:
+        return why, result
+    if op.get("kind") == "del":
+        return "", result
+    why, result = _data_refuse(member, key, cur, result)
+    if why:
+        return why, result
+    locked = locked_fields(store, lookup, key)
+    result, why = _locked_check(
+        member, cur, result, locked,
+        lambda: grants(store, lookup, layer=key, member=member.get("id")),
+    )
+    return why, result
 
 
 # ---- the field decision -------------------------------------------------------------------------------------

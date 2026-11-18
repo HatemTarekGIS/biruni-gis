@@ -803,9 +803,11 @@ class TeamDock(QDockWidget):
         self.outside.toggled.connect(self._outside_toggled)
         self.freeze = QCheckBox(tr("Freeze editing (maintenance): only this computer edits"))
         self.freeze.toggled.connect(self._freeze_toggled)
+        self.peer_apply = QCheckBox(tr("Teammates' edits appear at once; on conflict the newest save wins"))
+        self.peer_apply.toggled.connect(self._peer_apply_toggled)
         self.autobackup = QCheckBox(tr("Back up the shared data every hour"))
         self.autobackup.setChecked(True)
-        for c in (self.door, self.approve, self.outside, self.freeze, self.autobackup):
+        for c in (self.door, self.approve, self.outside, self.freeze, self.peer_apply, self.autobackup):
             bv.addWidget(c)
         msg = QHBoxLayout()
         self.notice = QLineEdit()
@@ -955,6 +957,10 @@ class TeamDock(QDockWidget):
             self.freeze.blockSignals(True)
             self.freeze.setChecked(n.hub.frozen)
             self.freeze.blockSignals(False)
+            self.peer_apply.blockSignals(True)
+            self.peer_apply.setChecked(rules.peer_apply(n.store, n.lookup_member))
+            self.peer_apply.setEnabled(n.my_rank() == 0)
+            self.peer_apply.blockSignals(False)
             self._tick()
 
     def _tick(self):
@@ -1043,6 +1049,7 @@ class TeamDock(QDockWidget):
                 "frozen": tr("The host froze editing for maintenance. You can look, not edit."),
                 "unfrozen": tr("Editing is open again."),
                 "base-too-large": tr("The room's files are over 2 GB and cannot be sent through the folder."),
+                "clock-ahead": tr("This computer's clock is ahead. Fix the date and time; your edits wait until then."),
                 "external-download": tr("Downloading the tunnel program from Cloudflare (once, about 60 MB)…")}
         if level == "zone":
             self._bar(tr("{name} is working in this area right now.").format(name=text), 1, 5)
@@ -1392,6 +1399,14 @@ class TeamDock(QDockWidget):
             if s.get("pending"):
                 parts.append(tr("{0} files still arriving").format(s["pending"]))
             text = " · ".join(parts)
+        if state in ("ok", "host-silent", "rejoin-needed"):
+            extra = []
+            if s.get("peer_applied"):
+                extra.append(tr("{0} applied from teammates").format(s["peer_applied"]))
+            if s.get("peer_waiting"):
+                extra.append(tr("{0} waiting: a teammate's clock is ahead").format(s["peer_waiting"]))
+            if extra:
+                text = " · ".join([text] + extra)
         lab.setText(text)
 
     def time_machine(self):
@@ -1674,6 +1689,10 @@ class TeamDock(QDockWidget):
         if self.node and self.node.hub:
             self.node.hub.frozen = on
             self.node.hub._bump()
+
+    def _peer_apply_toggled(self, on):
+        if self.node and self.node.role == "host" and self.node.my_rank() == 0:
+            self.node.set_peer_apply(on)
 
     def _send_notice(self):
         text = self.notice.text().strip()

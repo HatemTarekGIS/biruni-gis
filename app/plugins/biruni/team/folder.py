@@ -44,6 +44,10 @@ Security:
 - The host right is checked by every computer against the owner's signature. A computer that makes itself host
   without it is followed by nobody.
 - The marker stops a silent re-creation, not a deletion.
+- Direct peer apply (``peer_apply``): when turned on by the owner, members read each other's ``d-`` folders in the
+  worker thread, verify the room key, head signature, op signature (``Hub._signed``) and ``rules.check_op``, hold
+  future-clocked ops without advancing HLC, and apply LWW registers. The host keeps the last word via signed
+  stream entries and ``<uid>:x`` corrections, and reads removed members' packs only to refuse and correct them.
 """
 import hashlib
 import io
@@ -59,7 +63,7 @@ import zipfile
 
 from ..pigeon import core as pigeon
 from ..secure import crypto
-from . import cloudfs, rules, snapshot
+from . import cloudfs, peer, rules, snapshot
 
 HEAD = "head.bph"
 EXT = ".bpf"
@@ -239,7 +243,8 @@ def _head_candidates(entries):
     return cands
 
 
-def _pick_head(d, entries, key, tag, roster, head_seen=None, check_placeholder=True, trusted_pub=None):
+def _pick_head(d, entries, key, tag, roster, head_seen=None, check_placeholder=True, trusted_pub=None,
+               allow_out=False):
     """Find and verify the newest valid head in ``d``.
 
     Returns (fname, file_n, body, placeholders, unreadable, last_err, stale_ignored).
@@ -284,7 +289,8 @@ def _pick_head(d, entries, key, tag, roster, head_seen=None, check_placeholder=T
             continue
         if roster:
             who = next((m for m in roster if m.get("id") == maker), None)
-            if who is None or not who.get("pub") or who["pub"] != body.get("pub") or who.get("state") == "out":
+            if (who is None or not who.get("pub") or who["pub"] != body.get("pub")
+                    or (who.get("state") == "out" and not allow_out)):
                 last_err = "not a member"
                 continue
         elif trusted_pub:
@@ -490,7 +496,8 @@ def extract_base(host_dir, base_info, dest_folder, report=lambda *a: None, parts
         v = json.load(f)
     files = {k: n for k, n in (v.get("layer_files") or {}).items() if snapshot.safe_relative(n)}
     extra = {k: n for k, n in (v.get("extra") or {}).items() if snapshot.safe_relative(n)}
-    return {"folder": dest_folder, "head": v["head"], "versions": v["versions"], "layer_files": files, "extra": extra}
+    return {"folder": dest_folder, "head": v["head"], "versions": v["versions"], "layer_files": files,
+            "extra": extra, "lww": v.get("lww")}
 
 
 def _scan_welcome_and_base(hd, fmap, me_id, box_priv, marker, tag, out, min_made=0.0):
@@ -607,6 +614,9 @@ class FolderCarrier:
             "slow": False,
             "unreadable": 0,
             "refused_host": "",
+            "peer_applied": 0,
+            "peer_waiting": 0,
+            "clock_ahead": False,
         }
 
     # ---- paths and heads ------------------------------------------------------------------------------------
@@ -944,6 +954,7 @@ class FolderCarrier:
                 room_settings(st),
                 st.get("pigeon_results") or {},
                 refused,
+                roster,
             ], sort_keys=True).encode())
             written_head = st.get("folder_written_head")
             written_settings = st.get("folder_written_settings")
@@ -1229,6 +1240,7 @@ class FolderCarrier:
             "epoch": int(self.node.epoch or 1),
             "host_grants": list(st.get(rules.HKEY) or []),
             "last_welcome_made": float(st.get("folder_last_welcome_made") or 0.0),
+            "peer_apply": rules.peer_apply(st, self.node.lookup_member),
         }
 
     def _scan_join_request(self, d, d_files, folder_maker, ctx, out):
@@ -1385,7 +1397,8 @@ class FolderCarrier:
                         out["joins"].append(req)
 
             head_name, file_n, body, h_ph, h_unr, last_err, stale = _pick_head(
-                d, d_files, ctx["key"], ctx["tag"], roster, head_seen=ctx["head_seen"], check_placeholder=True
+                d, d_files, ctx["key"], ctx["tag"], roster, head_seen=ctx["head_seen"], check_placeholder=True,
+                allow_out=bool(ctx["host"] and ctx.get("peer_apply")),
             )
             out["placeholders"] += h_ph
             out["unreadable"] += h_unr
@@ -1446,7 +1459,7 @@ class FolderCarrier:
                             and rbody.get("pub") == who.get("pub") and pigeon._signed_ok(rbody)):
                         out["rekeys"].append((rkey, rbody))
 
-            if not ctx["host"] and not who.get("host"):
+            if not ctx["host"] and not who.get("host") and not ctx.get("peer_apply"):
                 continue
             if not ctx["host"] and who.get("host") and h_from is not None and ctx["since"] < int(h_from):
                 rw = _scan_welcome_and_base(
@@ -1519,12 +1532,16 @@ class FolderCarrier:
             seq = page[-1]["seq"]
             for e in page:
                 if e["kind"] != "field" and ":n:" not in e["uid"]:
-                    replay_ops.append({
+                    r_op = {
                         "uid": e["uid"], "layer": e["layer"], "fid": e["fid"], "kind": e["kind"],
                         "base_ver": max(0, (e["ver"] or 1) - 1), "base": e["prev"], "state": e["state"],
                         "author": e["author"], "name": e["name"], "ts": e["ts"], "sig": e["sig"],
                         "src": e.get("src"), "replay": True,
-                    })
+                    }
+                    if e.get("lww"):
+                        r_op["hlc"] = e["lww"]["hlc"]
+                        r_op["set"] = e["lww"]["set"]
+                    replay_ops.append(r_op)
         outbox_ops = st.outbox(1 << 30)
         with st._lock:
             st.con.execute("DELETE FROM ops WHERE seq>?", (at_seq,))
@@ -1631,14 +1648,15 @@ class FolderCarrier:
             self._need_rebase_join = False
 
         if result["state"] != "rejoin-needed":
-            for f in result.get("folders") or []:
+            folders = sorted(result.get("folders") or [], key=lambda f: (0 if f.get("from") is not None else 1))
+            for f in folders:
                 entry = f["entry"]
                 for name, sha, data in f["files"]:
                     key = entry + "/" + name + ":" + sha
                     if key in done:
                         continue
                     try:
-                        r = pigeon.open_data(self.node, data)
+                        r = pigeon.open_data(self.node, data, via_folder=True)
                     except pigeon.PigeonError as e:
                         rep["refused"].append(str(e))
                         done.add(key)
@@ -1669,6 +1687,10 @@ class FolderCarrier:
             unreadable=result.get("unreadable", 0),
         )
         self.status["from"] = result.get("from")
+        if st.get("peer_wait") or rules.peer_apply(st, self.node.lookup_member):
+            peer.retry(self.node)
+        else:
+            peer.sync_status(self.node)
 
         if result["state"] in ("no-drive", "missing"):
             self._miss_scans += 1

@@ -273,9 +273,11 @@ def _roster_entry(node, mid):
     return next((m for m in roster if m.get("id") == mid), None)
 
 
-def open_data(node, data):
+def open_data(node, data, via_folder=False):
     """Take what an envelope brings. -> report {"packs", "in", "applied", "carried", "waiting", "dups", "refused",
     "conflicts", "results"}"""
+    from ..team import peer, rules
+
     st = _ready(node.store)
     room, blobs = _envelope(data)
     if room != node.keys.tag:
@@ -283,6 +285,7 @@ def open_data(node, data):
     rep = {"packs": len(blobs), "in": 0, "applied": 0, "carried": 0, "waiting": 0, "dups": 0, "refused": [],
            "conflicts": 0, "decided": {}}
     host = _role(node) == "host"
+    peer_mode = rules.peer_apply(st, node.lookup_member)
     if not host:
         node.store.put("pigeon_only", True)  # packs by hand: a lost network must not make this computer the host
     now = time.time()
@@ -310,16 +313,19 @@ def open_data(node, data):
             if body["kind"] == "down":
                 rep["refused"].append("another host's stream" if body.get("sid") != st.get("sid") else "a host pack")
                 continue
-            if who is None or who.get("state") == "out" or not who.get("pub"):
+            if who is None or not who.get("pub") or (who.get("state") == "out" and not peer_mode):
                 rep["refused"].append("not a member")
                 continue
             _host_take(node, body, rep)
             _mark_seen(st, pid)
             continue
         if body["kind"] == "up":            # a member's changes: carried on towards the host
-            _carry(st, body, blob)
+            if peer_mode:
+                peer.take(node, body, rep)
+            if not via_folder:
+                _carry(st, body, blob)
+                rep["carried"] += 1
             _mark_seen(st, pid)
-            rep["carried"] += 1
             continue
         if body.get("sid") != st.get("sid"):
             rep["refused"].append("another host's stream")
@@ -345,6 +351,8 @@ def open_file(node, path):
 
 
 def _host_take(node, body, rep):
+    from ..team import peer
+
     hub = node.hub
     if hub is None:
         raise PigeonError("the room is not open on this computer")
@@ -373,6 +381,12 @@ def _host_take(node, body, rep):
         rep["in"] += 1
         status = r.get("status")
         rep["decided"][status] = rep["decided"].get(status, 0) + 1
+        if status in ("future", "wait"):
+            uid = str(op.get("uid") or "")
+            peer.add_wait(st, uid, op, maker, "future" if status == "future" else "unknown")
+            if status == "future":
+                mine[uid] = {"uid": uid, "status": "future"}
+            continue
         if r.get("conflicts"):
             rep["conflicts"] += 1
         if status in ("refused", "held", "conflict") or r.get("conflicts"):
@@ -421,20 +435,26 @@ def _answers(node, body, rep):
     st = node.store
     held = set(st.get("pigeon_held") or [])
     for uid in (body.get("refused") or {}).get(node.me_id) or []:
-        if st.outbox_op(uid):
-            node._revert(uid)
+        op = st.outbox_op(uid)
+        if op:
+            if op.get("hlc") is None:
+                node._revert(uid)
             st.drop_outbox(uid)
     for uid, x in ((body.get("results") or {}).get(node.me_id) or {}).items():
-        if not st.outbox_op(uid):
+        op = st.outbox_op(uid)
+        if not op:
             continue
         status = x.get("status")
+        if status == "future":
+            node.status.emit("warn", "clock-ahead")
+            continue
         if status == "held":
             held.add(uid)
             continue
         if x.get("conflicts"):
             node._keep_conflict(x)
             rep["conflicts"] += 1
-        if status == "refused":
+        if status == "refused" and op.get("hlc") is None:
             node._revert(uid)
         if status in ("refused", "conflict"):
             st.drop_outbox(uid)

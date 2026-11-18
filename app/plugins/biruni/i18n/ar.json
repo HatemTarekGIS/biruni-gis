@@ -8046,5 +8046,10 @@
  "Only the host can change columns of a shared layer.": "المضيف فقط يمكنه تغيير أعمدة طبقة مشتركة.",
  "Locked Fields": "الحقول المقفولة",
  "Ticked fields can only be changed by the room's owner. Members can still fill a new feature's numbering field from their granted range.": "الحقول المحددة لا يغيّرها إلا صاحب الغرفة. يظل بإمكان الأعضاء تعبئة حقل الترقيم للعنصر الجديد من النطاق الممنوح لهم.",
- "Only the room's owner can lock fields, while hosting the room.": "صاحب الغرفة فقط يمكنه قفل الحقول أثناء استضافة الغرفة."
+ "Only the room's owner can lock fields, while hosting the room.": "صاحب الغرفة فقط يمكنه قفل الحقول أثناء استضافة الغرفة.",
+ "Teammates' edits appear at once; on conflict the newest save wins": "تظهر تعديلات الزملاء فورًا؛ وعند التعارض يفوز الحفظ الأحدث",
+ "{0} applied from teammates": "تم تطبيق {0} من الزملاء",
+ "{0} waiting: a teammate's clock is ahead": "{0} بالانتظار: ساعة أحد الزملاء متقدمة",
+ "This computer's clock is ahead. Fix the date and time; your edits wait until then.": "ساعة هذا الجهاز متقدمة. صحّح التاريخ والوقت؛ ستنتظر تعديلاتك حتى ذلك الحين.",
+ "This room uses \"newest save wins\" for every field; these rules apply only when that is off.": "تستخدم هذه الغرفة قاعدة «الحفظ الأحدث يفوز» لكل حقل؛ ولا تسري هذه القواعد إلا عند إيقافها."
 }

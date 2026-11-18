@@ -8046,5 +8046,10 @@
  "Only the host can change columns of a shared layer.": "فقط میزبان می‌تواند ستون‌های یک لایه اشتراکی را تغییر دهد.",
  "Locked Fields": "فیلدهای قفل‌شده",
  "Ticked fields can only be changed by the room's owner. Members can still fill a new feature's numbering field from their granted range.": "فیلدهای تیک‌خورده فقط توسط مالک اتاق قابل تغییرند. اعضا همچنان می‌توانند فیلد شماره‌گذاری عارضه جدید را از بازه مجاز خود پر کنند.",
- "Only the room's owner can lock fields, while hosting the room.": "فقط مالک اتاق هنگام میزبانی اتاق می‌تواند فیلدها را قفل کند."
+ "Only the room's owner can lock fields, while hosting the room.": "فقط مالک اتاق هنگام میزبانی اتاق می‌تواند فیلدها را قفل کند.",
+ "Teammates' edits appear at once; on conflict the newest save wins": "ویرایش‌های همکاران بلافاصله نمایش داده می‌شود؛ هنگام تعارض، جدیدترین ذخیره برنده است",
+ "{0} applied from teammates": "{0} مورد از همکاران اعمال شد",
+ "{0} waiting: a teammate's clock is ahead": "{0} در انتظار: ساعت یکی از همکاران جلو است",
+ "This computer's clock is ahead. Fix the date and time; your edits wait until then.": "ساعت این رایانه جلو است. تاریخ و ساعت را تنظیم کنید؛ ویرایش‌های شما تا آن زمان منتظر می‌مانند.",
+ "This room uses \"newest save wins\" for every field; these rules apply only when that is off.": "این اتاق برای هر فیلد از قانون «جدیدترین ذخیره برنده است» استفاده می‌کند؛ این قوانین تنها زمانی اعمال می‌شوند که آن گزینه خاموش باشد."
 }

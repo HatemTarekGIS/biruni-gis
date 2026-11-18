@@ -37,7 +37,7 @@ from qgis.PyQt.QtCore import QObject, QTimer, pyqtSignal
 
 from ..local_server import ExclusiveServer
 from ..secure import crypto
-from . import area, features, merge, rules, wire
+from . import area, features, lww, merge, peer, rules, wire
 
 BLOCK = 1_000_000          # feature ids handed out at a time
 PULL_WAIT = 20             # seconds a pull waits for news
@@ -65,7 +65,7 @@ class _Job:
 
 
 ROOM_SETTINGS = ("approve", "default_rights", "external", "constitution", "number_grants", "host_grants",
-                 "field_locks")  # [I06] rules.py
+                 "field_locks", "peer_apply", "delete_limit")  # [I06] rules.py
 
 
 def room_settings(store):
@@ -90,6 +90,10 @@ def sign_body(op):
     body = {k: op.get(k) for k in keys}
     if op.get("src") is not None:   # where it was drawn from (provenance): signed too, when there is one, so
         body["src"] = op["src"]     # nobody can say afterwards it was drawn from another image
+    if op.get("hlc") is not None:
+        body["hlc"] = op["hlc"]
+    if op.get("set") is not None:
+        body["set"] = op["set"]
     return crypto.canonical(body)
 
 
@@ -429,15 +433,8 @@ class Hub(QObject):
         """"outside your area" when the feature is not inside the member's area before or after the change."""
         if member is self.me:
             return ""
-        a = area.of(member.get("rights"))
-        if a is None:
-            return ""
-        lyr = self.layers.get(key)
         after = None if op.get("kind") == "del" else (op.get("state") or {})
-        for st in (cur, after):
-            if st is not None and not self._areas.inside(a, lyr, st):
-                return "outside your area"
-        return ""
+        return rules._area_refuse(member, cur, after, self.layers.get(key), self._areas)
 
     def remove_member(self, cid):
         for m in self.store.members():
@@ -489,14 +486,18 @@ class Hub(QObject):
         return {k: v for _, _, k, v in out[:MAX_POINTERS]}
 
     def _entry(self, op, prev, state, ver, note=None):
-        return {"seq": None, "uid": op["uid"], "epoch": self.epoch, "author": op["author"],
-                "name": op.get("name", ""), "ts": op.get("ts", time.time()), "layer": op["layer"],
-                "fid": int(op["fid"]),
-                # a change of the layer's fields keeps its kind (it was written as a feature change, so no member
-                # ever got a new field)
-                "kind": "field" if op.get("kind") == "field" else ("del" if state is None else "put"),
-                "state": state, "prev": prev,
-                "ver": ver, "sig": op.get("sig"), "note": note or op.get("note"), "src": _src(op.get("src"))}
+        e = {"seq": None, "uid": op["uid"], "epoch": self.epoch, "author": op["author"],
+             "name": op.get("name", ""), "ts": op.get("ts", time.time()), "layer": op["layer"],
+             "fid": int(op["fid"]),
+             # a change of the layer's fields keeps its kind (it was written as a feature change, so no member
+             # ever got a new field)
+             "kind": "field" if op.get("kind") == "field" else ("del" if state is None else "put"),
+             "state": state, "prev": prev,
+             "ver": ver, "sig": op.get("sig"), "note": note or op.get("note"), "src": _src(op.get("src"))}
+        if op.get("hlc") is not None:
+            hlc, reg_set = lww.delta(op)
+            e["lww"] = {"hlc": hlc, "set": reg_set}
+        return e
 
     def _kept(self, entries):
         """Entries now in the stream: numbers, the host's map, one wake-up for every waiting member."""
@@ -663,16 +664,7 @@ class Hub(QObject):
         """Why ``member`` may not make ``op`` on layer ``key`` (or ""): "view only", "cannot delete", etc."""
         if member is self.me:
             return ""
-        if op.get("kind") == "field":
-            return "only the host changes fields"
-        right = (member.get("rights") or {}).get(key, "edit")
-        if right == "view":
-            return "view only"
-        if right == "nodelete" and op.get("kind") == "del":
-            return "cannot delete"
-        if right == "data" and op.get("kind") == "del":
-            return "data entry only: cannot delete"
-        return ""
+        return rules._rights_refuse(member, key, op)
 
     def _hold(self, op, member):
         """The guard: a member deleting more than delete_limit features in a minute waits for the host to say yes
@@ -708,6 +700,13 @@ class Hub(QObject):
                 self._guard_off = False
         else:
             self.refused_for.setdefault(member_id, []).extend(op["uid"] for op, _m in items)
+            if rules.peer_apply(self.store, self._member):
+                batch = _Batch(self)
+                for op, _m in items:
+                    if op.get("hlc") is not None:
+                        cur = batch.state(op["layer"], int(op["fid"]))
+                        self._correct(op, cur, batch)
+                batch.flush()
             self._bump()
         return len(items)
 
@@ -717,6 +716,109 @@ class Hub(QObject):
             return crypto.verify(bytes.fromhex(pub), bytes.fromhex(op.get("sig") or "00"), sign_body(op))
         except (ValueError, TypeError):
             return False
+
+    def _correct(self, op, cur, batch):
+        """Publish a host-authored correction entry `<uid>:x` with hlc=[l, c+1] and state=cur."""
+        hlc, reg_set = lww.delta(op)
+        corr_hlc = [int(hlc[0]), int(hlc[1]) + 1]
+        corr_set = ["del"] if cur is None else (["*"] if op.get("kind") == "del" else list(reg_set))
+        key, fid = op["layer"], int(op["fid"])
+        corr_op = {
+            "uid": f"{op['uid']}:x",
+            "layer": key,
+            "fid": fid,
+            "kind": "del" if cur is None else "put",
+            "state": cur,
+            "author": self.me["id"],
+            "name": self.me.get("name", ""),
+            "ts": time.time(),
+            "hlc": corr_hlc,
+            "set": corr_set,
+        }
+        regs, dead = batch.regs_dead(key, fid)
+        live2, regs2, dead2, _ = lww.apply(regs, cur, dead, corr_op)
+        batch.set_lww(key, fid, regs2, dead2)
+        cur_ver = batch.version(key, fid)
+        return batch.write(corr_op, cur, live2, cur_ver + 1, note="refused")
+
+    def _decide_lww(self, op, member, batch, force=False):
+        """Decide an LWW op when peer_apply mode is on."""
+        uid = str(op.get("uid", ""))
+        key = op.get("layer")
+        lyr = self.layers.get(key)
+        if op.get("replay"):
+            author = self._member(op.get("author"))
+            if author is None or not author.get("pub"):
+                return {"uid": uid, "status": "refused", "why": "unknown author"}
+            if not self._signed(op, author["pub"]):
+                return {"uid": uid, "status": "refused", "why": "bad signature"}
+            op.pop("force", None)
+            force = False
+            op["name"] = author.get("name", "")
+            who = author
+        else:
+            pub = member.get("pub")
+            if member is not self.me and not pub:
+                return {"uid": uid, "status": "refused", "why": "bad signature"}
+            if pub and not self._signed(op, pub):
+                return {"uid": uid, "status": "refused", "why": "bad signature"}
+            op["author"], op["name"] = member["id"], member.get("name", "")
+            who = member
+
+        hlc, reg_set = lww.delta(op)
+        if int(hlc[0]) > int(peer.wall(self) * 1000) + peer.SKEW_MS:
+            return {"uid": uid, "status": "future"}
+        fid = int(op["fid"])
+        if features.is_pending(lyr, fid) and not force:
+            self.commit_now(key)
+            return "later"
+        cur = batch.state(key, fid)
+        regs, dead = batch.regs_dead(key, fid)
+        cur_ver = batch.version(key, fid)
+        if cur is None and dead is None and cur_ver == 0 and "*" not in reg_set:
+            return {"uid": uid, "status": "wait"}
+        if self.frozen and who is not self.me:
+            self._correct(op, cur, batch)
+            return {"uid": uid, "status": "refused", "why": "frozen"}
+        if who is not self.me and who.get("state") == "out":
+            self._correct(op, cur, batch)
+            return {"uid": uid, "status": "refused", "why": "removed"}
+        ov = lww.overlay(cur, op)
+        if who is not self.me:
+            why, checked = rules.check_op(
+                self.store, self._member, who, key, op, cur, result=ov, layer=lyr, areas=self._areas
+            )
+        else:
+            checked, why = (self._locked_check(who, key, cur, ov) if op.get("kind") != "del" else (None, ""))
+        if why:
+            self._correct(op, cur, batch)
+            return {"uid": uid, "status": "refused", "why": why}
+        if not op.get("replay") and op.get("kind") == "del" and self._hold(op, member):
+            return {"uid": uid, "status": "held"}
+
+        op_apply = dict(op, state=checked) if (op.get("kind") != "del" and checked != ov) else op
+        live2, regs2, dead2, changed = lww.apply(regs, cur, dead, op_apply)
+        stamp = lww.stamp_of(op, hlc)
+        g_won = ("*" in reg_set or "g" in reg_set) and stamp > lww.eff(regs, "g")
+        node_flags = []
+        data_only = who is not self.me and (who.get("rights") or {}).get(key, "edit") == "data"
+        if (g_won and lyr is not None and cur is not None and live2 is not None
+                and cur.get("g") != live2.get("g") and not data_only):
+            live2, node_flags = self._propagate_shared_nodes(key, lyr, fid, who, cur, live2, live2, batch, op)
+        batch.set_lww(key, fid, regs2, dead2)
+        if not changed:
+            note = "older"
+            flags = []
+        else:
+            flags = self._number_flags(key, lyr, fid, who, cur, live2) if live2 is not None else []
+            flags.extend(node_flags)
+            note = "; ".join(flags) if flags else None
+        e = batch.write(op, cur, live2, cur_ver + 1, note=note)
+        peer.observe(self, hlc)
+        out = {"uid": uid, "status": "ok", "_entry": e}
+        if flags:
+            out["flags"] = flags
+        return out
 
     def decide_op(self, op, member, batch, force=False):
         uid = str(op.get("uid", ""))
@@ -728,6 +830,8 @@ class Hub(QObject):
         lyr = self.layers.get(key)
         if lyr is None:
             return {"uid": uid, "status": "refused", "why": "no such layer"}
+        if op.get("hlc") is not None and rules.peer_apply(self.store, self._member):
+            return self._decide_lww(op, member, batch, force=force)
         if self.frozen and member is not self.me:
             return {"uid": uid, "status": "refused", "why": "frozen"}
         if op.get("replay"):
@@ -802,9 +906,9 @@ class Hub(QObject):
                                                     mine_rank=int(who.get("rank", 99)), theirs_rank=theirs_rank)
             merged = True
         if data_only:
-            if not features.same_geometry(result.get("g"), cur.get("g")):
-                return {"uid": uid, "status": "refused", "why": "data entry only: the shape cannot change"}
-            result = dict(result, g=cur.get("g"))
+            why, result = rules._data_refuse(who, key, cur, result)
+            if why:
+                return {"uid": uid, "status": "refused", "why": why}
         result, why = self._locked_check(who, key, cur, result)
         if why:
             return {"uid": uid, "status": "refused", "why": why}
@@ -955,6 +1059,12 @@ class Hub(QObject):
                     n_op = {"uid": f"{op['uid']}:n:{n_fid}", "layer": key, "fid": n_fid,
                             "kind": "put", "author": op.get("author", who.get("id")),
                             "name": op.get("name", who.get("name", "")), "ts": op.get("ts", time.time())}
+                    if op.get("hlc") is not None:
+                        n_op["hlc"] = [int(op["hlc"][0]), int(op["hlc"][1]) + 1]
+                        n_op["set"] = ["g"]
+                        r_n, d_n = batch.regs_dead(key, n_fid)
+                        n_new_st, r_n2, d_n2, _ = lww.apply(r_n, n_st, d_n, n_op)
+                        batch.set_lww(key, n_fid, r_n2, d_n2)
                     note_parts = ["shared-node"]
                     if topo_flag:
                         note_parts.append(topo_flag)
@@ -978,6 +1088,12 @@ class Hub(QObject):
                         n_op = {"uid": f"{op['uid']}:t:{n_fid}", "layer": key, "fid": n_fid,
                                 "kind": "put", "author": op.get("author", who.get("id")),
                                 "name": op.get("name", who.get("name", "")), "ts": op.get("ts", time.time())}
+                        if op.get("hlc") is not None:
+                            n_op["hlc"] = [int(op["hlc"][0]), int(op["hlc"][1]) + 1]
+                            n_op["set"] = ["g"]
+                            r_n, d_n = batch.regs_dead(key, n_fid)
+                            n_new_st, r_n2, d_n2, _ = lww.apply(r_n, n_st, d_n, n_op)
+                            batch.set_lww(key, n_fid, r_n2, d_n2)
                         batch.write(n_op, n_st, n_new_st, n_ver + 1,
                                     note=f"shared-node: T-junction corner on neighbour #{n_fid}")
             except Exception as e:
@@ -1000,32 +1116,10 @@ class Hub(QObject):
     def _locked_check(self, who, key, cur, result):
         """Enforce owner-locked fields: refuse changes to existing features; clear ungranted values on new ones."""
         locked = self._locked(key)
-        if int(who.get("rank", 99)) == 0 or not locked:
-            return result, ""
-        ra = result.get("a") or {}
-        if cur is not None:
-            ca = cur.get("a") or {}
-            for f in locked:
-                if f in ra and ra[f] != ca.get(f):
-                    return result, "locked field: " + f
-            return result, ""
-        changed = None
-        grants = None
-        for f in locked:
-            if f not in ra:
-                continue
-            v = ra[f]
-            if v is None or v == "":
-                continue
-            if grants is None:
-                grants = [d for d in self._room_rules()[1] if d["layer"] == key and d["member"] == who.get("id")]
-            if not rules.in_ranges(v, [d for d in grants if d["field"] == f]):
-                if changed is None:
-                    changed = dict(ra)
-                changed[f] = None
-        if changed is not None:
-            return dict(result, a=changed), ""
-        return result, ""
+        return rules._locked_check(
+            who, cur, result, locked,
+            lambda: [d for d in self._room_rules()[1] if d["layer"] == key and d["member"] == who.get("id")],
+        )
 
     def _room_rules(self):
         """({layer: {field: rule}}, [grant docs]) verified once per change of the stored settings."""
@@ -1113,7 +1207,7 @@ class Hub(QObject):
         extra = self._extra_files(folder, files)
         with open(os.path.join(folder, "versions.json"), "w", encoding="utf-8") as f:
             json.dump({"head": head, "versions": self.store.all_versions(), "layer_files": layer_files,
-                       "extra": extra}, f)
+                       "extra": extra, "lww": self.store.lww_dump()}, f)
         files["versions.json"] = os.path.getsize(os.path.join(folder, "versions.json"))
         from . import snapshot
         snapshot.write_qlr(os.path.join(folder, "map.qlr"))
@@ -1155,7 +1249,7 @@ class Hub(QObject):
         extra = self._extra_files(folder, files, vectors_only=True, left_out=left_out)
         with open(os.path.join(folder, "versions.json"), "w", encoding="utf-8") as f:
             json.dump({"head": head, "versions": self.store.all_versions(), "layer_files": layer_files,
-                       "extra": extra}, f)
+                       "extra": extra, "lww": self.store.lww_dump()}, f)
         files["versions.json"] = os.path.getsize(os.path.join(folder, "versions.json"))
         from . import snapshot
         snapshot.write_qlr(os.path.join(folder, "map.qlr"))
@@ -1273,6 +1367,7 @@ class _Batch:
         self.hub = hub
         self.cur = {}        # (layer key, fid) -> [state in the file, state now]
         self.vers = {}
+        self.lww = {}        # (layer key, fid) -> [regs_dict, dead_state]
         self.entries = []
         self.uids = set()
         self.count = 0
@@ -1289,6 +1384,15 @@ class _Batch:
         if k not in self.vers:
             self.vers[k] = self.hub.store.version(key, fid)
         return self.vers[k]
+
+    def regs_dead(self, key, fid):
+        k = (key, int(fid))
+        if k not in self.lww:
+            self.lww[k] = [self.hub.store.regs(key, int(fid)), self.hub.store.dead(key, int(fid))]
+        return self.lww[k]
+
+    def set_lww(self, key, fid, regs, dead):
+        self.lww[(key, int(fid))] = [regs, dead]
 
     def write(self, op, prev, state, ver, note=None):
         k = (op["layer"], int(op["fid"]))
@@ -1320,6 +1424,10 @@ class _Batch:
         if kept:
             added = self.hub.store.append_many(kept)
             self.hub._kept([e for e, ok in zip(kept, added) if ok])
+        lww_items = [(key, fid, regs, dead) for (key, fid), (regs, dead) in self.lww.items()
+                     if key not in failed]
+        if lww_items:
+            self.hub.store.save_lww(lww_items)
 
 
 # ---- HTTP -------------------------------------------------------------------------------------------------

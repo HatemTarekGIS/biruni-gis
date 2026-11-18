@@ -8046,5 +8046,10 @@
  "Only the host can change columns of a shared layer.": "Paylaşılan bir katmanın sütunlarını yalnızca sunucu değiştirebilir.",
  "Locked Fields": "Kilitli Alanlar",
  "Ticked fields can only be changed by the room's owner. Members can still fill a new feature's numbering field from their granted range.": "İşaretli alanlar yalnızca oda sahibi tarafından değiştirilebilir. Üyeler yine de yeni bir detayın numaralandırma alanını kendilerine verilen aralıktan doldurabilir.",
- "Only the room's owner can lock fields, while hosting the room.": "Alanları yalnızca oda sahibi, odayı barındırırken kilitleyebilir."
+ "Only the room's owner can lock fields, while hosting the room.": "Alanları yalnızca oda sahibi, odayı barındırırken kilitleyebilir.",
+ "Teammates' edits appear at once; on conflict the newest save wins": "Ekip arkadaşlarının düzenlemeleri anında görünür; çakışmada en yeni kayıt kazanır",
+ "{0} applied from teammates": "Ekip arkadaşlarından {0} uygulandı",
+ "{0} waiting: a teammate's clock is ahead": "{0} bekliyor: bir ekip arkadaşının saati ileri",
+ "This computer's clock is ahead. Fix the date and time; your edits wait until then.": "Bu bilgisayarın saati ileri. Tarih ve saati düzeltin; düzenlemeleriniz o zamana kadar bekler.",
+ "This room uses \"newest save wins\" for every field; these rules apply only when that is off.": "Bu oda her alan için \"en yeni kayıt kazanır\" kuralını kullanır; bu kurallar yalnızca bu seçenek kapalıyken geçerlidir."
 }
