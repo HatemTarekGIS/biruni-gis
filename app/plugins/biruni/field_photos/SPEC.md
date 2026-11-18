@@ -91,3 +91,20 @@ The phone opens a static web page (served locally over Wi-Fi/hotspot or from `ht
   - **Subset rule:** the PC host (`127.0.0.1`) connects to the top `host` relays of the pool plus the top-ranked legacy relay per kind (**legacy anchor**, guaranteeing overlap with older un-updated pages). Viewers with `&p=2` connect to the top `phone` relays (a subset of `host`); viewers without `p=2` connect to all legacy relays.
   - A `4 s` health check closes and replaces any pooled member not up `8 s` after opening or with `fails >= 2` with the next ranked URL down to `scan`.
   - **Release order:** build and publish the updated static phone/viewer pages (`p/`, `d/`, `s/`) before releasing the desktop app update that adds `&p=2` to links and enables the expanded pool.
+
+## Your organization's relay
+
+- **One-click Cloudflare Worker (`org_relay.py`, `org_relay_dialog.py`, `org_relay_worker.js`):**
+  - Organizations can deploy their own unbudgeted copy of `biruni-relay` (bundled from `relay/hub.js` and `relay/worker.js`, with no `ROOM_PER_HOUR` or `DAY_BUDGET` vars) directly from Biruni's **My organization's relay…** dialog (in the GPS panel's bridge page and Field Photos' bridge mode).
+  - The user pastes a scoped Cloudflare API token (`Account · Workers Scripts · Edit` and `Account · Account Settings · Read`). The field uses password echo mode, is cleared as soon as Deploy starts, and the token stays strictly in memory inside the worker's closure — never written to disk, `QgsSettings`, logs, the activity log, or `OrgRelayError` text (where any occurrence of the token is scrubbed to `***`). Network calls use `urllib.request` directly (never `QgsNetworkAccessManager`).
+  - Only the resulting validated hostname (`ORG_RE`: `^[a-z0-9-]{1,63}\.[a-z0-9-]{1,63}\.workers\.dev$`) is stored in `QgsSettings` under `biruni/bridge/own-relay`, appended to links as `&o=<host>` after `&p=2`, and also sent over the bridge via `hello`/`rhello` and signed `{t:'org', h}` (`BROR1|<h>`).
+  - **CSP justification:** `bridge.with_csp` adds `wss://*.workers.dev` to `connect-src` for the phone photos page only (not `d/` or `s/`). Every payload sent over the organization's relay is sealed end-to-end with AES-GCM under the room key (and photos additionally with the office PC's handover key), while `script-src` remains strictly hash-only (`'sha256-...'`).
+
+## Biruni's relay is the last resort
+
+- **Fair-use limits on Biruni's shared relay (`relay/hub.js`, `relay/worker.js`, `relay/wrangler.toml`):**
+  - `ROOM_PER_HOUR = "600"`: each room has a token bucket of capacity `600` refilled at `600` messages/hour; exhausting it blocks that room for `10 minutes` (`600000 ms`) and closes messages and new joins with `1013`.
+  - `DAY_BUDGET = "1600000"`: counts accepted messages per UTC day across the hub; above the budget, every message and join closes with `1013` until the UTC day changes. State is memory-only (no storage writes, no logging, no per-IP state).
+- **Client priority and lazy own relay (`ladder_page.py`, `bridge.py`):**
+  - The fallback ladder order is: `direct`, `tunnel`, `org`, `mqtt`, `nostr`, `ntfy`, `own`, `drive`; `SIG.healthyAck()` orders by `org`, `mqtt`, `nostr`, `own`, then by `fails`.
+  - On a viewer (`!HOSTSIDE`), `OwnRelay` for Biruni's shared relay (`BR.own`) opens lazily only after `BR.ownLazyMs` (`10000 ms`) without any message from the PC, and closes once `direct`, `tunnel`, or `org` has been the primary for `60 s`. The desktop host keeps `own` open, and `OwnRelay` pings every `55 s` for `own` (`25 s` for `org`).

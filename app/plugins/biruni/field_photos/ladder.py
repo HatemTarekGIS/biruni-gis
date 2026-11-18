@@ -19,7 +19,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 DEV_RE = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
 B64U_RE = re.compile(r"^[A-Za-z0-9_-]+$")
-ROUTES = frozenset(("lan", "direct", "relay", "peer", "mqtt", "own", "tunnel", "drive"))
+ROUTES = frozenset(("lan", "direct", "relay", "peer", "mqtt", "org", "own", "tunnel", "drive"))
 MAX_INFLATE = 1 << 20
 MAX_GOT = 50_000
 MAX_ENV_AGE_MS = 48 * 3600 * 1000

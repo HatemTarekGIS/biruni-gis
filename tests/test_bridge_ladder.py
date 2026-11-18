@@ -338,6 +338,158 @@ host2.stop()
 wait(lambda: not host2.running(), 10)
 srv2.stop()
 own_srv.stop()
+
+# ---- 8. Organization relay (org) + MQTT up, lazy own stays closed, signed org message --------
+broker3 = FakeMqttBroker(split=True)
+org_srv3 = FakeOwnRelay()
+own_srv3 = FakeOwnRelay()
+SRV_PORT3 = free_port()
+os.environ["BIRUNI_BRIDGE_MQTT"] = broker3.url
+os.environ["BIRUNI_BRIDGE_TUNNEL"] = ""
+os.environ["BIRUNI_BRIDGE_OWN"] = own_srv3.url
+os.environ["BIRUNI_BRIDGE_ORG"] = org_srv3.url
+bridge.MQTT = (broker3.url,)
+bridge.LEGACY_MQTT = (broker3.url,)
+bridge.TUNNEL = ""
+bridge.OWN = own_srv3.url
+bridge.ORG = org_srv3.url
+
+csp_page3 = bridge.with_csp(bridge.phone_page(texts))
+conn_src3 = csp_page3.split("connect-src", 1)[1].split(";", 1)[0]
+check(f"ws://127.0.0.1:{org_srv3.port}" in conn_src3,
+      f"CSP connect-src includes org relay origin ({conn_src3})")
+
+srv3 = PhotoServer(os.path.join(work, "photos3"), os.path.join(work, "cert"), texts,
+                   "en", (), SRV_PORT3, ["127.0.0.1"], bind="127.0.0.1")
+key3 = bridge.new_key()
+srv3.set_ladder(key3)
+srv3.org_host = "biruni-relay.acme.workers.dev"
+host3 = bridge.BridgeHost(srv3.url("127.0.0.1") + "bridge#" + bridge.host_frag(key3))
+evs3 = []
+
+
+def drain3():
+    while not srv3.events.empty():
+        evs3.append(srv3.events.get_nowait())
+    return evs3
+
+
+check(wait(lambda: any(e[0] == "bridge" and e[1].get("type") == "relays"
+                       and (e[1].get("kinds") or {}).get("mqtt") == 1
+                       and (e[1].get("kinds") or {}).get("org") == 1 for e in drain3()), 60),
+      "hidden receiver connected to both MQTT and org relay")
+
+phone3 = Phone(profile)
+phone3.setHtml(csp_page3, QUrl(
+    f"https://phone.invalid/p/#k={key3}&i={bridge.pin(key3)}&l=en&p=2&o=biruni-relay.acme.workers.dev&m=gps"
+))
+
+
+def js3(expr):
+    res.pop("v", None)
+    phone3.runJavaScript(expr, lambda v: res.update(v=v))
+    wait(lambda: "v" in res, 10)
+    return res.get("v")
+
+
+check(wait(lambda: js3("typeof dc!=='undefined'&&!!(dc&&dc.readyState==='open')") is True, 60),
+      "phone3 direct WebRTC opens with org and MQTT up")
+
+drain3().clear()
+js3(r"""(() => {
+ BR.ice = []; BR.directMs = 1000;
+ window._blockP2P = true;
+ const scrubSdp = s => String(s || '').replace(/a=candidate:(\S+) (\d+) udp (\d+) \S+ \d+ typ host/gi,
+  'a=candidate:$1 $2 udp $3 192.0.2.1 9 typ host');
+ const origSigSend = SIG.send.bind(SIG);
+ SIG.send = async (obj, z) => {
+  if (window._blockP2P && obj && obj.t === 'offer' && obj.sdp) obj = Object.assign({}, obj, {sdp: scrubSdp(obj.sdp)});
+  return await origSigSend(obj, z);
+ };
+ window._origRTC = window.RTCPeerConnection;
+ window.RTCPeerConnection = function() {
+  const p = new window._origRTC({iceServers: []});
+  const origSetRemote = p.setRemoteDescription.bind(p);
+  p.setRemoteDescription = async (desc) => {
+   const sdp = window._blockP2P ? scrubSdp(desc.sdp) : desc.sdp;
+   return await origSetRemote({type: desc.type, sdp: sdp});
+  };
+  return p;
+ };
+ drop(); RELAY = false;
+ fix = {lat: 24.7401, lon: 46.7001, acc: 5, t: Date.now()};
+ $('me').value = 'SurveyorOrg';
+ tellPos(true);
+})();1""")
+org_pos = []
+check(wait(lambda: bool(org_pos.extend(e[1] for e in drain3() if e[0] == "pos" and e[1].get("via") == "org")
+                        or org_pos), 20) and (js3("SIG.kinds().mqtt||0") or 0) == 1,
+      f"position arrives via=org while MQTT is also up ({org_pos[:1]})")
+
+wait(lambda: False, 11.5)
+has_own = js3("SIG.relays.some(r=>r.kind==='own')")
+prim_id = js3("LAD.primary()&&LAD.primary().id")
+with own_srv3.lock:
+    own_conns = len(own_srv3.conns)
+check(has_own is False and own_conns <= 1,
+      f"phone does not open own relay while org is healthy (has_own={has_own}, primary={prim_id}, own_conns={own_conns})")
+
+host3.stop()
+wait(lambda: not host3.running(), 10)
+srv3.stop()
+
+# Link without &o= gets host from signed org message; wrongly signed one is refused
+SRV_PORT4 = free_port()
+srv4 = PhotoServer(os.path.join(work, "photos4"), os.path.join(work, "cert"), texts,
+                   "en", (), SRV_PORT4, ["127.0.0.1"], bind="127.0.0.1")
+key4 = bridge.new_key()
+srv4.set_ladder(key4)
+host4 = bridge.BridgeHost(srv4.url("127.0.0.1") + "bridge#" + bridge.host_frag(key4))
+evs4 = []
+def drain4():
+    while not srv4.events.empty():
+        evs4.append(srv4.events.get_nowait())
+    return evs4
+
+
+check(wait(lambda: any(e[0] == "bridge" and e[1].get("type") == "relays"
+                       and (e[1].get("kinds") or {}).get("mqtt") == 1 for e in drain4()), 60),
+      "host4 connected to MQTT without org initially set")
+
+phone4 = Phone(profile)
+phone4.setHtml(csp_page3, QUrl(f"https://phone.invalid/p/#k={key4}&i={bridge.pin(key4)}&l=en&p=2&m=gps"))
+
+
+def js4(expr):
+    res.pop("v", None)
+    phone4.runJavaScript(expr, lambda v: res.update(v=v))
+    wait(lambda: "v" in res, 10)
+    return res.get("v")
+
+
+check(wait(lambda: js4("typeof dc!=='undefined'&&!!(dc&&dc.readyState==='open')") is True, 60),
+      "phone4 without &o= connects to host4 over MQTT")
+
+js4(r"""(async()=>{
+ const s = await seal({t:'org', h:'biruni-relay.evil.workers.dev', n:'badorg1', ts:Date.now(), ip:'AA', is:'AA'});
+ await SIG.arrived(s, 'mqtt');
+})();1""")
+check(wait(lambda: (js4("SIG.refused||0") or 0) >= 1, 10)
+      and js4("SIG.relays.some(r=>r.kind==='org')") is False,
+      "wrongly signed org message is refused")
+
+srv4.org_host = "biruni-relay.acme.workers.dev"
+check(wait(lambda: js4("SIG.relays.some(r=>r.kind==='org'&&r.h==='biruni-relay.acme.workers.dev'&&r.up)") is True, 20),
+      "link without &o= gets org host from PC's signed org message and connects")
+
+check(not CSP_REFUSED, f"no CSP violations logged ({CSP_REFUSED})")
+
+host4.stop()
+wait(lambda: not host4.running(), 10)
+srv4.stop()
+org_srv3.stop()
+own_srv3.stop()
+broker3.stop()
 shutil.rmtree(work, ignore_errors=True)
 print("ALL PASS" if not failures else f"{len(failures)} FAILED", flush=True)
 sys.exit(1 if failures else 0)

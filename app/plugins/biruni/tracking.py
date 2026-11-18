@@ -34,6 +34,7 @@ def link_text(info):
         "direct": tr("Direct"),
         "peer": tr("Teammate"),
         "tunnel": tr("Direct address (tunnel)"),
+        "org": tr("Your organization's relay"),
         "own": tr("Biruni relay"),
         "mqtt": tr("Public relay (MQTT)"),
         "nostr": tr("Public relay (Nostr)"),
@@ -220,6 +221,9 @@ class TrackingDock(QDockWidget):
             lambda *_: QgsSettings().setValue(KEY + "detail", self.detail.currentData()))
         detail_row.addWidget(self.detail, 1)
         f4.addLayout(detail_row)
+        self.org_relay_btn = QPushButton(tr("My organization's relay…"))
+        self.org_relay_btn.clicked.connect(self._open_org_relay)
+        f4.addWidget(self.org_relay_btn)
         self.pages.addWidget(p4)
         cv.addWidget(self.pages)
         self.connect_btn = QPushButton(tr("Connect"))
@@ -299,6 +303,7 @@ class TrackingDock(QDockWidget):
     def _mode_changed(self):
         bridge = self.mode.currentData() == "bridge"
         self.pages.setCurrentIndex(3 if bridge else 2)   # the stack keeps its old pages: 2 = serial, 3 = the QR
+        self.org_relay_btn.setVisible(bridge)
         if bridge:
             self.hint4.setText(tr("Press Connect, then scan the code with the phone's camera. The page opens from "
                                   "Biruni's site with a real certificate - no warning - and the position goes "
@@ -404,6 +409,37 @@ class TrackingDock(QDockWidget):
         self._link_info = {"tunnel_adding": bool(bridge.TUNNEL)}
         self.link_lbl.setText(link_text(self._link_info))
         return True
+
+    def _refresh_org_link(self):
+        if self.source.bridge_server is None:
+            return
+        from qgis.PyQt.QtGui import QPixmap
+
+        from .field_photos import bridge
+        from .gps.browser import qr_png
+        from .gps.source import GPS_BRIDGE_KEY
+        from .i18n import lang
+
+        self.source.bridge_server.org_host = bridge.org_host()
+        key = bridge.load_key(QgsSettings(), name=GPS_BRIDGE_KEY)
+        use_drive = self.drive_box.isChecked()
+        detail = self.detail.currentData() or "normal"
+        base = (bridge.phone_url(key, lang()) + "&m=gps"
+                + ("&g=1" if use_drive else "") + ("&f=1" if detail == "full" else ""))
+        self.source._bridge_url = base
+        th = getattr(self.source.bridge_server, "tunnel_host", "")
+        url = f"{base}&t={th}" if th else base
+        pm = QPixmap()
+        pm.loadFromData(qr_png(url, 5))
+        self.qr.setPixmap(pm)
+        self.qr_url.setText(url.split("://", 1)[1].split("#", 1)[0])
+        self.qr_url.setToolTip(url)
+
+    def _open_org_relay(self):
+        from .field_photos.org_relay_dialog import OrgRelayDialog
+
+        dlg = OrgRelayDialog(self, on_changed=self._refresh_org_link)
+        dlg.exec()
 
     def _serve_browser(self):
         from qgis.core import QgsApplication

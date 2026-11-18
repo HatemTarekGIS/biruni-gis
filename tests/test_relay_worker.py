@@ -118,6 +118,66 @@ const FRAME = 'A'.repeat(32);
   assert.deepEqual(h.join('extra', T2, 1000), { close: 1013 });
 }
 
+// roomPerHour = 600: 600 messages pass, 601st closes with 1013, join while blocked closes 1013
+{
+  const h = new Hub({ roomPerHour: 600 });
+  for (let s = 0; s < 31; s++) {
+    assert.equal(h.join('rs' + s, T1, 1000).close, undefined);
+  }
+  for (let i = 0; i < 600; i++) {
+    const sid = 'rs' + Math.floor(i / 20);
+    assert.equal(h.message(sid, FRAME, 1000).close, undefined);
+  }
+  // 601st message hits empty room bucket -> 1013 and blocks room for 600000 ms
+  assert.deepEqual(h.message('rs30', FRAME, 1000), { close: 1013 });
+  assert.deepEqual(h.join('lateJoin', T1, 1000 + 300000), { close: 1013 });
+  // After 10 minutes (600000 ms), room unblocks and refilled tokens allow joining & sending
+  assert.equal(h.join('afterBlock', T1, 1000 + 600000).close, undefined);
+  assert.equal(h.message('afterBlock', FRAME, 1000 + 600000).close, undefined);
+}
+
+// roomPerHour = 600: 1 token is back after 6 s (without triggering the 10-min block)
+{
+  const h = new Hub({ roomPerHour: 600 });
+  for (let s = 0; s < 30; s++) {
+    assert.equal(h.join('t' + s, T1, 1000).close, undefined);
+  }
+  for (let i = 0; i < 600; i++) {
+    const sid = 't' + Math.floor(i / 20);
+    assert.equal(h.message(sid, FRAME, 1000).close, undefined);
+  }
+  assert.equal(h.join('t30', T1, 7000).close, undefined);
+  assert.equal(h.message('t30', FRAME, 7000).close, undefined);
+  assert.deepEqual(h.message('t30', FRAME, 7000), { close: 1013 });
+}
+
+// Default Hub() has no room or day budget
+{
+  const h = new Hub();
+  for (let s = 0; s < 35; s++) {
+    assert.equal(h.join('d' + s, T1, 1000).close, undefined);
+  }
+  for (let i = 0; i < 650; i++) {
+    const sid = 'd' + Math.floor(i / 20);
+    assert.equal(h.message(sid, FRAME, 1000).close, undefined);
+  }
+}
+
+// dayBudget closes messages and joins with 1013 and resets on the next UTC day
+{
+  const h = new Hub({ dayBudget: 5 });
+  const day0 = Date.UTC(2026, 10, 18, 23, 59, 0);
+  const day1 = Date.UTC(2026, 10, 19, 0, 0, 1);
+  assert.equal(h.join('u1', T1, day0).close, undefined);
+  for (let i = 0; i < 5; i++) {
+    assert.equal(h.message('u1', FRAME, day0 + i).close, undefined);
+  }
+  assert.deepEqual(h.message('u1', FRAME, day0 + 10), { close: 1013 });
+  assert.deepEqual(h.join('u2', T2, day0 + 20), { close: 1013 });
+  assert.equal(h.join('u2', T2, day1).close, undefined);
+  assert.equal(h.message('u2', FRAME, day1).close, undefined);
+}
+
 console.log('HUB_JS_OK');
 """
 
@@ -148,6 +208,12 @@ with open(os.path.join(RELAY, "wrangler.toml"), encoding="utf-8") as f:
     toml = f.read()
 check("new_sqlite_classes" in toml and "custom_domain" in toml,
       "wrangler.toml contains new_sqlite_classes and custom_domain")
+check('ROOM_PER_HOUR = "600"' in toml and 'DAY_BUDGET = "1600000"' in toml,
+      "wrangler.toml sets ROOM_PER_HOUR=600 and DAY_BUDGET=1600000")
+with open(os.path.join(RELAY, "worker.js"), encoding="utf-8") as f:
+    worker_js = f.read()
+check("ROOM_PER_HOUR" in worker_js and "DAY_BUDGET" in worker_js,
+      "worker.js forwards ROOM_PER_HOUR and DAY_BUDGET to Hub")
 
 # ---- 4. No token-like string in relay\ or deploy_relay.ps1 --------------------------------------
 TOKEN_RES = [

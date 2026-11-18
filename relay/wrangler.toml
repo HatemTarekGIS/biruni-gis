@@ -14,3 +14,7 @@ class_name = "HubDO"
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["HubDO"]
+
+[vars]
+ROOM_PER_HOUR = "600"
+DAY_BUDGET = "1600000"

@@ -75,14 +75,16 @@ const LAD=(()=>{
   {id:'tunnel',minGap:1000,ready:()=>SIG.relays.some(r=>r.kind==='tunnel'),
    send:s=>{const r=SIG.relays.find(x=>x.kind==='tunnel');return r?r.post(s):false},
    okAt:0,fails:0,unacked:0,waitMs:0,until:0,lastSent:-1},
-  {id:'own',relay:true,minGap:2000,ready:()=>(SIG.kinds().own||0)>0,
-   send:s=>SIG.sendRaw(s,'own'),okAt:0,fails:0,unacked:0,waitMs:0,until:0,lastSent:-1},
+  {id:'org',relay:true,minGap:2000,ready:()=>(SIG.kinds().org||0)>0,
+   send:s=>SIG.sendRaw(s,'org'),okAt:0,fails:0,unacked:0,waitMs:0,until:0,lastSent:-1},
   {id:'mqtt',relay:true,minGap:2000,ready:()=>(SIG.kinds().mqtt||0)>0,
    send:s=>SIG.sendRaw(s,'mqtt'),okAt:0,fails:0,unacked:0,waitMs:0,until:0,lastSent:-1},
   {id:'nostr',relay:true,minGap:3000,ready:()=>(SIG.kinds().nostr||0)>0,
    send:s=>SIG.sendRaw(s,'nostr'),okAt:0,fails:0,unacked:0,waitMs:0,until:0,lastSent:-1},
   {id:'ntfy',relay:true,minGap:2000,ready:()=>(SIG.kinds().ntfy||0)>0,
    send:s=>SIG.sendRaw(s,'ntfy'),okAt:0,fails:0,unacked:0,waitMs:0,until:0,lastSent:-1},
+  {id:'own',relay:true,minGap:2000,ready:()=>(SIG.kinds().own||0)>0,
+   send:s=>SIG.sendRaw(s,'own'),okAt:0,fails:0,unacked:0,waitMs:0,until:0,lastSent:-1},
   {id:'drive',minGap:20000,
    ready:()=>typeof GDRIVE!=='undefined'&&GDRIVE&&typeof DRV==='object'&&DRV.go(),
    send:()=>false,okAt:0,fails:0,unacked:0,waitMs:0,until:0,lastSent:-1}
@@ -106,6 +108,7 @@ const LAD=(()=>{
    this.seq=parseInt(kept('biruni-lad-q-'+ROOM)||'0',10)||0;
    this.upto=parseInt(kept('biruni-lad-u-'+ROOM)||'0',10)||0;
    if(typeof TUNH==='string'&&/^[a-z0-9-]{3,80}$/.test(TUNH)){this.cap=true;SIG.tunnel(TUNH)}
+   if(typeof ORGH==='string'&&/^[a-z0-9-]{1,63}\.[a-z0-9-]{1,63}\.workers\.dev$/.test(ORGH)){this.cap=true;SIG.org(ORGH)}
    if(typeof GDRIVE!=='undefined'&&GDRIVE)this.cap=true;
    this._ready=(async()=>{
     this.db=await openPosDb();
@@ -125,13 +128,17 @@ const LAD=(()=>{
    if(!this.db)return res(null);
    try{const t=this.db.transaction('p',mode),q=fn(t.objectStore('p'));
     t.oncomplete=()=>res(q&&q.result);t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error)}catch(e){rej(e)}})},
-  onCap(m){if(m&&m.lad)this.cap=true;if(m&&m.tun)this.onTun(m.tun)},
+  onCap(m){if(m&&m.lad)this.cap=true;if(m&&m.tun)this.onTun(m.tun);if(m&&m.org)this.onOrg(m.org)},
   onTun(h){if(typeof h==='string'&&/^[a-z0-9-]{3,80}$/.test(h)){
    keep('biruni-tun-'+ROOM,h);this.cap=true;SIG.tunnel(h)}},
+  onOrg(h){const v=String(h||'').trim().toLowerCase();
+   if(/^[a-z0-9-]{1,63}\.[a-z0-9-]{1,63}\.workers\.dev$/.test(v)){
+    keep('biruni-org-'+ROOM,v);this.cap=true;SIG.org(v)}},
   get backlog(){return this._items.length},
   primary(now=Date.now()){return CH.find(c=>c.ready()&&c.okAt>0&&(now-c.okAt)<=PRIMARY_TTL_MS())||null},
   viaName(){const p=this.primary();if(!p||p.id==='direct')return '';
    if(p.id==='tunnel')return T.chTunnel||'direct address';
+   if(p.id==='org')return T.chOrg||"your organization's relay";
    if(p.id==='own')return T.chOwn||'Biruni relay';
    if(p.id==='drive')return T.driveTitle||'Google Drive';
    return T.chRelay||'public relay'},

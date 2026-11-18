@@ -45,12 +45,18 @@ MQTT = relay_pool.MQTT
 LEGACY_MQTT = relay_pool.LEGACY_MQTT
 TUNNEL = "https://{h}.trycloudflare.com"
 OWN = "wss://relay.biruni-gis.com/r/"   # Biruni's own relay (relay/, deployed 2026-11-18)
+ORG = "wss://{h}/r/"
+ORG_KEY = "biruni/bridge/own-relay"
+ORG_RE = re.compile(r"^[a-z0-9-]{1,63}\.[a-z0-9-]{1,63}\.workers\.dev$")
 if os.environ.get("BIRUNI_BRIDGE_RELAYS"):  # tests: a relay on this PC
     RELAYS = LEGACY_RELAYS = tuple(os.environ["BIRUNI_BRIDGE_RELAYS"].split())
     NTFY = os.environ.get("BIRUNI_BRIDGE_NTFY", NTFY)
     MQTT = LEGACY_MQTT = tuple(os.environ.get("BIRUNI_BRIDGE_MQTT", "").split())
     TUNNEL = os.environ.get("BIRUNI_BRIDGE_TUNNEL", "")
     OWN = os.environ.get("BIRUNI_BRIDGE_OWN", "")
+    ORG = os.environ.get("BIRUNI_BRIDGE_ORG", "")
+elif "BIRUNI_BRIDGE_ORG" in os.environ:
+    ORG = os.environ["BIRUNI_BRIDGE_ORG"]
 KEY = "biruni/field-photos/bridge-key"
 
 
@@ -171,11 +177,36 @@ def pin(key):
     return identity(key)[1]
 
 
+def org_host():
+    """Validated workers.dev hostname of this organization's Biruni relay, or '' on any error."""
+    try:
+        from qgis.core import QgsSettings
+
+        h = str(QgsSettings().value(ORG_KEY, "") or "").strip().lower()
+        return h if ORG_RE.fullmatch(h) else ""
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def set_org_host(h):
+    """Store (or clear when empty) the organization's relay hostname in QgsSettings."""
+    from qgis.core import QgsSettings
+
+    val = str(h or "").strip().lower()
+    if val and not ORG_RE.fullmatch(val):
+        raise ValueError("invalid organization relay host")
+    QgsSettings().setValue(ORG_KEY, val)
+    return val
+
+
 def phone_url(key, lang="en", drive_pk=None):
     """The phone page's address (everything after # stays on the phone). drive_pk: this computer's handover public
     key when the project takes photos through Google Drive - the page then offers Drive and seals each photo for it
     (&d=1&pk=, see drive.py) even before it has ever reached this computer."""
     url = f"{PAGE_URL}#k={key}&i={pin(key)}&l={lang}&p=2"
+    oh = org_host()
+    if oh:
+        url += f"&o={oh}"
     return url + f"&d=1&pk={drive_pk}" if drive_pk else url
 
 
@@ -183,7 +214,7 @@ def phone_url(key, lang="en", drive_pk=None):
 CORE_JS = r"""
 /* ---- Biruni bridge core: shared by the phone page and the PC's hidden receiver ---- */
 const BR={relays:__RELAYS__,legacyRelays:__LEGACY_RELAYS__,ntfy:'__NTFY__',mqtt:__MQTT__,legacyMqtt:__LEGACY_MQTT__,
- poolK:__POOL_K__,tun:'__TUN__',own:'__OWN__',kind:25050,
+ poolK:__POOL_K__,tun:'__TUN__',own:'__OWN__',org:'__ORG__',ownLazyMs:10000,kind:25050,
  ice:[{urls:['stun:stun.l.google.com:19302','stun:stun.cloudflare.com:3478']}]};
 const HOSTSIDE=typeof location!=='undefined'&&location.hostname==='127.0.0.1';
 const POOLV=typeof location!=='undefined'&&new URLSearchParams((location.hash||'').slice(1)).get('p')==='2';
@@ -400,32 +431,38 @@ class TunnelRelay{
   return this.post(s)}
  close(){this.closed=true;clearInterval(this._timer);const was=this.up;this.up=false;if(was)this.sig.changed()}}
 class OwnRelay{
- constructor(sig){this.kind='own';this.url=BR.own;this.sig=sig;this.up=false;this.wait=3000;this.fails=0;
-  this._bo=0;this.backoffUntil=0;this._ping=null;this._opened=false;this._tm=0;this.open()}
+ constructor(sig,url=BR.own,kind='own'){this.kind=kind;this.url=url;this.sig=sig;this.up=false;this.wait=3000;
+  this.fails=0;this._bo=0;this.backoffUntil=0;this._ping=null;this._opened=false;this._tm=0;this.closed=false;this.open()}
  _backoff(){this._bo=this._bo?Math.min(600000,this._bo*2):60000;this.backoffUntil=Date.now()+this._bo}
- open(){if(!BR.own)return;const left=this.backoffUntil-Date.now();
+ open(){if(this.closed||!this.url)return;const left=this.backoffUntil-Date.now();
   if(left>0){clearTimeout(this._tm);this._tm=setTimeout(()=>this.open(),left);return}
-  let ws;try{ws=new WebSocket(BR.own+BK.topic)}catch(e){this.fails++;
+  const base=this.url.endsWith('/')?this.url:this.url+'/';
+  let ws;try{ws=new WebSocket(base+BK.topic)}catch(e){this.fails++;
    if(this.fails>=3)this._backoff();return this.later()}
   this.ws=ws;this._opened=false;
   ws.onopen=()=>{this._opened=true;this.up=true;this.wait=3000;this.fails=0;this._bo=0;this.backoffUntil=0;
-   clearInterval(this._ping);
-   this._ping=setInterval(()=>{if(this.ws===ws&&ws.readyState===1)try{ws.send('p')}catch(x){}},25000);
+   clearInterval(this._ping);const pingMs=this.kind==='own'?55000:25000;
+   this._ping=setInterval(()=>{if(this.ws===ws&&ws.readyState===1)try{ws.send('p')}catch(x){}},pingMs);
    this.sig.changed()};
-  ws.onmessage=e=>{if(typeof e.data==='string'&&e.data!=='q')this.sig.arrived(e.data,'own',this)};
+  ws.onmessage=e=>{if(typeof e.data==='string'&&e.data!=='q')this.sig.arrived(e.data,this.kind,this)};
   ws.onclose=e=>{clearInterval(this._ping);const was=this.up;this.up=false;if(was)this.sig.changed();
+   if(this.closed)return;
    if(e&&e.code===1013)this._backoff();
    else if(!this._opened){this.fails++;if(this.fails>=3)this._backoff()}
    this.later()};
   ws.onerror=()=>{try{ws.close()}catch(x){}}}
- later(){const ms=Math.max(this.wait+Math.random()*1000,this.backoffUntil-Date.now());
+ later(){if(this.closed)return;const ms=Math.max(this.wait+Math.random()*1000,this.backoffUntil-Date.now());
   clearTimeout(this._tm);this._tm=setTimeout(()=>this.open(),ms);this.wait=Math.min(this.wait*2,60000)}
+ close(){this.closed=true;clearTimeout(this._tm);clearInterval(this._ping);const was=this.up;this.up=false;
+  try{if(this.ws)this.ws.close()}catch(x){}if(was)this.sig.changed()}
  send(s){if(this.up&&Date.now()>=this.backoffUntil&&typeof s==='string'&&s.length<=90000)
   try{this.ws.send(s)}catch(e){}}
  sendWait(ev,s){if(typeof ev==='string'&&typeof s!=='string')s=ev;
   if(!this.up||Date.now()<this.backoffUntil||typeof s!=='string'||s.length>90000)return Promise.resolve(false);
   try{this.ws.send(s);return Promise.resolve(this.up)}catch(e){return Promise.resolve(false)}}}
-const SIG={relays:[],seen:new Set(),loose:new Set(),on:null,onchange:null,_lastChunk:0,_tun:null,_hc:null,_tried:null,
+const SIG={relays:[],seen:new Set(),loose:new Set(),on:null,onchange:null,_lastChunk:0,_tun:null,_org:null,_own:null,
+ _hc:null,_lazyTm:null,_startedAt:0,_lastPcAt:0,_pcHeard:false,_goodSince:0,_tried:null,
+ notePc(){this._pcHeard=true;this._lastPcAt=Date.now()},
  _pick(kind){
   const pool=(BK&&BK.order&&BK.order[kind])||(kind==='nostr'?BR.relays:BR.mqtt)||[];
   const leg=(kind==='nostr'?BR.legacyRelays:BR.legacyMqtt)||[];
@@ -434,6 +471,17 @@ const SIG={relays:[],seen:new Set(),loose:new Set(),on:null,onchange:null,_lastC
    if(anc&&!top.includes(anc))top.push(anc);return top}
   if(POOLV)return pool.slice(0,cfg.phone);
   return leg.slice()},
+ _checkOwn(){if(HOSTSIDE||!BR.own)return;const now=Date.now();
+  const p=typeof LAD==='object'&&LAD.primary?LAD.primary(now):null;
+  const good=!!(p&&(p.id==='direct'||p.id==='tunnel'||p.id==='org'));
+  if(good){if(!this._goodSince)this._goodSince=now;
+   if(this._own&&(now-this._goodSince)>=60000){this._own.close();this.relays=this.relays.filter(r=>r!==this._own);this._own=null}
+   return}
+  this._goodSince=0;if(this._own)return;
+  const lm=BR.ownLazyMs!=null?BR.ownLazyMs:10000;
+  if(typeof lineOpen==='function'&&lineOpen())return;
+  if((!this._pcHeard&&(now-this._startedAt)>=lm)||(typeof LAD==='object'&&(now-this._lastPcAt)>=lm)){
+   this._own=new OwnRelay(this,BR.own,'own');this.relays.push(this._own)}},
  _health(){const now=Date.now();
   for(let i=0;i<this.relays.length;i++){const r=this.relays[i];
    if(r.kind!=='nostr'&&r.kind!=='mqtt')continue;
@@ -444,24 +492,37 @@ const SIG={relays:[],seen:new Set(),loose:new Set(),on:null,onchange:null,_lastC
    const nextUrl=pool.slice(0,scan).find(u=>!tried.has(u));
    if(!nextUrl)continue;
    tried.add(nextUrl);r.close();
-   this.relays[i]=r.kind==='nostr'?new NostrRelay(nextUrl,this):new MqttRelay(nextUrl,this)}},
- start(onMsg,onChange){this.on=onMsg;this.onchange=onChange;clearInterval(this._hc);
+   this.relays[i]=r.kind==='nostr'?new NostrRelay(nextUrl,this):new MqttRelay(nextUrl,this)}
+  this._checkOwn()},
+ start(onMsg,onChange){this.on=onMsg;this.onchange=onChange;clearInterval(this._hc);clearTimeout(this._lazyTm);
+  if(this._own){this._own.close();this._own=null}
+  if(this._org){this._org.close();this._org=null}
+  if(this._tun){this._tun.close();this._tun=null}
+  this._startedAt=Date.now();this._lastPcAt=this._startedAt;this._pcHeard=false;this._goodSince=0;
   const nUrls=this._pick('nostr'),mUrls=this._pick('mqtt');
   this._tried={nostr:new Set(nUrls),mqtt:new Set(mUrls)};
   this.relays=nUrls.map(u=>new NostrRelay(u,this)).concat([new NtfyRelay(this)])
-   .concat(mUrls.map(u=>new MqttRelay(u,this)))
-   .concat(BR.own?[new OwnRelay(this)]:[]);
+   .concat(mUrls.map(u=>new MqttRelay(u,this)));
+  if(HOSTSIDE&&BR.own){this._own=new OwnRelay(this,BR.own,'own');this.relays.push(this._own)}
+  else if(!HOSTSIDE&&BR.own){const lm=BR.ownLazyMs!=null?BR.ownLazyMs:10000;
+   this._lazyTm=setTimeout(()=>this._checkOwn(),lm)}
   this._hc=setInterval(()=>this._health(),4000)},
  tunnel(h){if(!BR.tun||!/^[a-z0-9-]{3,80}$/.test(String(h||'')))return null;
   if(this._tun&&this._tun.h===h&&!this._tun.closed)return this._tun;
   if(this._tun){this._tun.close();this.relays=this.relays.filter(r=>r!==this._tun)}
   const r=new TunnelRelay(h,this);this._tun=r;this.relays.push(r);return r},
+ org(h){const v=String(h||'').trim().toLowerCase();
+  if(!BR.org||!/^[a-z0-9-]{1,63}\.[a-z0-9-]{1,63}\.workers\.dev$/.test(v))return null;
+  if(this._org&&this._org.h===v&&!this._org.closed)return this._org;
+  if(this._org){this._org.close();this.relays=this.relays.filter(r=>r!==this._org)}
+  const r=new OwnRelay(this,BR.org.replace('{h}',v),'org');r.h=v;this._org=r;this.relays.push(r);return r},
  up(){return this.relays.filter(r=>r.up).length},
  hosts(){const out=[];for(const r of this.relays)if(r.up&&r.url){try{
    const h=new URL(r.url).hostname;if(h&&!out.includes(h))out.push(h)}catch(e){}}return out},
  kinds(){const k={};for(const r of this.relays){const n=r.kind||'nostr';k[n]=(k[n]||0)+(r.up?1:0)}return k},
- healthyAck(){return this.relays.filter(r=>r.up&&typeof r.sendWait==='function'&&Date.now()>=(r.backoffUntil||0))
-  .sort((a,b)=>(a.fails||0)-(b.fails||0))},
+ healthyAck(){const ord={org:0,mqtt:1,nostr:2,own:3};
+  return this.relays.filter(r=>r.up&&typeof r.sendWait==='function'&&Date.now()>=(r.backoffUntil||0))
+   .sort((a,b)=>((ord[a.kind]??9)-(ord[b.kind]??9))||((a.fails||0)-(b.fails||0)))},
  healthyNostr(){return this.healthyAck()},
  changed(){if(this.onchange)this.onchange(this.up())},
  async _sign(obj){
@@ -469,7 +530,8 @@ const SIG={relays:[],seen:new Set(),loose:new Set(),on:null,onchange:null,_lastC
   else if(obj.t==='rhello'&&ID.sk){const g=await IDSIGN('BRH0|'+obj.sid+'|'+(obj.pk||''));obj.ip=g.pub;obj.is=g.sig}
   else if(obj.t==='rack'&&ID.sk){
    const g=await IDSIGN('BRAK1|'+obj.id+'|'+obj.kind+'|'+obj.nonce);obj.ip=g.pub;obj.is=g.sig}
-  else if(obj.t==='tun'&&ID.sk){const g=await IDSIGN('BRTN1|'+obj.h);obj.ip=g.pub;obj.is=g.sig}},
+  else if(obj.t==='tun'&&ID.sk){const g=await IDSIGN('BRTN1|'+obj.h);obj.ip=g.pub;obj.is=g.sig}
+  else if(obj.t==='org'&&ID.sk){const g=await IDSIGN('BROR1|'+obj.h);obj.ip=g.pub;obj.is=g.sig}},
  async send(obj,z){obj.n=rid();obj.ts=Date.now();this.seen.add(obj.n);await this._sign(obj);
   const s=await seal(obj,z);let ev=null;
   try{ev=await nostrEvent(s,BK.topic)}catch(e){}for(const r of this.relays)r.send(s,ev)},
@@ -509,6 +571,10 @@ const SIG={relays:[],seen:new Set(),loose:new Set(),on:null,onchange:null,_lastC
    this.refused=(this.refused||0)+1;return}
   if(o.t==='tun'&&ID.pin&&!await IDOK(o.ip,o.is,'BRTN1|'+o.h)){
    this.refused=(this.refused||0)+1;return}
+  if(o.t==='org'&&ID.pin&&!await IDOK(o.ip,o.is,'BROR1|'+o.h)){
+   this.refused=(this.refused||0)+1;return}
+  if(o.t==='answer'||o.t==='rhello'||o.t==='rguide'||o.t==='rack'||o.t==='lack'||o.t==='tun'||o.t==='org'
+   ||(typeof o.t==='string'&&o.t.startsWith('mesh_')))this.notePc();
   if(this.on)this.on(o,kind,s,relay)}};
 /* a private line through a teammate's phone: the phone and the PC agree on a key of their own (ECDH on P-256),
    so the phone that carries the messages cannot read them. Every frame after the first is sealed; its first
@@ -532,6 +598,10 @@ BOOT_JS = r"""
 const HP=new URLSearchParams(location.hash.slice(1)),KEYB=HP.get('k')||'';HASHL=HP.get('l');ROOM=KEYB.slice(0,12);
 const _TH=HP.get('t')||'';
 const TUNH=/^[a-z0-9-]{3,80}$/.test(_TH)?(keep('biruni-tun-'+ROOM,_TH),_TH):(kept('biruni-tun-'+ROOM)||'');
+const _ORG_RE=/^[a-z0-9-]{1,63}\.[a-z0-9-]{1,63}\.workers\.dev$/;
+const _OH=(HP.get('o')||'').trim().toLowerCase();
+const _OK=_ORG_RE.test(_OH)?(keep('biruni-org-'+ROOM,_OH),_OH):(kept('biruni-org-'+ROOM)||'');
+const ORGH=_ORG_RE.test(_OK)?_OK:'';
 GPSMODE=HP.get('m')==='gps';const VIAONLY=HP.get('v')==='1',GDRIVE=GPSMODE&&HP.get('g')==='1',DRFULL=HP.get('f')==='1';
 /* d=1&pk=: this project takes photos through Google Drive; pk is the computer's key, so photos are sealed for it
    before the phone ever reaches the computer (drive_page.py) */
@@ -574,12 +644,15 @@ async function handleAck(m){const f=acks.get(m.id);if(!f)return;
    SIG.refused=(SIG.refused||0)+1;return}}
  acks.delete(m.id);f.resolve(m.status===200&&f.kind==='preview'?202:m.status)}
 /* what the PC says, however it comes */
-function fromPc(m){if(m.t==='hello')hello(m);else if(m.t==='guide')setGuide(m.g);
+function fromPc(m){SIG.notePc();if(m.t==='hello')hello(m);else if(m.t==='guide')setGuide(m.g);
  else if(m.t==='ack')handleAck(m);else if(m.t==='dgot'&&typeof driveGot==='function')driveGot(m);
  else if(m.t==='la'&&typeof m.s==='string')SIG.arrived(m.s,'direct');
  else if(m.t==='tun'&&typeof LAD==='object'){
   if(!ID.pin)LAD.onTun(m.h);
-  else IDOK(m.ip,m.is,'BRTN1|'+m.h).then(ok=>{if(ok)LAD.onTun(m.h);else SIG.refused=(SIG.refused||0)+1})}}
+  else IDOK(m.ip,m.is,'BRTN1|'+m.h).then(ok=>{if(ok)LAD.onTun(m.h);else SIG.refused=(SIG.refused||0)+1})}
+ else if(m.t==='org'&&typeof LAD==='object'){
+  if(!ID.pin)LAD.onOrg(m.h);
+  else IDOK(m.ip,m.is,'BROR1|'+m.h).then(ok=>{if(ok)LAD.onOrg(m.h);else SIG.refused=(SIG.refused||0)+1})}}
 function failAcks(){for(const [id,f] of acks)if(f.kind==='original'||f.line){acks.delete(id);f.reject(new Error('closed'))}}
 function drop(){const p=pc;pc=null;dc=null;linking=false;if(p)try{p.close()}catch(e){}
  for(const [k,c] of carried){try{if(c)c.close()}catch(e){}}carried.clear();if(!lineOpen())failAcks()}
@@ -656,7 +729,8 @@ async function onSignal(o,kind){
  else if(o.t==='rguide')setGuide(o.g);
  else if(o.t==='rack')handleAck(o);
  else if(o.t==='lack'&&typeof LAD==='object')LAD.onAck(o,kind);
- else if(o.t==='tun'&&typeof LAD==='object')LAD.onTun(o.h)}
+ else if(o.t==='tun'&&typeof LAD==='object')LAD.onTun(o.h);
+ else if(o.t==='org'&&typeof LAD==='object')LAD.onOrg(o.h)}
 async function sendRelayPreview(it){
  if(!PCKEY)throw new Error('nokey');
  if(!it.prev&&it.meta&&!it.meta.sealed)it=await put(it);
@@ -734,9 +808,9 @@ async function onRelay(o,kind,s,relay){
  if(o.t==='offer')return onOffer(o);
  if(o.t==='rhi'){tell({type:'phone',ua:String(o.ua||'').slice(0,160),relay:true});
   await SIG.send({t:'rhello',sid:String(o.sid||''),kinds:CFG.kinds,lang:CFG.lang,form:CFG.form||[],pk:CFG.pk||'',
-   lad:CFG.lad?1:0,tun:CFG.tun||''},true);
+   lad:CFG.lad?1:0,tun:CFG.tun||'',org:CFG.org||''},true);
   if(GV)try{await SIG.send({t:'rguide',g:JSON.parse(GUIDE_TXT)},true)}catch(e){}return}
- if(o.t==='rpos'){const p=Object.assign({},o.p||{},{route:kind==='own'?'own':'relay'});
+ if(o.t==='rpos'){const p=Object.assign({},o.p||{},{route:(kind==='own'||kind==='org')?kind:'relay'});
   fetch('pos',{method:'POST',body:JSON.stringify(p)}).catch(()=>{});return}
  if(o.t==='rchunk'&&o.id&&o.nonce&&+o.k>0&&+o.k<=128&&+o.i>=0&&+o.i<+o.k&&typeof o.d==='string'){
   const key=o.id+':'+o.nonce;let e=rphotos.get(key);
@@ -794,14 +868,14 @@ function serve(ch,end,pc){ch.binaryType='arraybuffer';const P={send:s=>ch.send(s
     if(m.t==='hi'&&m.e&&!v.key){const kp=await E2E.pair();v.key=await E2E.key(kp.kp,m.e);ports.add(v.P);
      const g=await IDSIGN('BRH1|'+m.e+'|'+kp.pub)||{};
      ch.send(JSON.stringify({t:'fwd',to:v.id,m:JSON.stringify({t:'hello',kinds:CFG.kinds,lang:CFG.lang,
-      form:CFG.form||[],pk:CFG.pk||'',lad:CFG.lad?1:0,tun:CFG.tun||'',e:kp.pub,ip:g.pub,is:g.sig})}));
+      form:CFG.form||[],pk:CFG.pk||'',lad:CFG.lad?1:0,tun:CFG.tun||'',org:CFG.org||'',e:kp.pub,ip:g.pub,is:g.sig})}));
      tell({type:'phone',ua:String(m.ua||'').slice(0,160),via:true});if(GV)v.P.send('{"t":"guide","g":'+GUIDE_TXT+'}')}
     return}
    if(!v.key)return;const p=await E2E.open(v.key,data);
    if(p[0]===0)await handle(v.P,dec.decode(p.slice(1)));else await handle(v.P,p.slice(1).buffer)}).catch(()=>{})};
  const gone=id=>{const v=carried.get(id);if(v){ports.delete(v.P);carried.delete(id)}};
  ch.onopen=()=>{ports.add(P);ch.send(JSON.stringify({t:'hello',kinds:CFG.kinds,lang:CFG.lang,form:CFG.form||[],
-  pk:CFG.pk||'',lad:CFG.lad?1:0,tun:CFG.tun||''}));
+  pk:CFG.pk||'',lad:CFG.lad?1:0,tun:CFG.tun||'',org:CFG.org||''}));
   if(GV)ch.send('{"t":"guide","g":'+GUIDE_TXT+'}')};
  ch.onclose=()=>{ports.delete(P);for(const id of [...carried.keys()])gone(id);end()};
  ch.onmessage=e=>{
@@ -822,7 +896,7 @@ class LocalRelay{
    const a=await r.json();if(Array.isArray(a))for(const m of a)if(typeof m==='string')this.sig.arrived(m,'tunnel',this)}
   catch(e){if(this.up){this.up=false;this.sig.changed()}await sleep(3000)}}}
  send(s){if(this.up&&typeof s==='string')fetch('x-push',{method:'POST',body:s}).catch(()=>{})}}
-let LAST_TUN='';
+let LAST_TUN='',LAST_ORG='';
 setInterval(async()=>{try{
  const c=await (await fetch('bridge-config',{cache:'no-store'})).json();
  if(c&&typeof c==='object'){CFG=c;
@@ -830,11 +904,17 @@ setInterval(async()=>{try{
    await SIG.send({t:'tun',h:CFG.tun},true);
    const g=await IDSIGN('BRTN1|'+CFG.tun)||{};
    const msg=JSON.stringify({t:'tun',h:CFG.tun,ip:g.pub,is:g.sig});
+   for(const p of ports)try{p.send(msg)}catch(e){}}
+  if(CFG.org&&CFG.org!==LAST_ORG){LAST_ORG=CFG.org;SIG.org(CFG.org);
+   await SIG.send({t:'org',h:CFG.org},true);
+   const g=await IDSIGN('BROR1|'+CFG.org)||{};
+   const msg=JSON.stringify({t:'org',h:CFG.org,ip:g.pub,is:g.sig});
    for(const p of ports)try{p.send(msg)}catch(e){}}}}catch(e){}},10000);
 (async()=>{try{CFG=await (await fetch('bridge-config',{cache:'no-store'})).json()}catch(e){}
- LAST_TUN=CFG.tun||'';
+ LAST_TUN=CFG.tun||'';LAST_ORG=CFG.org||'';
  await bridgeKey(HP.get('k')||'');
  SIG.start(onRelay,n=>tell({type:'relays',up:n,of:SIG.relays.length,kinds:SIG.kinds(),hosts:SIG.hosts()}));
+ if(CFG.org)SIG.org(CFG.org);
  SIG.relays.push(new LocalRelay(SIG));if(CFG.lad)SIG.changed();
  tell({type:'started'})})();
 """
@@ -886,7 +966,8 @@ def _core():
             .replace("__LEGACY_MQTT__", json.dumps(leg_mqtt))
             .replace("__POOL_K__", json.dumps(relay_pool.K))
             .replace("__TUN__", TUNNEL)
-            .replace("__OWN__", OWN))
+            .replace("__OWN__", OWN)
+            .replace("__ORG__", ORG))
 
 
 def receiver_page():
@@ -916,7 +997,7 @@ def _origin(url):
     return f"{p.scheme}://{p.netloc}"
 
 
-def connect_sources(tunnel=False):
+def connect_sources(tunnel=False, org=False):
     """Unique connect-src origins for public bridge pages."""
     sources = [_origin(u) for u in RELAYS if u]
     if NTFY:
@@ -927,6 +1008,8 @@ def connect_sources(tunnel=False):
         sources.append(_origin(OWN))
     if tunnel and TUNNEL:
         sources.append(_origin(TUNNEL.replace("{h}", "*")))
+    if org and ORG:
+        sources.append(_origin(ORG.replace("{h}", "*.workers.dev")))
     return list(dict.fromkeys(sources))
 
 
@@ -939,7 +1022,7 @@ def with_csp(page, connect=(), frames=()):
         return "'sha256-" + base64.b64encode(hashlib.sha256(body.encode("utf-8")).digest()).decode() + "'"
 
     assert page.count("<script>") == 1 and page.count("<style>") == 1 and "<script " not in page, "one inline script"
-    conn = list(dict.fromkeys([*connect_sources(True), *map(_origin, connect)]))
+    conn = list(dict.fromkeys([*connect_sources(True, org=True), *map(_origin, connect)]))
     frame = " ".join(map(_origin, frames)) or "'none'"
     csp = "; ".join([
         "default-src 'none'", f"script-src {sha('script')}", f"style-src {sha('style')}",

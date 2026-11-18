@@ -6,7 +6,7 @@
  */
 import { Hub } from './hub.js';
 
-const TOPIC_RE = /^\/r\/(biruni[0-9a-f]{40})$/;
+const PATH_RE = /^\/r\/(biruni[0-9a-f]{40})$/;
 const ALLOWED_ORIGINS = new Set(['https://photos.biruni-gis.com', 'https://biruni-gis.com']);
 const LOCAL_ORIGIN_RE = /^https:\/\/127\.0\.0\.1:([1-9]\d{0,4})$/;
 
@@ -21,7 +21,7 @@ export class HubDO {
   constructor(ctx, env) {
     this.ctx = ctx;
     this.env = env;
-    this.hub = new Hub();
+    this.hub = new Hub({ roomPerHour: +env.ROOM_PER_HOUR || 0, dayBudget: +env.DAY_BUDGET || 0 });
     this.ids = new WeakMap();
     this.sockets = new Map();
     this.ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('p', 'q'));
@@ -53,7 +53,7 @@ export class HubDO {
   }
 
   async fetch(request) {
-    const m = TOPIC_RE.exec(new URL(request.url).pathname);
+    const m = PATH_RE.exec(new URL(request.url).pathname);
     if (!m) return new Response('Not found', { status: 404 });
     const topic = m[1];
     const now = Date.now();
@@ -116,7 +116,7 @@ export class HubDO {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (!TOPIC_RE.test(url.pathname)) {
+    if (!PATH_RE.test(url.pathname)) {
       return new Response('Not found', { status: 404 });
     }
     if ((request.headers.get('Upgrade') || '').toLowerCase() !== 'websocket') {

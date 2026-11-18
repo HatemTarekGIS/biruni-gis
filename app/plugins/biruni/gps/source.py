@@ -143,6 +143,7 @@ class NmeaSource(QObject):
                                              ["127.0.0.1"], bind="127.0.0.1")
             key = bridge.load_key(QgsSettings(), name=GPS_BRIDGE_KEY)
             self.bridge_server.set_ladder(key)
+            self.bridge_server.org_host = bridge.org_host()
             self.bridge = bridge.BridgeHost(self.bridge_server.url("127.0.0.1") + "bridge#" + bridge.host_frag(key))
             self.tunnel = ladder.TunnelLink(self.bridge_server.port)
         except OSError as e:

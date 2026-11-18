@@ -134,7 +134,7 @@ def clean_pos(m):
             "net": net if net in NETS else "", "eff": eff if eff in ("slow-2g", "2g", "3g", "4g") else "",
             "down": _num(m.get("down"), 0, 10000), "ping": _num(m.get("ping"), 0, 120000),
             "crtt": _num(m.get("crtt"), 0, 60000),
-            "route": route if route in ("lan", "direct", "relay", "peer", "mqtt", "own", "tunnel", "drive") else "",
+            "route": route if route in ("lan", "direct", "relay", "peer", "mqtt", "org", "own", "tunnel", "drive") else "",
             "bat": _num(m.get("bat"), 0, 1), "chg": m.get("chg") is True}
 
 
@@ -782,6 +782,7 @@ class PhotoServer:
         self.xin = None
         self.xout = None
         self.tunnel_host = ""
+        self.org_host = ""
         self._xout_seq = 0
         self._xlock = threading.Lock()
         self._x_fails = deque()
@@ -1077,6 +1078,7 @@ class PhotoServer:
         self.xin = queue.Queue()
         self.xout = deque(maxlen=64)
         self.tunnel_host = ""
+        self.org_host = ""
         self._xout_seq = 0
         self._x_fails = deque()
         self._x_block_until = 0.0
@@ -1098,6 +1100,7 @@ class PhotoServer:
         if self.ladder is not None:
             d["lad"] = 1
             d["tun"] = self.tunnel_host or ""
+            d["org"] = self.org_host or ""
         return json.dumps(d, ensure_ascii=False).encode("utf-8")
 
     def set_guide(self, items):
@@ -1243,6 +1246,7 @@ def phone_texts(tr):
             "ladVia": tr("Sending through: {name}"),
             "chTunnel": tr("direct address"),
             "chRelay": tr("public relay"),
+            "chOrg": tr("your organization's relay"),
             "chOwn": tr("Biruni relay")}
 
 

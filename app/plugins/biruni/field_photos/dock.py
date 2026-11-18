@@ -447,6 +447,7 @@ def _route_text(route):
         "lan": tr("Local network"),
         "tunnel": tr("Tunnel"),
         "mqtt": tr("Public relay (MQTT)"),
+        "org": tr("Your organization's relay"),
         "own": tr("Biruni relay"),
         "drive": tr("Google Drive"),
     }.get(route or "", "—")
@@ -850,6 +851,10 @@ class FieldPhotosDock(QDockWidget):
                                     "send to this computer."))
         self.new_code.clicked.connect(self._new_code)
         cv.addWidget(self.new_code)
+        self.org_relay_btn = QPushButton(tr("My organization's relay…"))
+        self.org_relay_btn.setToolTip(tr("Deploy or clear your own organization relay on Cloudflare."))
+        self.org_relay_btn.clicked.connect(self._open_org_relay)
+        cv.addWidget(self.org_relay_btn)
         self.qr_mode = QComboBox()
         self.qr_mode.addItem(tr("One QR code for all surveyors (each writes their name)"), "shared")
         self.qr_mode.addItem(tr("Separate QR code per surveyor (verified identity & instant revoke)"), "per_surveyor")
@@ -1130,6 +1135,7 @@ class FieldPhotosDock(QDockWidget):
     def _show_hint(self):
         self.own.setVisible(self.mode.currentData() == "own")
         self.new_code.setVisible(self.mode.currentData() == "bridge")
+        self.org_relay_btn.setVisible(self.mode.currentData() == "bridge")
         if self.mode.currentData() == "bridge":
             self.hint.setText(tr("Works wherever the phone has mobile data, with nothing to download or set up. "
                                  "The phone and this computer find each other through public relays, encrypted, "
@@ -1271,6 +1277,7 @@ class FieldPhotosDock(QDockWidget):
 
         key = bridge.load_key(QgsSettings())
         self.server.set_ladder(key)
+        self.server.org_host = bridge.org_host()
         try:
             self.bridge = bridge.BridgeHost(self.server.url("127.0.0.1") + "bridge#" + bridge.host_frag(key))
         except OSError as e:
@@ -2124,6 +2131,27 @@ class FieldPhotosDock(QDockWidget):
         self._base_qr_url = self._base_qr_tip = url
         self._show_qr(url, url)
         self.url.setText(bridge.PAGE_URL.split("://", 1)[1])
+
+    def _refresh_org_link(self):
+        from . import bridge
+
+        if self.server is not None and self.bridge is not None:
+            self.server.org_host = bridge.org_host()
+        if self.bridge is None or not self._base_qr_url.startswith(bridge.PAGE_URL):
+            return
+        url = bridge.phone_url(bridge.load_key(QgsSettings()), lang(), self._drive_pk())
+        if self.server is not None and getattr(self.server, "tunnel_host", ""):
+            url += f"&t={self.server.tunnel_host}"
+        self._base_qr_url = self._base_qr_tip = url
+        if self.qr_mode.currentData() != "per_surveyor":
+            self._show_qr(url, url)
+            self.url.setText(bridge.PAGE_URL.split("://", 1)[1])
+
+    def _open_org_relay(self):
+        from .org_relay_dialog import OrgRelayDialog
+
+        dlg = OrgRelayDialog(self, on_changed=self._refresh_org_link)
+        dlg.exec()
 
     def show_shared_qr(self):
         base = self._current_base_url()

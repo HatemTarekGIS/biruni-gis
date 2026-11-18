@@ -397,8 +397,8 @@ if bridge.NTFY:
     pool_origins.extend([f"{p_n.scheme}://{p_n.netloc}", f"ws{'s' if p_n.scheme == 'https' else ''}://{p_n.netloc}"])
 
 check(all(o in conn_tokens for o in pool_origins), "with_csp connect-src includes every pool origin")
-check(all("*" not in tok or "trycloudflare.com" in tok for tok in conn_tokens),
-      "with_csp has no wildcard except tunnel")
+check(all("*" not in tok or "trycloudflare.com" in tok or "workers.dev" in tok for tok in conn_tokens),
+      "with_csp has no wildcard except tunnel and org")
 for path_key in ("d/index.html", "s/index.html"):
     ct = pol[path_key]["connect"]
     check(all(o in ct for o in pool_origins) and all("*" not in tok for tok in ct),
@@ -465,6 +465,71 @@ fx2 = fix_from_json({"lat": 24.7, "lon": 46.6, "heading": 180})
 check(fx1.course == 95 and fx2.course == 180, "fix_from_json uses cog when present else heading")
 lt1 = link_text({"relays": {"hosts": ["a.io", "b.io", "c.io", "d.io", "e.io", "f.io"]}})
 check("a.io, b.io, c.io, d.io +2" in lt1, f"link_text formats 4 hosts +2 ({lt1!r})")
+
+# ---- 6. Lazy own relay, ping intervals, and healthyAck order ----------------------------------
+OWN_LAZY_JS = r"""
+let fakeNow=100000;
+globalThis.Date=class extends Date{constructor(...a){super(...(a.length?a:[fakeNow]))}static now(){return fakeNow}};
+const intervals=[],sockets=[];
+const origSetInterval=globalThis.setInterval,origClearInterval=globalThis.clearInterval;
+globalThis.setInterval=(fn,ms)=>{const id={fn,ms,cleared:false};intervals.push(id);return id};
+globalThis.clearInterval=(id)=>{if(id)id.cleared=true};
+globalThis.setTimeout=(fn,ms)=>({fn,ms});
+globalThis.clearTimeout=()=>{};
+globalThis.WebSocket=class{
+ constructor(url,proto){this.url=url;this.proto=proto;this.readyState=1;sockets.push(this)}
+ send(){}
+ close(){this.readyState=3;if(this.onclose)this.onclose({})}
+};
+""" + "const location={hostname:'photos.biruni-gis.com',hash:'#k=test&p=2'};\n" + bridge._core() + r"""
+let fakePrim=null;
+globalThis.LAD={primary:()=>fakePrim};
+(async()=>{
+ await bridgeKey(process.argv[2]);
+ SIG.start(()=>{},()=>{});
+ const atStart=SIG.relays.some(r=>r.kind==='own');
+ fakeNow+=5000;SIG._health();
+ const at5s=SIG.relays.some(r=>r.kind==='own');
+ fakeNow+=5000;SIG._health();
+ const at10s=SIG.relays.some(r=>r.kind==='own');
+ const ownRelay=SIG.relays.find(r=>r.kind==='own');
+ if(ownRelay&&ownRelay.ws&&ownRelay.ws.onopen)ownRelay.ws.onopen();
+ const ownPing=intervals.filter(x=>!x.cleared).slice(-1)[0].ms;
+ const orgRelay=SIG.org('biruni-relay.acme.workers.dev');
+ if(orgRelay&&orgRelay.ws&&orgRelay.ws.onopen)orgRelay.ws.onopen();
+ const orgPing=intervals.filter(x=>!x.cleared).slice(-1)[0].ms;
+
+ // healthyAck order: org, mqtt, nostr, own, then fails
+ const mk=(k,f)=>({kind:k,up:true,fails:f,backoffUntil:0,sendWait:async()=>true});
+ SIG.relays=[mk('own',0),mk('nostr',0),mk('mqtt',2),mk('mqtt',0),mk('org',1),mk('org',0)];
+ const ackOrder=SIG.healthyAck().map(r=>r.kind+':'+r.fails);
+
+ // Close own after org has been primary for 60 s
+ SIG.relays=[ownRelay,orgRelay];
+ SIG._own=ownRelay;
+ fakePrim={id:'org'};
+ fakeNow+=1000;SIG._health();
+ const ownAt1s=SIG.relays.some(r=>r.kind==='own');
+ fakeNow+=60000;SIG._health();
+ const ownAt61s=SIG.relays.some(r=>r.kind==='own');
+
+ console.log(JSON.stringify({atStart,at5s,at10s,ownPing,orgPing,ackOrder,ownAt1s,ownAt61s}));
+ process.exit(0);
+})();
+"""
+p_own = os.path.join(work, "own_lazy.js")
+with open(p_own, "w", encoding="utf-8") as fh:
+    fh.write(OWN_LAZY_JS)
+ro = subprocess.run([node, p_own, k_test], capture_output=True, text=True, encoding="utf-8", timeout=20)
+od = json.loads(ro.stdout.strip()) if ro.returncode == 0 else {}
+check(ro.returncode == 0 and od.get("atStart") is False and od.get("at5s") is False and od.get("at10s") is True,
+      f"viewer opens own relay lazily only after BR.ownLazyMs=10s ({od})")
+check(od.get("ownPing") == 55000 and od.get("orgPing") == 25000,
+      f"OwnRelay pings 55s for own and 25s for org ({od.get('ownPing')}, {od.get('orgPing')})")
+check(od.get("ackOrder") == ["org:0", "org:1", "mqtt:0", "mqtt:2", "nostr:0", "own:0"],
+      f"healthyAck orders by kind (org, mqtt, nostr, own) then fails ({od.get('ackOrder')})")
+check(od.get("ownAt1s") is True and od.get("ownAt61s") is False,
+      f"viewer closes own relay after org has been primary for 60 s ({od})")
 
 shutil.rmtree(work, ignore_errors=True)
 print("ALL PASS" if not failures else f"{len(failures)} FAILED", flush=True)
