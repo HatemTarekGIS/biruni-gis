@@ -72,12 +72,11 @@ class TrackingDock(QDockWidget):
         conn.setObjectName("GpsCard")
         cv = QVBoxLayout(conn)
         self.mode = QComboBox()
-        self.mode.addItem(tr("The phone sends to this PC (Wi-Fi)"), "listen")
-        self.mode.addItem(tr("Connect to the phone (Wi-Fi)"), "connect")
-        self.mode.addItem(tr("Bluetooth / USB (COM port)"), "serial")
-        self.mode.addItem(tr("Phone browser - scan a QR code (no app)"), "browser")
+        # Hatem 11-18: only ways that work from anywhere - the phone's browser over the bridge (Wi-Fi or mobile
+        # data), or a receiver on Bluetooth / USB. The same-Wi-Fi ways (listen, connect, local QR) are gone.
         self.mode.addItem(tr("Phone browser from anywhere - no warning (Biruni bridge)"), "bridge")
-        self.mode.setCurrentIndex(max(0, self.mode.findData(s.value(KEY + "mode", "listen"))))
+        self.mode.addItem(tr("Bluetooth / USB (COM port)"), "serial")
+        self.mode.setCurrentIndex(max(0, self.mode.findData(s.value(KEY + "mode", "bridge"))))
         cv.addWidget(self.mode)
         self.pages = QStackedWidget()
         # listen
@@ -234,7 +233,7 @@ class TrackingDock(QDockWidget):
 
     def _mode_changed(self):
         bridge = self.mode.currentData() == "bridge"
-        self.pages.setCurrentIndex(3 if bridge else self.mode.currentIndex())  # the bridge shows the QR page too
+        self.pages.setCurrentIndex(3 if bridge else 2)   # the stack keeps its old pages: 2 = serial, 3 = the QR
         if bridge:
             self.hint4.setText(tr("Press Connect, then scan the code with the phone's camera. The page opens from "
                                   "Biruni's site with a real certificate - no warning - and the position goes "

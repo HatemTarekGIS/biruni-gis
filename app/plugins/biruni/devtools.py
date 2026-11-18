@@ -245,10 +245,10 @@ def schedule(plugin):
                 d = plugin.tracking
                 d.show()
                 d.raise_()
-                d.mode.setCurrentIndex(d.mode.findData("browser"))
+                d.mode.setCurrentIndex(d.mode.findData("bridge"))
                 if not d.source.is_active():
                     d.toggle_connection()
-                log(f"gps browser url={d.qr_url.text()} qr={not d.qr.pixmap().isNull()}")
+                log(f"gps bridge url={d.qr_url.text()} qr={not d.qr.pixmap().isNull()}")
                 delay = 1500
             elif kind == "gpsoff":
                 if plugin.tracking.source.is_active():
