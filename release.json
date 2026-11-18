@@ -3,10 +3,10 @@
   "404.html": "a8281351950491edb476a4772814d8de63cb43140a7e0d8a21c5e6aa1aa112c8",
   "_headers": "0121a30bb19e945782cab14a87f61dbd5a051483184aa4985b00f26ec676196f",
   "index.html": "cd6ffa4fd15904e68fdf63c82dc20a6e4c0cd4e05bf9db07cc4643b5f1bd9f21",
-  "p/index.html": "e9502b448b2c01d3616110b6fd5d606f2e92a42f9406878a24a5ae499a11a567",
+  "p/index.html": "0a9f6b32a930fa6652e7037cd7696955e22481bda45d5b71765a7064f2c3b68e",
   "p/sw.js": "46f5e287db16818e038c6ce15ce574c2acae180b83bbd6b436fcdde9074fa543",
   "r/index.html": "cb147c048ba0e9479c5923528d2cb6fd539919e190ede6644823af43a3be3b8b"
  },
  "format": "biruni-release",
- "version": "2026-11-18T07:20:13Z"
+ "version": "2026-11-18T07:55:02Z"
 }
