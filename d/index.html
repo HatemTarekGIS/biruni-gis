@@ -1,4 +1,4 @@
-<!doctype html><html lang="en" dir="ltr" data-theme="biruni-light"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-BVRP6yqRzD7uvXkMut3a3Tv7/x/Yez4jsE6rVcaLKBg='; style-src 'sha256-uY33hA/+jIhYy2ljAIpb7iVZbOkhkjuVN6+81MkHIdQ='; img-src data: blob:; connect-src wss://relay.damus.io wss://nos.lol wss://relay.primal.net wss://nostr.mom wss://relay.nostr.band https://ntfy.sh wss://ntfy.sh; worker-src blob:; frame-src 'self'; base-uri 'none'; form-action 'none'">
+<!doctype html><html lang="en" dir="ltr" data-theme="biruni-light"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-NA086fMAp28K0rkG7q2wm5lpDAbLwDgZsgZPM7J9CP0='; style-src 'sha256-uY33hA/+jIhYy2ljAIpb7iVZbOkhkjuVN6+81MkHIdQ='; img-src data: blob:; connect-src wss://relay.damus.io wss://nos.lol wss://relay.primal.net wss://nostr.mom wss://relay.nostr.band https://ntfy.sh wss://ntfy.sh wss://broker.hivemq.com:8884 wss://broker.emqx.io:8084 wss://test.mosquitto.org:8081; worker-src blob:; frame-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
 <meta name="referrer" content="no-referrer">
@@ -478,7 +478,7 @@ html.mxHost #grid,html.mxHost #wait,html.mxHost #banner,html.mxHost #conn,html.m
 <script>
 
 /* ---- Biruni bridge core: shared by the phone page and the PC's hidden receiver ---- */
-const BR={relays:["wss://relay.damus.io", "wss://nos.lol", "wss://relay.primal.net", "wss://nostr.mom", "wss://relay.nostr.band"],ntfy:'https://ntfy.sh/',kind:25050,
+const BR={relays:["wss://relay.damus.io", "wss://nos.lol", "wss://relay.primal.net", "wss://nostr.mom", "wss://relay.nostr.band"],ntfy:'https://ntfy.sh/',mqtt:["wss://broker.hivemq.com:8884/mqtt", "wss://broker.emqx.io:8084/mqtt", "wss://test.mosquitto.org:8081/mqtt"],tun:'https://{h}.trycloudflare.com',own:'',kind:25050,
  ice:[{urls:['stun:stun.l.google.com:19302','stun:stun.cloudflare.com:3478']}]};
 const enc=new TextEncoder(),dec=new TextDecoder();
 const b64u={enc:b=>{let s='';const a=new Uint8Array(b);for(let i=0;i<a.length;i++)s+=String.fromCharCode(a[i]);
@@ -550,14 +550,35 @@ async function seal(obj,z){let d=enc.encode(JSON.stringify(obj)),f=0;
 async function unseal(s){try{const b=b64u.dec(s);
   const p=new Uint8Array(await crypto.subtle.decrypt({name:'AES-GCM',iv:b.slice(0,12)},BK.k,b.slice(12)));
   const d=p[0]===1?await zz(p.slice(1),false):p.slice(1);return JSON.parse(dec.decode(d))}catch(e){return null}}
-/* the relays: control messages go to all; preview chunks go to at most 2 healthy Nostr relays with rate limiting */
-class NostrRelay{constructor(url,sig){this.url=url;this.sig=sig;this.up=false;this.wait=3000;this.fails=0;
-  this.backoffUntil=0;this.oks=new Map();this.notices=[];this.open()}
+/* MQTT 3.1.1 wire helpers */
+const MQ={
+ len(n){const o=[];do{let d=n&127;n>>>=7;if(n>0)d|=128;o.push(d)}while(n>0);return o},
+ str(s){const b=enc.encode(s);return cat(new Uint8Array([b.length>>8,b.length&255]),b)},
+ connect(id){const b=cat(this.str('MQTT'),new Uint8Array([4,2,0,60]),this.str(id));
+  return cat(new Uint8Array([0x10,...this.len(b.length)]),b)},
+ subscribe(pid,topic){const b=cat(new Uint8Array([(pid>>8)&255,pid&255]),this.str(topic),new Uint8Array([0]));
+  return cat(new Uint8Array([0x82,...this.len(b.length)]),b)},
+ publish(topic,bytes,qos=0,pid=0){
+  const p=typeof bytes==='string'?enc.encode(bytes):new Uint8Array(bytes);
+  const vh=qos>0?cat(this.str(topic),new Uint8Array([(pid>>8)&255,pid&255])):this.str(topic);
+  const b=cat(vh,p);return cat(new Uint8Array([0x30|((qos&3)<<1),...this.len(b.length)]),b)},
+ ping(){return new Uint8Array([0xC0,0x00])},
+ parse(buf){const b=buf instanceof Uint8Array?buf:new Uint8Array(buf),pk=[];let i=0;
+  while(i+1<b.length){const h=b[i],type=h>>4,flags=h&15;let j=i+1,mul=1,len=0,ok=false;
+   for(let k=0;k<4;k++){if(j>=b.length)break;const c=b[j++];len+=(c&127)*mul;
+    if(!(c&128)){ok=true;break}mul*=128}
+   if(!ok||j+len>b.length)break;
+   pk.push({type:type,flags:flags,body:b.slice(j,j+len)});i=j+len}
+  return {pk:pk,rest:b.slice(i)}}
+};
+/* the relays: control messages go to all; preview chunks go to at most 2 healthy relays with rate limiting */
+class NostrRelay{constructor(url,sig){this.kind='nostr';this.url=url;this.sig=sig;this.up=false;this.wait=3000;
+  this.fails=0;this.backoffUntil=0;this.oks=new Map();this.notices=[];this.open()}
  open(){let ws;try{ws=new WebSocket(this.url)}catch(e){return this.later()}this.ws=ws;
   ws.onopen=()=>{this.up=true;this.wait=3000;ws.send(JSON.stringify(['REQ','b'+rid(),
    {kinds:[BR.kind],'#t':[BK.topic],since:Math.floor(Date.now()/1000)-60}]));this.sig.changed()};
   ws.onmessage=e=>{try{const m=JSON.parse(e.data);
-   if(m[0]==='EVENT'&&m[2]&&typeof m[2].content==='string')this.sig.arrived(m[2].content);
+   if(m[0]==='EVENT'&&m[2]&&typeof m[2].content==='string')this.sig.arrived(m[2].content,'nostr');
    else if(m[0]==='OK'&&typeof m[1]==='string'){const ok=!!m[2];
     if(!ok){this.fails++;this.backoffUntil=Date.now()+Math.min(60000,4000*Math.pow(2,this.fails-1))}
     else{this.fails=0;this.backoffUntil=0}
@@ -568,45 +589,160 @@ class NostrRelay{constructor(url,sig){this.url=url;this.sig=sig;this.up=false;th
    if(was)this.sig.changed();this.later()};ws.onerror=()=>{try{ws.close()}catch(x){}}}
  later(){setTimeout(()=>this.open(),this.wait+Math.random()*1000);this.wait=Math.min(this.wait*2,60000)}
  send(s,ev){if(this.up&&ev&&Date.now()>=this.backoffUntil)try{this.ws.send(JSON.stringify(['EVENT',ev]))}catch(e){}}
- sendWait(ev,ms=3500){if(!this.up||!ev||Date.now()<this.backoffUntil)return Promise.resolve(false);
+ sendWait(ev,_s,ms=3500){if(typeof _s==='number')ms=_s;
+  if(!this.up||!ev||Date.now()<this.backoffUntil)return Promise.resolve(false);
   return new Promise(r=>{const t=setTimeout(()=>{if(this.oks.delete(ev.id))r(false)},ms);
    this.oks.set(ev.id,ok=>{clearTimeout(t);r(ok)});
    try{this.ws.send(JSON.stringify(['EVENT',ev]))}catch(e){clearTimeout(t);this.oks.delete(ev.id);r(false)}})}}
-class NtfyRelay{constructor(sig){this.sig=sig;this.up=false;this.wait=3000;this.open()}
+NostrRelay.prototype.kind='nostr';
+class NtfyRelay{constructor(sig){this.kind='ntfy';this.sig=sig;this.up=false;this.wait=3000;this.open()}
  open(){let ws;try{ws=new WebSocket(BR.ntfy.replace(/^http/,'ws')+BK.topic+'/ws')}catch(e){return this.later()}this.ws=ws;
   ws.onopen=()=>{this.up=true;this.wait=3000;this.sig.changed()};
   ws.onmessage=e=>{try{const m=JSON.parse(e.data);if(m.event==='message'){
-   if(m.attachment&&m.attachment.url)fetch(m.attachment.url).then(r=>r.ok?r.text():'').then(t=>{if(t)this.sig.arrived(t)}).catch(()=>{});
-   else if(m.message)this.sig.arrived(m.message)}}catch(x){}};
+   if(m.attachment&&m.attachment.url)
+    fetch(m.attachment.url).then(r=>r.ok?r.text():'').then(t=>{if(t)this.sig.arrived(t,'ntfy')}).catch(()=>{});
+   else if(m.message)this.sig.arrived(m.message,'ntfy')}}catch(x){}};
   ws.onclose=()=>{const was=this.up;this.up=false;if(was)this.sig.changed();this.later()};ws.onerror=()=>{try{ws.close()}catch(x){}}}
  later(){setTimeout(()=>this.open(),this.wait+Math.random()*1000);this.wait=Math.min(this.wait*2,60000)}
  send(s){if(s.length<=4000)fetch(BR.ntfy+BK.topic+'?cache=no&firebase=no',{method:'POST',body:s}).catch(()=>{})}
  async sendChunk(s){try{const u=BR.ntfy+BK.topic+(s.length<=4000?'?cache=no&firebase=no':'?firebase=no'),
    h=s.length>4000?{'Filename':'p.bin'}:{};return (await fetch(u,{method:'POST',body:s,headers:h})).ok}catch(e){return false}}}
-const SIG={relays:[],seen:new Set(),loose:new Set(),on:null,onchange:null,_lastChunk:0,
+class MqttRelay{
+ constructor(url,sig){this.kind='mqtt';this.url=url;this.sig=sig;this.up=false;this.wait=3000;this.fails=0;
+  this.backoffUntil=0;this.oks=new Map();this.notices=[];this.pid=1;this.buf=new Uint8Array(0);
+  this._ping=null;this._dead=null;this.open()}
+ _cid(){let id='b';const r=crypto.getRandomValues(new Uint8Array(16));
+  for(const x of r)id+=(x%36).toString(36);return id}
+ _fail(){this.fails++;this.backoffUntil=Date.now()+Math.min(60000,4000*Math.pow(2,this.fails-1))}
+ _touch(ws){clearTimeout(this._dead);this._dead=setTimeout(()=>{if(this.ws===ws)try{ws.close()}catch(x){}},60000)}
+ open(){let ws;try{ws=new WebSocket(this.url,'mqtt')}catch(e){return this.later()}
+  ws.binaryType='arraybuffer';this.ws=ws;this.buf=new Uint8Array(0);
+  ws.onopen=()=>{this._touch(ws);try{ws.send(MQ.connect(this._cid()))}catch(x){try{ws.close()}catch(y){}}};
+  ws.onmessage=e=>{this._touch(ws);
+   const chunk=e.data instanceof ArrayBuffer?new Uint8Array(e.data):enc.encode(String(e.data||''));
+   this.buf=cat(this.buf,chunk);const {pk,rest}=MQ.parse(this.buf);this.buf=rest;
+   for(const p of pk){
+    if(p.type===2){if(p.body.length>=2&&p.body[1]===0){
+      this.pid=(this.pid%65535)+1;ws.send(MQ.subscribe(this.pid,'biruni/1/'+BK.topic))}
+     else{this._fail();try{ws.close()}catch(x){}}}
+    else if(p.type===9){if(p.body.length>=3&&p.body[2]!==0x80){
+      this.up=true;this.wait=3000;this.fails=0;this.backoffUntil=0;
+      clearInterval(this._ping);
+      this._ping=setInterval(()=>{if(this.ws===ws&&ws.readyState===1)try{ws.send(MQ.ping())}catch(x){}},25000);
+      this.sig.changed()}
+     else{this._fail();try{ws.close()}catch(x){}}}
+    else if(p.type===3&&p.body.length>=2){
+     const tl=(p.body[0]<<8)|p.body[1],qos=(p.flags>>1)&3,off=2+tl+(qos>0?2:0);
+     if(qos===1&&p.body.length>=4+tl)try{ws.send(new Uint8Array([0x40,2,p.body[2+tl],p.body[3+tl]]))}catch(x){}
+     if(off<=p.body.length)this.sig.arrived(dec.decode(p.body.subarray(off)),'mqtt')}
+    else if(p.type===4&&p.body.length>=2){
+     const pid=(p.body[0]<<8)|p.body[1],cb=this.oks.get(pid);if(cb){this.oks.delete(pid);cb(true)}}}};
+  ws.onclose=()=>{clearInterval(this._ping);clearTimeout(this._dead);const was=this.up;this.up=false;
+   for(const [,cb] of this.oks)cb(false);this.oks.clear();if(was)this.sig.changed();this.later()};
+  ws.onerror=()=>{try{ws.close()}catch(x){}}}
+ later(){setTimeout(()=>this.open(),this.wait+Math.random()*1000);this.wait=Math.min(this.wait*2,60000)}
+ send(s){if(!this.up||Date.now()<this.backoffUntil||typeof s!=='string'||s.length>90000)return;
+  try{this.ws.send(MQ.publish('biruni/1/'+BK.topic,s,0,0))}catch(e){}}
+ sendWait(ev,s,ms=3500){if(typeof ev==='string'&&typeof s!=='string'){ms=typeof s==='number'?s:3500;s=ev}
+  if(!this.up||Date.now()<this.backoffUntil||typeof s!=='string'||s.length>90000)return Promise.resolve(false);
+  const pid=this.pid=(this.pid%65535)+1;
+  return new Promise(r=>{const t=setTimeout(()=>{if(this.oks.delete(pid))r(false)},ms);
+   this.oks.set(pid,ok=>{clearTimeout(t);r(ok)});
+   try{this.ws.send(MQ.publish('biruni/1/'+BK.topic,s,1,pid))}
+   catch(e){clearTimeout(t);this.oks.delete(pid);r(false)}})}}
+class TunnelRelay{
+ constructor(h,sig){this.kind='tunnel';this.h=h;this.sig=sig;this.base=BR.tun.replace('{h}',h).replace(/\/+$/,'');
+  this.up=false;this.fails=0;this.backoffUntil=0;this.cur=0;this.closed=false;this.lastPost=0;this._inflight=0;
+  this.post('');this._timer=setInterval(()=>{const n=Date.now();
+   if(!this.closed&&!this._inflight&&n>=this.backoffUntil&&n-this.lastPost>=4000)this.post('')},1000)}
+ async post(s){if(this.closed)return false;this.lastPost=Date.now();this._inflight++;
+  const c=new AbortController(),t=setTimeout(()=>c.abort(),8000);
+  try{const r=await fetch(this.base+'/x/'+BK.topic+'?a='+this.cur,{method:'POST',body:s,
+    headers:{'Content-Type':'text/plain'},signal:c.signal});
+   clearTimeout(t);
+   if(r.status!==200)throw new Error(String(r.status));
+   const j=await r.json();if(typeof j.a==='number'&&j.a>this.cur)this.cur=j.a;
+   if(Array.isArray(j.m))for(const m of j.m)if(typeof m==='string')this.sig.arrived(m,'tunnel');
+   const was=this.up;this.up=true;this.fails=0;this.backoffUntil=0;if(!was)this.sig.changed();return true}
+  catch(e){clearTimeout(t);this.fails++;
+   if(this.fails>=3){this.backoffUntil=Date.now()+Math.min(60000,5000*Math.pow(2,this.fails-3));
+    if(this.up){this.up=false;this.sig.changed()}}
+   return false}
+  finally{this._inflight--}}
+ send(s){if(!this.closed&&Date.now()>=this.backoffUntil)this.post(s).catch(()=>{})}
+ sendWait(ev,s){if(typeof ev==='string'&&typeof s!=='string')s=ev;
+  if(this.closed||Date.now()<this.backoffUntil||typeof s!=='string')return Promise.resolve(false);
+  return this.post(s)}
+ close(){this.closed=true;clearInterval(this._timer);const was=this.up;this.up=false;if(was)this.sig.changed()}}
+class OwnRelay{
+ constructor(sig){this.kind='own';this.sig=sig;this.up=false;this.wait=3000;this.fails=0;
+  this._bo=0;this.backoffUntil=0;this._ping=null;this._opened=false;this._tm=0;this.open()}
+ _backoff(){this._bo=this._bo?Math.min(600000,this._bo*2):60000;this.backoffUntil=Date.now()+this._bo}
+ open(){if(!BR.own)return;const left=this.backoffUntil-Date.now();
+  if(left>0){clearTimeout(this._tm);this._tm=setTimeout(()=>this.open(),left);return}
+  let ws;try{ws=new WebSocket(BR.own+BK.topic)}catch(e){this.fails++;
+   if(this.fails>=3)this._backoff();return this.later()}
+  this.ws=ws;this._opened=false;
+  ws.onopen=()=>{this._opened=true;this.up=true;this.wait=3000;this.fails=0;this._bo=0;this.backoffUntil=0;
+   clearInterval(this._ping);
+   this._ping=setInterval(()=>{if(this.ws===ws&&ws.readyState===1)try{ws.send('p')}catch(x){}},25000);
+   this.sig.changed()};
+  ws.onmessage=e=>{if(typeof e.data==='string'&&e.data!=='q')this.sig.arrived(e.data,'own')};
+  ws.onclose=e=>{clearInterval(this._ping);const was=this.up;this.up=false;if(was)this.sig.changed();
+   if(e&&e.code===1013)this._backoff();
+   else if(!this._opened){this.fails++;if(this.fails>=3)this._backoff()}
+   this.later()};
+  ws.onerror=()=>{try{ws.close()}catch(x){}}}
+ later(){const ms=Math.max(this.wait+Math.random()*1000,this.backoffUntil-Date.now());
+  clearTimeout(this._tm);this._tm=setTimeout(()=>this.open(),ms);this.wait=Math.min(this.wait*2,60000)}
+ send(s){if(this.up&&Date.now()>=this.backoffUntil&&typeof s==='string'&&s.length<=90000)
+  try{this.ws.send(s)}catch(e){}}
+ sendWait(ev,s){if(typeof ev==='string'&&typeof s!=='string')s=ev;
+  if(!this.up||Date.now()<this.backoffUntil||typeof s!=='string'||s.length>90000)return Promise.resolve(false);
+  try{this.ws.send(s);return Promise.resolve(this.up)}catch(e){return Promise.resolve(false)}}}
+const SIG={relays:[],seen:new Set(),loose:new Set(),on:null,onchange:null,_lastChunk:0,_tun:null,
  start(onMsg,onChange){this.on=onMsg;this.onchange=onChange;
-  this.relays=BR.relays.map(u=>new NostrRelay(u,this)).concat([new NtfyRelay(this)])},
+  this.relays=BR.relays.map(u=>new NostrRelay(u,this)).concat([new NtfyRelay(this)])
+   .concat((BR.mqtt||[]).map(u=>new MqttRelay(u,this)))
+   .concat(BR.own?[new OwnRelay(this)]:[])},
+ tunnel(h){if(!BR.tun||!/^[a-z0-9-]{3,80}$/.test(String(h||'')))return null;
+  if(this._tun&&this._tun.h===h&&!this._tun.closed)return this._tun;
+  if(this._tun){this._tun.close();this.relays=this.relays.filter(r=>r!==this._tun)}
+  const r=new TunnelRelay(h,this);this._tun=r;this.relays.push(r);return r},
  up(){return this.relays.filter(r=>r.up).length},
- healthyNostr(){return this.relays.filter(r=>r instanceof NostrRelay&&r.up&&Date.now()>=r.backoffUntil).sort((a,b)=>a.fails-b.fails)},
+ kinds(){const k={};for(const r of this.relays){const n=r.kind||'nostr';k[n]=(k[n]||0)+(r.up?1:0)}return k},
+ healthyAck(){return this.relays.filter(r=>r.up&&typeof r.sendWait==='function'&&Date.now()>=(r.backoffUntil||0))
+  .sort((a,b)=>(a.fails||0)-(b.fails||0))},
+ healthyNostr(){return this.healthyAck()},
  changed(){if(this.onchange)this.onchange(this.up())},
  async _sign(obj){
   if(obj.t==='answer'&&ID.sk){const g=await IDSIGN('BRA1|'+obj.sid+'|'+obj.sdp);obj.ip=g.pub;obj.is=g.sig}
   else if(obj.t==='rhello'&&ID.sk){const g=await IDSIGN('BRH0|'+obj.sid+'|'+(obj.pk||''));obj.ip=g.pub;obj.is=g.sig}
-  else if(obj.t==='rack'&&ID.sk){const g=await IDSIGN('BRAK1|'+obj.id+'|'+obj.kind+'|'+obj.nonce);obj.ip=g.pub;obj.is=g.sig}},
+  else if(obj.t==='rack'&&ID.sk){
+   const g=await IDSIGN('BRAK1|'+obj.id+'|'+obj.kind+'|'+obj.nonce);obj.ip=g.pub;obj.is=g.sig}
+  else if(obj.t==='tun'&&ID.sk){const g=await IDSIGN('BRTN1|'+obj.h);obj.ip=g.pub;obj.is=g.sig}},
  async send(obj,z){obj.n=rid();obj.ts=Date.now();this.seen.add(obj.n);await this._sign(obj);
   const s=await seal(obj,z);let ev=null;
   try{ev=await nostrEvent(s,BK.topic)}catch(e){}for(const r of this.relays)r.send(s,ev)},
+ async sendRaw(s,kind){if(typeof s!=='string')return false;
+  const list=this.relays.filter(r=>(r.kind||'nostr')===kind&&r.up&&Date.now()>=(r.backoffUntil||0))
+   .sort((a,b)=>(a.fails||0)-(b.fails||0)).slice(0,2);
+  if(!list.length)return false;let ev=null;
+  if(kind==='nostr')try{ev=await nostrEvent(s,BK.topic)}catch(e){return false}
+  for(const r of list)r.send(s,ev);return true},
  async sendChunk(obj){
   const pace=BR.paceMs!=null?BR.paceMs:180,wait=Math.max(0,this._lastChunk+pace-Date.now());
   if(wait)await sleep(wait);this._lastChunk=Date.now();
   obj.n=rid();obj.ts=Date.now();this.seen.add(obj.n);const s=await seal(obj,true);
   let ev=null;try{ev=await nostrEvent(s,BK.topic)}catch(e){}
   const tried=new Set();
-  while(ev){const pair=this.healthyNostr().filter(r=>!tried.has(r)).slice(0,2);if(!pair.length)break;
-   pair.forEach(r=>tried.add(r));const res=await Promise.all(pair.map(r=>r.sendWait(ev)));
+  while(true){const pair=this.healthyAck().filter(r=>!tried.has(r)&&(ev||(r.kind||'nostr')!=='nostr')).slice(0,2);
+   if(!pair.length)break;
+   pair.forEach(r=>tried.add(r));const res=await Promise.all(pair.map(r=>r.sendWait(ev,s)));
    if(res.some(Boolean))return true}
-  const nr=this.relays.find(r=>r instanceof NtfyRelay);return nr?await nr.sendChunk(s):false},
- async arrived(s){const o=await unseal(s);if(!o||!o.n||this.seen.has(o.n))return;this.seen.add(o.n);
+  const nr=this.relays.find(r=>r.kind==='ntfy');return nr?await nr.sendChunk(s):false},
+ async arrived(s,kind){const o=await unseal(s);if(!o||!o.n||this.seen.has(o.n))return;this.seen.add(o.n);
+  if(this.seen.size>4000)this.seen.delete(this.seen.values().next().value);
   if(Math.abs(Date.now()-(o.ts||0))>15*60000)return;
   /* answers and receipts to this phone must come from the PC (signed) */
   if(o.t==='answer'&&ID.pin&&!this.loose.has(o.sid)&&!await IDOK(o.ip,o.is,'BRA1|'+o.sid+'|'+o.sdp)){
@@ -615,7 +751,11 @@ const SIG={relays:[],seen:new Set(),loose:new Set(),on:null,onchange:null,_lastC
    this.refused=(this.refused||0)+1;return}
   if(o.t==='rack'&&ID.pin&&!await IDOK(o.ip,o.is,'BRAK1|'+o.id+'|'+o.kind+'|'+o.nonce)){
    this.refused=(this.refused||0)+1;return}
-  if(this.on)this.on(o)}};
+  if(o.t==='lack'&&ID.pin&&!await IDOK(o.ip,o.is,'BRLA1|'+o.d+'|'+o.e+'|'+o.upto)){
+   this.refused=(this.refused||0)+1;return}
+  if(o.t==='tun'&&ID.pin&&!await IDOK(o.ip,o.is,'BRTN1|'+o.h)){
+   this.refused=(this.refused||0)+1;return}
+  if(this.on)this.on(o,kind,s)}};
 /* a private line through a teammate's phone: the phone and the PC agree on a key of their own (ECDH on P-256),
    so the phone that carries the messages cannot read them. Every frame after the first is sealed; its first
    byte says what it is (0 a message, 1 a piece of a photo). */
