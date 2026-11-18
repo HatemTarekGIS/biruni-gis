@@ -1,4 +1,4 @@
-<!doctype html><html lang="en" dir="ltr" data-theme="biruni-light"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-NA086fMAp28K0rkG7q2wm5lpDAbLwDgZsgZPM7J9CP0='; style-src 'sha256-uY33hA/+jIhYy2ljAIpb7iVZbOkhkjuVN6+81MkHIdQ='; img-src data: blob:; connect-src wss://relay.damus.io wss://nos.lol wss://relay.primal.net wss://nostr.mom wss://relay.nostr.band https://ntfy.sh wss://ntfy.sh wss://broker.hivemq.com:8884 wss://broker.emqx.io:8084 wss://test.mosquitto.org:8081; worker-src blob:; frame-src 'self'; base-uri 'none'; form-action 'none'">
+<!doctype html><html lang="en" dir="ltr" data-theme="biruni-light"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-03vWz8MLOGGYOIHGKUa9+rvFwci9L6vPYetjfOMsvfM='; style-src 'sha256-uY33hA/+jIhYy2ljAIpb7iVZbOkhkjuVN6+81MkHIdQ='; img-src data: blob:; connect-src wss://relay.damus.io wss://nos.lol wss://relay.primal.net wss://nostr.mom wss://relay.nostr.band https://ntfy.sh wss://ntfy.sh wss://broker.hivemq.com:8884 wss://broker.emqx.io:8084 wss://test.mosquitto.org:8081 wss://relay.biruni-gis.com; worker-src blob:; frame-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
 <meta name="referrer" content="no-referrer">
@@ -478,7 +478,7 @@ html.mxHost #grid,html.mxHost #wait,html.mxHost #banner,html.mxHost #conn,html.m
 <script>
 
 /* ---- Biruni bridge core: shared by the phone page and the PC's hidden receiver ---- */
-const BR={relays:["wss://relay.damus.io", "wss://nos.lol", "wss://relay.primal.net", "wss://nostr.mom", "wss://relay.nostr.band"],ntfy:'https://ntfy.sh/',mqtt:["wss://broker.hivemq.com:8884/mqtt", "wss://broker.emqx.io:8084/mqtt", "wss://test.mosquitto.org:8081/mqtt"],tun:'https://{h}.trycloudflare.com',own:'',kind:25050,
+const BR={relays:["wss://relay.damus.io", "wss://nos.lol", "wss://relay.primal.net", "wss://nostr.mom", "wss://relay.nostr.band"],ntfy:'https://ntfy.sh/',mqtt:["wss://broker.hivemq.com:8884/mqtt", "wss://broker.emqx.io:8084/mqtt", "wss://test.mosquitto.org:8081/mqtt"],tun:'https://{h}.trycloudflare.com',own:'wss://relay.biruni-gis.com/r/',kind:25050,
  ice:[{urls:['stun:stun.l.google.com:19302','stun:stun.cloudflare.com:3478']}]};
 const enc=new TextEncoder(),dec=new TextDecoder();
 const b64u={enc:b=>{let s='';const a=new Uint8Array(b);for(let i=0;i<a.length;i++)s+=String.fromCharCode(a[i]);
