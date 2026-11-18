@@ -44,6 +44,7 @@ class NmeaSource(QObject):
     fixReceived = pyqtSignal(object)
     status = pyqtSignal(str, bool)       # message, connected
     rawReceived = pyqtSignal()
+    link = pyqtSignal(object)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -57,7 +58,8 @@ class NmeaSource(QObject):
         self._retry.timeout.connect(self._reconnect)
         self.bytes = 0
         self.browser = None
-        self.bridge = self.bridge_server = None
+        self.bridge = self.bridge_server = self.tunnel = None
+        self._bridge_url = ""
         self._poll = QTimer(self)
         self._poll.setInterval(250)
         self._poll.timeout.connect(self._read_browser)
@@ -131,7 +133,7 @@ class NmeaSource(QObject):
     def serve_bridge(self, cert_folder, work_folder, lang="en"):
         """The phone opens Biruni's page on GitHub (a real certificate: no warning) and sends its position
         directly to this PC over the bridge (field_photos/bridge.py). Returns the phone's address or None."""
-        from ..field_photos import bridge
+        from ..field_photos import bridge, ladder
         from ..field_photos.server import PhotoServer, all_phone_texts
         from qgis.core import QgsSettings
 
@@ -140,20 +142,33 @@ class NmeaSource(QObject):
             self.bridge_server = PhotoServer(work_folder, cert_folder, all_phone_texts(), lang, (), BRIDGE_PORT,
                                              ["127.0.0.1"], bind="127.0.0.1")
             key = bridge.load_key(QgsSettings(), name=GPS_BRIDGE_KEY)
+            self.bridge_server.set_ladder(key)
             self.bridge = bridge.BridgeHost(self.bridge_server.url("127.0.0.1") + "bridge#" + bridge.host_frag(key))
+            self.tunnel = ladder.TunnelLink(self.bridge_server.port)
         except OSError as e:
             self.status.emit(str(e), False)
             self.stop()
             return None
         self.mode = MODE_BRIDGE
+        self._bridge_url = bridge.phone_url(key, lang) + "&m=gps"
         self._poll.start()
         self.status.emit("listening", True)
-        return bridge.phone_url(key, lang) + "&m=gps"
+        return self._bridge_url
 
     def _read_browser(self):
         if self.bridge_server is not None:
             from .browser import fix_from_json
 
+            if self.tunnel is not None:
+                while True:
+                    ev = self.tunnel.poll()
+                    if ev is None:
+                        break
+                    if ev[0] == "url":
+                        self.bridge_server.tunnel_host = ev[1]
+                        self.link.emit({"qr": self._bridge_url + "&t=" + ev[1], "tunnel": ev[1]})
+                    elif ev[0] == "error":
+                        self.link.emit({"tunnel_error": ev[1]})
             got = False
             while not self.bridge_server.events.empty():
                 kind, value = self.bridge_server.events.get_nowait()
@@ -163,6 +178,10 @@ class NmeaSource(QObject):
                         got = True
                     except (ValueError, KeyError, TypeError):
                         pass
+                elif kind == "ladder":
+                    self.link.emit(dict(value))
+                elif kind == "bridge" and isinstance(value, dict) and value.get("type") == "relays":
+                    self.link.emit({"relays": value})
             if got:
                 self.rawReceived.emit()
             return
@@ -184,9 +203,13 @@ class NmeaSource(QObject):
             except OSError:
                 pass
             self.browser = None
+        if self.tunnel is not None:
+            self.tunnel.stop()
+            self.tunnel = None
         if self.bridge is not None:
             self.bridge.stop()
             self.bridge = None
+        self._bridge_url = ""
         if self.bridge_server is not None:
             try:
                 self.bridge_server.stop()

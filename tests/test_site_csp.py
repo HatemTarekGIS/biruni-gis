@@ -268,10 +268,12 @@ once = csp.add_csp(BASE_HTML)
 twice = csp.add_csp(once)
 check(once == twice, "add_csp is idempotent (running twice gives the same result)")
 
-old_relays, old_ntfy = bridge.RELAYS, bridge.NTFY
+old_relays, old_ntfy, old_mqtt, old_own = bridge.RELAYS, bridge.NTFY, bridge.MQTT, bridge.OWN
 try:
     bridge.RELAYS = ("wss://relay.example.test/nostr",)
     bridge.NTFY = "https://ntfy.example.test/topic"
+    bridge.MQTT = ()
+    bridge.OWN = ""
     pol = csp.site_policies()
     check(
         pol["s/index.html"]["connect"]
@@ -279,7 +281,7 @@ try:
         "site_policies() reflects bridge.RELAYS and bridge.NTFY at call time",
     )
 finally:
-    bridge.RELAYS, bridge.NTFY = old_relays, old_ntfy
+    bridge.RELAYS, bridge.NTFY, bridge.MQTT, bridge.OWN = old_relays, old_ntfy, old_mqtt, old_own
 
 
 # ---- dynamic checks in offscreen Chromium --------------------------------------------------------------------------

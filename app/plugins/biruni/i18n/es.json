@@ -8051,5 +8051,18 @@
  "{0} applied from teammates": "{0} aplicados de compañeros",
  "{0} waiting: a teammate's clock is ahead": "{0} en espera: el reloj de un compañero está adelantado",
  "This computer's clock is ahead. Fix the date and time; your edits wait until then.": "El reloj de este equipo está adelantado. Corrige la fecha y la hora; tus cambios esperarán hasta entonces.",
- "This room uses \"newest save wins\" for every field; these rules apply only when that is off.": "Esta sala usa «el guardado más reciente gana» para cada campo; estas reglas solo se aplican cuando está desactivado."
+ "This room uses \"newest save wins\" for every field; these rules apply only when that is off.": "Esta sala usa «el guardado más reciente gana» para cada campo; estas reglas solo se aplican cuando está desactivado.",
+ "Channel: {name}": "Canal: {name}",
+ "Public relay (MQTT)": "Repetidor público (MQTT)",
+ "Public relay (Nostr)": "Repetidor público (Nostr)",
+ "Biruni relay": "Repetidor Biruni",
+ "Direct address (tunnel)": "Dirección directa (túnel)",
+ "Catching up - {n} earlier positions are still on the phone": "Poniéndose al día: aún quedan {n} posiciones anteriores en el teléfono",
+ "Adding a direct address for networks that block the relays…": "Agregando una dirección directa para las redes que bloquean los repetidores…",
+ "Direct address ready. A phone that could not connect: scan the code again.": "Dirección directa lista. Si un teléfono no pudo conectarse, escanee el código otra vez.",
+ "{n} positions kept on the phone - they are sent when the computer is in reach.": "{n} posiciones guardadas en el teléfono; se enviarán cuando el equipo esté al alcance.",
+ "Sending {n} earlier positions…": "Enviando {n} posiciones anteriores…",
+ "Sending through: {name}": "Enviando mediante: {name}",
+ "direct address": "dirección directa",
+ "public relay": "repetidor público"
 }

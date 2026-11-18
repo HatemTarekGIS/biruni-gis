@@ -22,6 +22,36 @@ WGS84 = QgsCoordinateReferenceSystem("EPSG:4326")
 MERC = QgsCoordinateReferenceSystem("EPSG:3857")
 
 
+def link_text(info):
+    """Status text for the bridge link label from a link/ladder info dict."""
+    if not isinstance(info, dict) or not info:
+        return ""
+    names = {
+        "lan": tr("Local network"),
+        "direct": tr("Direct"),
+        "peer": tr("Teammate"),
+        "tunnel": tr("Direct address (tunnel)"),
+        "own": tr("Biruni relay"),
+        "mqtt": tr("Public relay (MQTT)"),
+        "nostr": tr("Public relay (Nostr)"),
+        "ntfy": tr("Public relay (Nostr)"),
+        "relay": tr("Public relay (Nostr)"),
+    }
+    lines = []
+    via = info.get("via")
+    if via:
+        lines.append(tr("Channel: {name}").format(name=names.get(via, via)))
+    bl = int(info.get("backlog") or 0)
+    if bl > 0:
+        lines.append(tr("Catching up - {n} earlier positions are still on the phone").format(n=bl))
+    if not via:
+        if info.get("tunnel") or info.get("qr"):
+            lines.append(tr("Direct address ready. A phone that could not connect: scan the code again."))
+        elif info.get("tunnel_adding"):
+            lines.append(tr("Adding a direct address for networks that block the relays…"))
+    return "\n".join(lines)
+
+
 def panel_qss(t):
     return f"""
 #BiruniGps QLabel#GpsValue {{ font-size: 11pt; font-weight: 600; color: {t['text']}; }}
@@ -51,8 +81,10 @@ class TrackingDock(QDockWidget):
         self.accuracy_band = None
         self._last_data = None
         self._zoomed = False
+        self._link_info = {}
         self.source.fixReceived.connect(self._on_fix)
         self.source.status.connect(self._on_status)
+        self.source.link.connect(self._on_link)
         self.source.rawReceived.connect(lambda: setattr(self, "_last_data", dt.datetime.now()))
         self._clock = QTimer(self)
         self._clock.setInterval(1000)
@@ -168,6 +200,10 @@ class TrackingDock(QDockWidget):
         self.state = QLabel(tr("Not connected"))
         self.state.setObjectName("GpsHint")
         cv.addWidget(self.state)
+        self.link_lbl = QLabel("")
+        self.link_lbl.setObjectName("GpsHint")
+        self.link_lbl.setWordWrap(True)
+        cv.addWidget(self.link_lbl)
         v.addWidget(conn)
 
         live = QFrame()
@@ -304,6 +340,10 @@ class TrackingDock(QDockWidget):
         self.qr.setPixmap(pm)
         self.qr_url.setText(url.split("://", 1)[1].split("#", 1)[0])
         self.qr_url.setToolTip(url)
+        from .field_photos import bridge
+
+        self._link_info = {"tunnel_adding": bool(bridge.TUNNEL)}
+        self.link_lbl.setText(link_text(self._link_info))
         return True
 
     def _serve_browser(self):
@@ -341,6 +381,8 @@ class TrackingDock(QDockWidget):
         if hasattr(self, "qr"):
             self.qr.clear()
             self.qr_url.clear()
+        self._link_info = {}
+        self.link_lbl.clear()
         self._clock.stop()
         self.connect_btn.setText(tr("Connect"))
         self.record_btn.setEnabled(False)
@@ -353,8 +395,31 @@ class TrackingDock(QDockWidget):
                  "stopped": tr("Not connected")}
         self.state.setText(texts.get(message, message))
 
+    def _on_link(self, ev):
+        if not isinstance(ev, dict):
+            return
+        if "qr" in ev:
+            from qgis.PyQt.QtGui import QPixmap
+
+            from .gps.browser import qr_png
+
+            url = ev["qr"]
+            pm = QPixmap()
+            pm.loadFromData(qr_png(url, 5))
+            self.qr.setPixmap(pm)
+            self.qr_url.setText(url.split("://", 1)[1].split("#", 1)[0])
+            self.qr_url.setToolTip(url)
+        if "tunnel" in ev or "qr" in ev or "tunnel_error" in ev:
+            self._link_info.pop("tunnel_adding", None)
+        self._link_info.update(ev)
+        self.link_lbl.setText(link_text(self._link_info))
+
     # ---- positions -------------------------------------------------------
     def _on_fix(self, fix):
+        if "late" in getattr(fix, "sentences", ()):
+            if fix.valid and self.recorder.add(fix):
+                self._refresh_record_info()
+            return
         self.last_fix = fix
         t = self.plugin.theme.tokens()
         quality = {1: "GPS", 2: "DGPS", 4: "RTK fixed", 5: "RTK float"}.get(fix.quality, "GPS")

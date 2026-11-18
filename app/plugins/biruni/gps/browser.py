@@ -101,9 +101,10 @@ def fix_from_json(d):
     lat, lon = float(d["lat"]), float(d["lon"])
     if not (-90 <= lat <= 90 and -180 <= lon <= 180):
         raise ValueError("position out of range")
+    sentences = {"browser", "late"} if d.get("late") else {"browser"}
     return Fix(time=when, lat=lat, lon=lon, alt=d.get("alt"),
                speed_kmh=speed * 3.6 if speed is not None else None, course=d.get("heading"),
-               hdop=(acc / UERE_M) if acc else None, quality=1, valid=True, sentences={"browser"})
+               hdop=(acc / UERE_M) if acc else None, quality=1, valid=True, sentences=sentences)
 
 
 class BrowserServer:

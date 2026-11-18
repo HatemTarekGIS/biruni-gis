@@ -8051,5 +8051,18 @@
  "{0} applied from teammates": "Ekip arkadaşlarından {0} uygulandı",
  "{0} waiting: a teammate's clock is ahead": "{0} bekliyor: bir ekip arkadaşının saati ileri",
  "This computer's clock is ahead. Fix the date and time; your edits wait until then.": "Bu bilgisayarın saati ileri. Tarih ve saati düzeltin; düzenlemeleriniz o zamana kadar bekler.",
- "This room uses \"newest save wins\" for every field; these rules apply only when that is off.": "Bu oda her alan için \"en yeni kayıt kazanır\" kuralını kullanır; bu kurallar yalnızca bu seçenek kapalıyken geçerlidir."
+ "This room uses \"newest save wins\" for every field; these rules apply only when that is off.": "Bu oda her alan için \"en yeni kayıt kazanır\" kuralını kullanır; bu kurallar yalnızca bu seçenek kapalıyken geçerlidir.",
+ "Channel: {name}": "Kanal: {name}",
+ "Public relay (MQTT)": "Genel aktarıcı (MQTT)",
+ "Public relay (Nostr)": "Genel aktarıcı (Nostr)",
+ "Biruni relay": "Biruni aktarıcı",
+ "Direct address (tunnel)": "Doğrudan adres (tünel)",
+ "Catching up - {n} earlier positions are still on the phone": "Yetişiliyor - önceki {n} konum hâlâ telefonda",
+ "Adding a direct address for networks that block the relays…": "Aktarıcıları engelleyen ağlar için doğrudan adres ekleniyor…",
+ "Direct address ready. A phone that could not connect: scan the code again.": "Doğrudan adres hazır. Bağlanamayan telefon: kodu yeniden tarayın.",
+ "{n} positions kept on the phone - they are sent when the computer is in reach.": "{n} konum telefonda tutuluyor - bilgisayara ulaşıldığında gönderilir.",
+ "Sending {n} earlier positions…": "Önceki {n} konum gönderiliyor…",
+ "Sending through: {name}": "Gönderim kanalı: {name}",
+ "direct address": "doğrudan adres",
+ "public relay": "genel aktarıcı"
 }

@@ -31,6 +31,11 @@ The phone opens a static web page (served locally over Wi-Fi/hotspot or from `ht
 - **What public relays (`Nostr` and `ntfy.sh`) can see:**
   - Relays cannot read the photo, coordinates, notes or form answers, and cannot forge a receipt.
   - Relays **do see** the meeting topic hash, client IP addresses, ciphertext sizes and message timestamps.
+- **What the MQTT broker and Cloudflare tunnel can see:**
+  - The MQTT broker, and any `#` subscriber, see the topic (a hash), the sizes, the times and both IPs.
+  - Cloudflare's tunnel sees the same, plus the tunnel's hostname.
+- **Phone storage for positions:**
+  - The phone's storage holds its own positions in plaintext until they are acked, or for 48 h.
 - **What Google sees (Drive route):** file names (`NNNNNN-<sha12>.bfp`), folder names, sizes, upload times, the surveyor's and the office's Google accounts, and the `appProperties` photo id. It cannot read the photo, place, notes or answers. The link page asks for `drive.file` only, so Biruni can touch only the files and folders it made or the surveyor picked.
 
 ## Limits

@@ -39,9 +39,15 @@ PAGE_URL = "https://photos.biruni-gis.com/p/"
 RELAYS = ("wss://relay.damus.io", "wss://nos.lol", "wss://relay.primal.net", "wss://nostr.mom",
           "wss://relay.nostr.band")
 NTFY = "https://ntfy.sh/"
+MQTT = ("wss://broker.hivemq.com:8884/mqtt", "wss://broker.emqx.io:8084/mqtt", "wss://test.mosquitto.org:8081/mqtt")
+TUNNEL = "https://{h}.trycloudflare.com"
+OWN = ""
 if os.environ.get("BIRUNI_BRIDGE_RELAYS"):  # tests: a relay on this PC
     RELAYS = tuple(os.environ["BIRUNI_BRIDGE_RELAYS"].split())
     NTFY = os.environ.get("BIRUNI_BRIDGE_NTFY", NTFY)
+    MQTT = tuple(os.environ.get("BIRUNI_BRIDGE_MQTT", "").split())
+    TUNNEL = os.environ.get("BIRUNI_BRIDGE_TUNNEL", "")
+    OWN = os.environ.get("BIRUNI_BRIDGE_OWN", "")
 KEY = "biruni/field-photos/bridge-key"
 
 
@@ -173,7 +179,7 @@ def phone_url(key, lang="en", drive_pk=None):
 # ---- the shared script: encryption, Nostr signatures, relays ------------------------------
 CORE_JS = r"""
 /* ---- Biruni bridge core: shared by the phone page and the PC's hidden receiver ---- */
-const BR={relays:__RELAYS__,ntfy:'__NTFY__',kind:25050,
+const BR={relays:__RELAYS__,ntfy:'__NTFY__',mqtt:__MQTT__,tun:'__TUN__',kind:25050,
  ice:[{urls:['stun:stun.l.google.com:19302','stun:stun.cloudflare.com:3478']}]};
 const enc=new TextEncoder(),dec=new TextDecoder();
 const b64u={enc:b=>{let s='';const a=new Uint8Array(b);for(let i=0;i<a.length;i++)s+=String.fromCharCode(a[i]);
@@ -245,14 +251,35 @@ async function seal(obj,z){let d=enc.encode(JSON.stringify(obj)),f=0;
 async function unseal(s){try{const b=b64u.dec(s);
   const p=new Uint8Array(await crypto.subtle.decrypt({name:'AES-GCM',iv:b.slice(0,12)},BK.k,b.slice(12)));
   const d=p[0]===1?await zz(p.slice(1),false):p.slice(1);return JSON.parse(dec.decode(d))}catch(e){return null}}
-/* the relays: control messages go to all; preview chunks go to at most 2 healthy Nostr relays with rate limiting */
-class NostrRelay{constructor(url,sig){this.url=url;this.sig=sig;this.up=false;this.wait=3000;this.fails=0;
-  this.backoffUntil=0;this.oks=new Map();this.notices=[];this.open()}
+/* MQTT 3.1.1 wire helpers */
+const MQ={
+ len(n){const o=[];do{let d=n&127;n>>>=7;if(n>0)d|=128;o.push(d)}while(n>0);return o},
+ str(s){const b=enc.encode(s);return cat(new Uint8Array([b.length>>8,b.length&255]),b)},
+ connect(id){const b=cat(this.str('MQTT'),new Uint8Array([4,2,0,60]),this.str(id));
+  return cat(new Uint8Array([0x10,...this.len(b.length)]),b)},
+ subscribe(pid,topic){const b=cat(new Uint8Array([(pid>>8)&255,pid&255]),this.str(topic),new Uint8Array([0]));
+  return cat(new Uint8Array([0x82,...this.len(b.length)]),b)},
+ publish(topic,bytes,qos=0,pid=0){
+  const p=typeof bytes==='string'?enc.encode(bytes):new Uint8Array(bytes);
+  const vh=qos>0?cat(this.str(topic),new Uint8Array([(pid>>8)&255,pid&255])):this.str(topic);
+  const b=cat(vh,p);return cat(new Uint8Array([0x30|((qos&3)<<1),...this.len(b.length)]),b)},
+ ping(){return new Uint8Array([0xC0,0x00])},
+ parse(buf){const b=buf instanceof Uint8Array?buf:new Uint8Array(buf),pk=[];let i=0;
+  while(i+1<b.length){const h=b[i],type=h>>4,flags=h&15;let j=i+1,mul=1,len=0,ok=false;
+   for(let k=0;k<4;k++){if(j>=b.length)break;const c=b[j++];len+=(c&127)*mul;
+    if(!(c&128)){ok=true;break}mul*=128}
+   if(!ok||j+len>b.length)break;
+   pk.push({type:type,flags:flags,body:b.slice(j,j+len)});i=j+len}
+  return {pk:pk,rest:b.slice(i)}}
+};
+/* the relays: control messages go to all; preview chunks go to at most 2 healthy relays with rate limiting */
+class NostrRelay{constructor(url,sig){this.kind='nostr';this.url=url;this.sig=sig;this.up=false;this.wait=3000;
+  this.fails=0;this.backoffUntil=0;this.oks=new Map();this.notices=[];this.open()}
  open(){let ws;try{ws=new WebSocket(this.url)}catch(e){return this.later()}this.ws=ws;
   ws.onopen=()=>{this.up=true;this.wait=3000;ws.send(JSON.stringify(['REQ','b'+rid(),
    {kinds:[BR.kind],'#t':[BK.topic],since:Math.floor(Date.now()/1000)-60}]));this.sig.changed()};
   ws.onmessage=e=>{try{const m=JSON.parse(e.data);
-   if(m[0]==='EVENT'&&m[2]&&typeof m[2].content==='string')this.sig.arrived(m[2].content);
+   if(m[0]==='EVENT'&&m[2]&&typeof m[2].content==='string')this.sig.arrived(m[2].content,'nostr');
    else if(m[0]==='OK'&&typeof m[1]==='string'){const ok=!!m[2];
     if(!ok){this.fails++;this.backoffUntil=Date.now()+Math.min(60000,4000*Math.pow(2,this.fails-1))}
     else{this.fails=0;this.backoffUntil=0}
@@ -263,45 +290,133 @@ class NostrRelay{constructor(url,sig){this.url=url;this.sig=sig;this.up=false;th
    if(was)this.sig.changed();this.later()};ws.onerror=()=>{try{ws.close()}catch(x){}}}
  later(){setTimeout(()=>this.open(),this.wait+Math.random()*1000);this.wait=Math.min(this.wait*2,60000)}
  send(s,ev){if(this.up&&ev&&Date.now()>=this.backoffUntil)try{this.ws.send(JSON.stringify(['EVENT',ev]))}catch(e){}}
- sendWait(ev,ms=3500){if(!this.up||!ev||Date.now()<this.backoffUntil)return Promise.resolve(false);
+ sendWait(ev,_s,ms=3500){if(typeof _s==='number')ms=_s;
+  if(!this.up||!ev||Date.now()<this.backoffUntil)return Promise.resolve(false);
   return new Promise(r=>{const t=setTimeout(()=>{if(this.oks.delete(ev.id))r(false)},ms);
    this.oks.set(ev.id,ok=>{clearTimeout(t);r(ok)});
    try{this.ws.send(JSON.stringify(['EVENT',ev]))}catch(e){clearTimeout(t);this.oks.delete(ev.id);r(false)}})}}
-class NtfyRelay{constructor(sig){this.sig=sig;this.up=false;this.wait=3000;this.open()}
+NostrRelay.prototype.kind='nostr';
+class NtfyRelay{constructor(sig){this.kind='ntfy';this.sig=sig;this.up=false;this.wait=3000;this.open()}
  open(){let ws;try{ws=new WebSocket(BR.ntfy.replace(/^http/,'ws')+BK.topic+'/ws')}catch(e){return this.later()}this.ws=ws;
   ws.onopen=()=>{this.up=true;this.wait=3000;this.sig.changed()};
   ws.onmessage=e=>{try{const m=JSON.parse(e.data);if(m.event==='message'){
-   if(m.attachment&&m.attachment.url)fetch(m.attachment.url).then(r=>r.ok?r.text():'').then(t=>{if(t)this.sig.arrived(t)}).catch(()=>{});
-   else if(m.message)this.sig.arrived(m.message)}}catch(x){}};
+   if(m.attachment&&m.attachment.url)
+    fetch(m.attachment.url).then(r=>r.ok?r.text():'').then(t=>{if(t)this.sig.arrived(t,'ntfy')}).catch(()=>{});
+   else if(m.message)this.sig.arrived(m.message,'ntfy')}}catch(x){}};
   ws.onclose=()=>{const was=this.up;this.up=false;if(was)this.sig.changed();this.later()};ws.onerror=()=>{try{ws.close()}catch(x){}}}
  later(){setTimeout(()=>this.open(),this.wait+Math.random()*1000);this.wait=Math.min(this.wait*2,60000)}
  send(s){if(s.length<=4000)fetch(BR.ntfy+BK.topic+'?cache=no&firebase=no',{method:'POST',body:s}).catch(()=>{})}
  async sendChunk(s){try{const u=BR.ntfy+BK.topic+(s.length<=4000?'?cache=no&firebase=no':'?firebase=no'),
    h=s.length>4000?{'Filename':'p.bin'}:{};return (await fetch(u,{method:'POST',body:s,headers:h})).ok}catch(e){return false}}}
-const SIG={relays:[],seen:new Set(),loose:new Set(),on:null,onchange:null,_lastChunk:0,
+class MqttRelay{
+ constructor(url,sig){this.kind='mqtt';this.url=url;this.sig=sig;this.up=false;this.wait=3000;this.fails=0;
+  this.backoffUntil=0;this.oks=new Map();this.notices=[];this.pid=1;this.buf=new Uint8Array(0);
+  this._ping=null;this._dead=null;this.open()}
+ _cid(){let id='b';const r=crypto.getRandomValues(new Uint8Array(16));
+  for(const x of r)id+=(x%36).toString(36);return id}
+ _fail(){this.fails++;this.backoffUntil=Date.now()+Math.min(60000,4000*Math.pow(2,this.fails-1))}
+ _touch(ws){clearTimeout(this._dead);this._dead=setTimeout(()=>{if(this.ws===ws)try{ws.close()}catch(x){}},60000)}
+ open(){let ws;try{ws=new WebSocket(this.url,'mqtt')}catch(e){return this.later()}
+  ws.binaryType='arraybuffer';this.ws=ws;this.buf=new Uint8Array(0);
+  ws.onopen=()=>{this._touch(ws);try{ws.send(MQ.connect(this._cid()))}catch(x){try{ws.close()}catch(y){}}};
+  ws.onmessage=e=>{this._touch(ws);
+   const chunk=e.data instanceof ArrayBuffer?new Uint8Array(e.data):enc.encode(String(e.data||''));
+   this.buf=cat(this.buf,chunk);const {pk,rest}=MQ.parse(this.buf);this.buf=rest;
+   for(const p of pk){
+    if(p.type===2){if(p.body.length>=2&&p.body[1]===0){
+      this.pid=(this.pid%65535)+1;ws.send(MQ.subscribe(this.pid,'biruni/1/'+BK.topic))}
+     else{this._fail();try{ws.close()}catch(x){}}}
+    else if(p.type===9){if(p.body.length>=3&&p.body[2]!==0x80){
+      this.up=true;this.wait=3000;this.fails=0;this.backoffUntil=0;
+      clearInterval(this._ping);
+      this._ping=setInterval(()=>{if(this.ws===ws&&ws.readyState===1)try{ws.send(MQ.ping())}catch(x){}},25000);
+      this.sig.changed()}
+     else{this._fail();try{ws.close()}catch(x){}}}
+    else if(p.type===3&&p.body.length>=2){
+     const tl=(p.body[0]<<8)|p.body[1],qos=(p.flags>>1)&3,off=2+tl+(qos>0?2:0);
+     if(qos===1&&p.body.length>=4+tl)try{ws.send(new Uint8Array([0x40,2,p.body[2+tl],p.body[3+tl]]))}catch(x){}
+     if(off<=p.body.length)this.sig.arrived(dec.decode(p.body.subarray(off)),'mqtt')}
+    else if(p.type===4&&p.body.length>=2){
+     const pid=(p.body[0]<<8)|p.body[1],cb=this.oks.get(pid);if(cb){this.oks.delete(pid);cb(true)}}}};
+  ws.onclose=()=>{clearInterval(this._ping);clearTimeout(this._dead);const was=this.up;this.up=false;
+   for(const [,cb] of this.oks)cb(false);this.oks.clear();if(was)this.sig.changed();this.later()};
+  ws.onerror=()=>{try{ws.close()}catch(x){}}}
+ later(){setTimeout(()=>this.open(),this.wait+Math.random()*1000);this.wait=Math.min(this.wait*2,60000)}
+ send(s){if(!this.up||Date.now()<this.backoffUntil||typeof s!=='string'||s.length>90000)return;
+  try{this.ws.send(MQ.publish('biruni/1/'+BK.topic,s,0,0))}catch(e){}}
+ sendWait(ev,s,ms=3500){if(typeof ev==='string'&&typeof s!=='string'){ms=typeof s==='number'?s:3500;s=ev}
+  if(!this.up||Date.now()<this.backoffUntil||typeof s!=='string'||s.length>90000)return Promise.resolve(false);
+  const pid=this.pid=(this.pid%65535)+1;
+  return new Promise(r=>{const t=setTimeout(()=>{if(this.oks.delete(pid))r(false)},ms);
+   this.oks.set(pid,ok=>{clearTimeout(t);r(ok)});
+   try{this.ws.send(MQ.publish('biruni/1/'+BK.topic,s,1,pid))}
+   catch(e){clearTimeout(t);this.oks.delete(pid);r(false)}})}}
+class TunnelRelay{
+ constructor(h,sig){this.kind='tunnel';this.h=h;this.sig=sig;this.base=BR.tun.replace('{h}',h).replace(/\/+$/,'');
+  this.up=false;this.fails=0;this.backoffUntil=0;this.cur=0;this.closed=false;this.lastPost=0;this._inflight=0;
+  this.post('');this._timer=setInterval(()=>{const n=Date.now();
+   if(!this.closed&&!this._inflight&&n>=this.backoffUntil&&n-this.lastPost>=4000)this.post('')},1000)}
+ async post(s){if(this.closed)return false;this.lastPost=Date.now();this._inflight++;
+  const c=new AbortController(),t=setTimeout(()=>c.abort(),8000);
+  try{const r=await fetch(this.base+'/x/'+BK.topic+'?a='+this.cur,{method:'POST',body:s,
+    headers:{'Content-Type':'text/plain'},signal:c.signal});
+   clearTimeout(t);
+   if(r.status!==200)throw new Error(String(r.status));
+   const j=await r.json();if(typeof j.a==='number'&&j.a>this.cur)this.cur=j.a;
+   if(Array.isArray(j.m))for(const m of j.m)if(typeof m==='string')this.sig.arrived(m,'tunnel');
+   const was=this.up;this.up=true;this.fails=0;this.backoffUntil=0;if(!was)this.sig.changed();return true}
+  catch(e){clearTimeout(t);this.fails++;
+   if(this.fails>=3){this.backoffUntil=Date.now()+Math.min(60000,5000*Math.pow(2,this.fails-3));
+    if(this.up){this.up=false;this.sig.changed()}}
+   return false}
+  finally{this._inflight--}}
+ send(s){if(!this.closed&&Date.now()>=this.backoffUntil)this.post(s).catch(()=>{})}
+ sendWait(ev,s){if(typeof ev==='string'&&typeof s!=='string')s=ev;
+  if(this.closed||Date.now()<this.backoffUntil||typeof s!=='string')return Promise.resolve(false);
+  return this.post(s)}
+ close(){this.closed=true;clearInterval(this._timer);const was=this.up;this.up=false;if(was)this.sig.changed()}}
+const SIG={relays:[],seen:new Set(),loose:new Set(),on:null,onchange:null,_lastChunk:0,_tun:null,
  start(onMsg,onChange){this.on=onMsg;this.onchange=onChange;
-  this.relays=BR.relays.map(u=>new NostrRelay(u,this)).concat([new NtfyRelay(this)])},
+  this.relays=BR.relays.map(u=>new NostrRelay(u,this)).concat([new NtfyRelay(this)])
+   .concat((BR.mqtt||[]).map(u=>new MqttRelay(u,this)))},
+ tunnel(h){if(!BR.tun||!/^[a-z0-9-]{3,80}$/.test(String(h||'')))return null;
+  if(this._tun&&this._tun.h===h&&!this._tun.closed)return this._tun;
+  if(this._tun){this._tun.close();this.relays=this.relays.filter(r=>r!==this._tun)}
+  const r=new TunnelRelay(h,this);this._tun=r;this.relays.push(r);return r},
  up(){return this.relays.filter(r=>r.up).length},
- healthyNostr(){return this.relays.filter(r=>r instanceof NostrRelay&&r.up&&Date.now()>=r.backoffUntil).sort((a,b)=>a.fails-b.fails)},
+ kinds(){const k={};for(const r of this.relays){const n=r.kind||'nostr';k[n]=(k[n]||0)+(r.up?1:0)}return k},
+ healthyAck(){return this.relays.filter(r=>r.up&&typeof r.sendWait==='function'&&Date.now()>=(r.backoffUntil||0))
+  .sort((a,b)=>(a.fails||0)-(b.fails||0))},
+ healthyNostr(){return this.healthyAck()},
  changed(){if(this.onchange)this.onchange(this.up())},
  async _sign(obj){
   if(obj.t==='answer'&&ID.sk){const g=await IDSIGN('BRA1|'+obj.sid+'|'+obj.sdp);obj.ip=g.pub;obj.is=g.sig}
   else if(obj.t==='rhello'&&ID.sk){const g=await IDSIGN('BRH0|'+obj.sid+'|'+(obj.pk||''));obj.ip=g.pub;obj.is=g.sig}
-  else if(obj.t==='rack'&&ID.sk){const g=await IDSIGN('BRAK1|'+obj.id+'|'+obj.kind+'|'+obj.nonce);obj.ip=g.pub;obj.is=g.sig}},
+  else if(obj.t==='rack'&&ID.sk){
+   const g=await IDSIGN('BRAK1|'+obj.id+'|'+obj.kind+'|'+obj.nonce);obj.ip=g.pub;obj.is=g.sig}
+  else if(obj.t==='tun'&&ID.sk){const g=await IDSIGN('BRTN1|'+obj.h);obj.ip=g.pub;obj.is=g.sig}},
  async send(obj,z){obj.n=rid();obj.ts=Date.now();this.seen.add(obj.n);await this._sign(obj);
   const s=await seal(obj,z);let ev=null;
   try{ev=await nostrEvent(s,BK.topic)}catch(e){}for(const r of this.relays)r.send(s,ev)},
+ async sendRaw(s,kind){if(typeof s!=='string')return false;
+  const list=this.relays.filter(r=>(r.kind||'nostr')===kind&&r.up&&Date.now()>=(r.backoffUntil||0))
+   .sort((a,b)=>(a.fails||0)-(b.fails||0)).slice(0,2);
+  if(!list.length)return false;let ev=null;
+  if(kind==='nostr')try{ev=await nostrEvent(s,BK.topic)}catch(e){return false}
+  for(const r of list)r.send(s,ev);return true},
  async sendChunk(obj){
   const pace=BR.paceMs!=null?BR.paceMs:180,wait=Math.max(0,this._lastChunk+pace-Date.now());
   if(wait)await sleep(wait);this._lastChunk=Date.now();
   obj.n=rid();obj.ts=Date.now();this.seen.add(obj.n);const s=await seal(obj,true);
   let ev=null;try{ev=await nostrEvent(s,BK.topic)}catch(e){}
   const tried=new Set();
-  while(ev){const pair=this.healthyNostr().filter(r=>!tried.has(r)).slice(0,2);if(!pair.length)break;
-   pair.forEach(r=>tried.add(r));const res=await Promise.all(pair.map(r=>r.sendWait(ev)));
+  while(true){const pair=this.healthyAck().filter(r=>!tried.has(r)&&(ev||(r.kind||'nostr')!=='nostr')).slice(0,2);
+   if(!pair.length)break;
+   pair.forEach(r=>tried.add(r));const res=await Promise.all(pair.map(r=>r.sendWait(ev,s)));
    if(res.some(Boolean))return true}
-  const nr=this.relays.find(r=>r instanceof NtfyRelay);return nr?await nr.sendChunk(s):false},
- async arrived(s){const o=await unseal(s);if(!o||!o.n||this.seen.has(o.n))return;this.seen.add(o.n);
+  const nr=this.relays.find(r=>r.kind==='ntfy');return nr?await nr.sendChunk(s):false},
+ async arrived(s,kind){const o=await unseal(s);if(!o||!o.n||this.seen.has(o.n))return;this.seen.add(o.n);
+  if(this.seen.size>4000)this.seen.delete(this.seen.values().next().value);
   if(Math.abs(Date.now()-(o.ts||0))>15*60000)return;
   /* answers and receipts to this phone must come from the PC (signed) */
   if(o.t==='answer'&&ID.pin&&!this.loose.has(o.sid)&&!await IDOK(o.ip,o.is,'BRA1|'+o.sid+'|'+o.sdp)){
@@ -310,7 +425,11 @@ const SIG={relays:[],seen:new Set(),loose:new Set(),on:null,onchange:null,_lastC
    this.refused=(this.refused||0)+1;return}
   if(o.t==='rack'&&ID.pin&&!await IDOK(o.ip,o.is,'BRAK1|'+o.id+'|'+o.kind+'|'+o.nonce)){
    this.refused=(this.refused||0)+1;return}
-  if(this.on)this.on(o)}};
+  if(o.t==='lack'&&ID.pin&&!await IDOK(o.ip,o.is,'BRLA1|'+o.d+'|'+o.e+'|'+o.upto)){
+   this.refused=(this.refused||0)+1;return}
+  if(o.t==='tun'&&ID.pin&&!await IDOK(o.ip,o.is,'BRTN1|'+o.h)){
+   this.refused=(this.refused||0)+1;return}
+  if(this.on)this.on(o,kind,s)}};
 /* a private line through a teammate's phone: the phone and the PC agree on a key of their own (ECDH on P-256),
    so the phone that carries the messages cannot read them. Every frame after the first is sealed; its first
    byte says what it is (0 a message, 1 a piece of a photo). */
@@ -331,6 +450,8 @@ function gathered(pc,ms){return new Promise(r=>{if(pc.iceGatheringState==='compl
 # ---- the phone: the photo page of server.py, sending over the bridge ------------------------
 BOOT_JS = r"""
 const HP=new URLSearchParams(location.hash.slice(1)),KEYB=HP.get('k')||'';HASHL=HP.get('l');ROOM=KEYB.slice(0,12);
+const _TH=HP.get('t')||'';
+const TUNH=/^[a-z0-9-]{3,80}$/.test(_TH)?(keep('biruni-tun-'+ROOM,_TH),_TH):(kept('biruni-tun-'+ROOM)||'');
 GPSMODE=HP.get('m')==='gps';const VIAONLY=HP.get('v')==='1';
 /* d=1&pk=: this project takes photos through Google Drive; pk is the computer's key, so photos are sealed for it
    before the phone ever reaches the computer (drive_page.py) */
@@ -356,12 +477,14 @@ function lineText(s){if(direct())return dc.send(s);const v=VIA;if(!v||!v.ready)t
 function lineBin(u8){if(direct())return dc.send(u8);const v=VIA;if(!v||!v.ready)throw new Error('closed');
  v.pend+=u8.length;v.q=v.q.then(async()=>{v.ch.send(await E2E.seal(v.key,1,u8));v.pend-=u8.length}).catch(()=>{})}
 const lineBuffered=()=>direct()?dc.bufferedAmount:VIA?VIA.ch.bufferedAmount+VIA.pend:0;
-async function sendPos(p){if(lineOpen())lineText(JSON.stringify({t:'pos',p:p}));
+async function sendPos(p){if(typeof LAD==='object'&&LAD.cap)await LAD.push(p);
+ else if(lineOpen())lineText(JSON.stringify({t:'pos',p:p}));
  else if(RELAY&&SIG.up())SIG.send({t:'rpos',p:p},true)}
 function pollGuide(){}
 function hello(m){if(Array.isArray(m.kinds))KINDS=m.kinds.map(String).slice(0,24);drawKinds();
  if(typeof m.pk==='string'&&m.pk.length>80&&m.pk.length<100){PCKEY=m.pk;keep('biruni-pckey-'+ROOM,m.pk);sealWaiting()}
  if(Array.isArray(m.form)){FORM=m.form.filter(f=>f&&f.name&&f.label).slice(0,30);drawForm()}
+ if(typeof LAD==='object')LAD.onCap(m);
  if(!kept('biruni-lang')&&!HASHL&&pick(m.lang))setLang(pick(m.lang));keep('biruni-hello-'+ROOM,JSON.stringify({kinds:KINDS,form:FORM}))}
 async function handleAck(m){const f=acks.get(m.id);if(!f)return;
  if(m.status===200){const k=m.kind||'original',n=m.nonce||'';
@@ -370,7 +493,11 @@ async function handleAck(m){const f=acks.get(m.id);if(!f)return;
  acks.delete(m.id);f.resolve(m.status===200&&f.kind==='preview'?202:m.status)}
 /* what the PC says, however it comes */
 function fromPc(m){if(m.t==='hello')hello(m);else if(m.t==='guide')setGuide(m.g);
- else if(m.t==='ack')handleAck(m);else if(m.t==='dgot'&&typeof driveGot==='function')driveGot(m)}
+ else if(m.t==='ack')handleAck(m);else if(m.t==='dgot'&&typeof driveGot==='function')driveGot(m);
+ else if(m.t==='la'&&typeof m.s==='string')SIG.arrived(m.s,'direct');
+ else if(m.t==='tun'&&typeof LAD==='object'){
+  if(!ID.pin)LAD.onTun(m.h);
+  else IDOK(m.ip,m.is,'BRTN1|'+m.h).then(ok=>{if(ok)LAD.onTun(m.h);else SIG.refused=(SIG.refused||0)+1})}}
 function failAcks(){for(const [id,f] of acks)if(f.kind==='original'||f.line){acks.delete(id);f.reject(new Error('closed'))}}
 function drop(){const p=pc;pc=null;dc=null;linking=false;if(p)try{p.close()}catch(e){}
  for(const [k,c] of carried){try{if(c)c.close()}catch(e){}}carried.clear();if(!lineOpen())failAcks()}
@@ -436,7 +563,7 @@ async function carry(o){if(!o.sid||carried.has(o.sid)||!direct()||carried.size>=
  setTimeout(()=>{if(carried.has(o.sid)&&!carried.get(o.sid))end()},45000);
  try{await p.setRemoteDescription({type:'offer',sdp:o.sdp});await p.setLocalDescription(await p.createAnswer());
   await gathered(p,3000);await SIG.send({t:'answer',sid:o.sid,sdp:p.localDescription.sdp},!!o.z)}catch(e){end()}}
-async function onSignal(o){
+async function onSignal(o,kind){
  if(o.t==='answer'&&o.sid===sid&&pc&&pc.signalingState==='have-local-offer'){
   try{await pc.setRemoteDescription({type:'answer',sdp:o.sdp})}catch(e){drop();later()}}
  else if(o.t==='answer'&&VIA&&o.sid===VIA.sid&&VIA.pc&&VIA.pc.signalingState==='have-local-offer'){
@@ -444,7 +571,9 @@ async function onSignal(o){
  else if(o.t==='help')carry(o);
  else if(o.t==='rhello'&&(!o.sid||o.sid===rsid)){hello(o);if(!lineOpen()){RELAY=true;say(false,'relayMode');flush();tellPos(true)}}
  else if(o.t==='rguide')setGuide(o.g);
- else if(o.t==='rack')handleAck(o)}
+ else if(o.t==='rack')handleAck(o);
+ else if(o.t==='lack'&&typeof LAD==='object')LAD.onAck(o,kind);
+ else if(o.t==='tun'&&typeof LAD==='object')LAD.onTun(o.h)}
 async function sendRelayPreview(it){
  if(!PCKEY)throw new Error('nokey');
  if(!it.prev&&it.meta&&!it.meta.sealed)it=await put(it);
@@ -485,12 +614,14 @@ async function sendItem1(it){
  throw new Error('closed')}
 async function alive(){if(lineOpen())return true;if(RELAY&&SIG.up())return true;connect();return false}
 function offline(){if(lineOpen())return;drivePump();
+ if(typeof LAD==='object'&&LAD.statusText()){say(false,'ladVia');return}
  if(DRV.on&&DRV.go()){say(false,'driveMode');connect();return}
  if(RELAY&&SIG.up()){say(false,'relayMode');return}
  if(lastState==='connected'||!lastState||lastState==='driveMode')say(false,'connecting');else say(false,lastState);connect()}
 (async()=>{if(!KEYB||KEYB.length!==43||!window.isSecureContext||!window.RTCPeerConnection){
   $('go').disabled=true;status(false,!KEYB?'nokey':'insecure');return}
  await bridgeKey(KEYB);SIG.start(onSignal,n=>{if(n&&!linking&&!lineOpen()){backoff=4000;connect()}});
+ if(typeof LAD==='object')LAD.init();
  window.addEventListener('online',()=>{backoff=4000;connect()})})();
 """
 
@@ -511,10 +642,15 @@ async function onOffer(o){if(o.t!=='offer'||!o.sid||peers.has(o.sid))return;
  setTimeout(()=>{if(pc.iceConnectionState==='new'||pc.iceConnectionState==='checking')end()},45000);
  try{await pc.setRemoteDescription({type:'offer',sdp:o.sdp});await pc.setLocalDescription(await pc.createAnswer());
   await gathered(pc,3000);await SIG.send({t:'answer',sid:o.sid,sdp:pc.localDescription.sdp},!!o.z)}catch(e){end()}}
-async function onRelay(o){
+async function onRelay(o,kind,s){
+ if(o.t==='lpos'&&typeof s==='string'){
+  const via=kind==='nostr'||kind==='ntfy'?'relay':(kind||'relay');
+  try{const r=await fetch('lpos?via='+encodeURIComponent(via),{method:'POST',body:s});
+   if(r.status===200){const ack=await r.text();if(ack)SIG.sendRaw(ack,kind)}}catch(x){}return}
  if(o.t==='offer')return onOffer(o);
  if(o.t==='rhi'){tell({type:'phone',ua:String(o.ua||'').slice(0,160),relay:true});
-  await SIG.send({t:'rhello',sid:String(o.sid||''),kinds:CFG.kinds,lang:CFG.lang,form:CFG.form||[],pk:CFG.pk||''},true);
+  await SIG.send({t:'rhello',sid:String(o.sid||''),kinds:CFG.kinds,lang:CFG.lang,form:CFG.form||[],pk:CFG.pk||'',
+   lad:CFG.lad?1:0,tun:CFG.tun||''},true);
   if(GV)try{await SIG.send({t:'rguide',g:JSON.parse(GUIDE_TXT)},true)}catch(e){}return}
  if(o.t==='rpos'){const p=Object.assign({},o.p||{},{route:'relay'});
   fetch('pos',{method:'POST',body:JSON.stringify(p)}).catch(()=>{});return}
@@ -542,6 +678,9 @@ async function handle(P,data){
    if(cur.got>cur.size||cur.got>41943040){P.send(JSON.stringify({t:'ack',id:cur.id,status:413}));P.cur=null}}return}
  let m;try{m=JSON.parse(data)}catch(x){return}
  if(m.t==='hi')tell({type:'phone',ua:String(m.ua||'').slice(0,160)});
+ else if(m.t==='lp'&&typeof m.s==='string'){const lk=await link(P.pc),route=lk.route||'direct';
+  try{const r=await fetch('lpos?via='+encodeURIComponent(route),{method:'POST',body:m.s});
+   if(r.status===200){const ack=await r.text();if(ack)P.send(JSON.stringify({t:'la',s:ack}))}}catch(x){}}
  else if(m.t==='pos'){const p=Object.assign({},m.p||{},await link(P.pc));
   fetch('pos',{method:'POST',body:JSON.stringify(p)}).catch(()=>{})}
  else if(m.t==='photo')P.cur={id:m.id,kind:m.kind==='preview'?'preview':'original',nonce:String(m.nonce||''),
@@ -570,13 +709,15 @@ function serve(ch,end,pc){ch.binaryType='arraybuffer';const P={send:s=>ch.send(s
    if(typeof data==='string'){let m;try{m=JSON.parse(data)}catch(x){return}
     if(m.t==='hi'&&m.e&&!v.key){const kp=await E2E.pair();v.key=await E2E.key(kp.kp,m.e);ports.add(v.P);
      const g=await IDSIGN('BRH1|'+m.e+'|'+kp.pub)||{};
-     ch.send(JSON.stringify({t:'fwd',to:v.id,m:JSON.stringify({t:'hello',kinds:CFG.kinds,lang:CFG.lang,form:CFG.form||[],pk:CFG.pk||'',e:kp.pub,ip:g.pub,is:g.sig})}));
+     ch.send(JSON.stringify({t:'fwd',to:v.id,m:JSON.stringify({t:'hello',kinds:CFG.kinds,lang:CFG.lang,
+      form:CFG.form||[],pk:CFG.pk||'',lad:CFG.lad?1:0,tun:CFG.tun||'',e:kp.pub,ip:g.pub,is:g.sig})}));
      tell({type:'phone',ua:String(m.ua||'').slice(0,160),via:true});if(GV)v.P.send('{"t":"guide","g":'+GUIDE_TXT+'}')}
     return}
    if(!v.key)return;const p=await E2E.open(v.key,data);
    if(p[0]===0)await handle(v.P,dec.decode(p.slice(1)));else await handle(v.P,p.slice(1).buffer)}).catch(()=>{})};
  const gone=id=>{const v=carried.get(id);if(v){ports.delete(v.P);carried.delete(id)}};
- ch.onopen=()=>{ports.add(P);ch.send(JSON.stringify({t:'hello',kinds:CFG.kinds,lang:CFG.lang,form:CFG.form||[],pk:CFG.pk||''}));
+ ch.onopen=()=>{ports.add(P);ch.send(JSON.stringify({t:'hello',kinds:CFG.kinds,lang:CFG.lang,form:CFG.form||[],
+  pk:CFG.pk||'',lad:CFG.lad?1:0,tun:CFG.tun||''}));
   if(GV)ch.send('{"t":"guide","g":'+GUIDE_TXT+'}')};
  ch.onclose=()=>{ports.delete(P);for(const id of [...carried.keys()])gone(id);end()};
  ch.onmessage=e=>{
@@ -587,8 +728,30 @@ function serve(ch,end,pc){ch.binaryType='arraybuffer';const P={send:s=>ch.send(s
   else if(m&&m.t==='fwdb'&&m.from)nextBin=guest(m.from);
   else if(m&&m.t==='fwdx'&&m.from)gone(m.from);
   else{const d=e.data;q=q.then(()=>handle(P,d)).catch(()=>{})}}}
+class LocalRelay{
+ constructor(sig){this.sig=sig;this.kind='tunnel';this.up=!!CFG.lad;this.loop()}
+ async loop(){while(true){try{
+   const r=await fetch('x-pull',{cache:'no-store'});
+   if(r.status===404){if(this.up){this.up=false;this.sig.changed()}await sleep(30000);continue}
+   if(!r.ok){if(this.up){this.up=false;this.sig.changed()}await sleep(3000);continue}
+   if(!this.up){this.up=true;this.sig.changed()}
+   const a=await r.json();if(Array.isArray(a))for(const m of a)if(typeof m==='string')this.sig.arrived(m,'tunnel')}
+  catch(e){if(this.up){this.up=false;this.sig.changed()}await sleep(3000)}}}
+ send(s){if(this.up&&typeof s==='string')fetch('x-push',{method:'POST',body:s}).catch(()=>{})}}
+let LAST_TUN='';
+setInterval(async()=>{try{
+ const c=await (await fetch('bridge-config',{cache:'no-store'})).json();
+ if(c&&typeof c==='object'){CFG=c;
+  if(CFG.tun&&CFG.tun!==LAST_TUN){LAST_TUN=CFG.tun;
+   await SIG.send({t:'tun',h:CFG.tun},true);
+   const g=await IDSIGN('BRTN1|'+CFG.tun)||{};
+   const msg=JSON.stringify({t:'tun',h:CFG.tun,ip:g.pub,is:g.sig});
+   for(const p of ports)try{p.send(msg)}catch(e){}}}}catch(e){}},10000);
 (async()=>{try{CFG=await (await fetch('bridge-config',{cache:'no-store'})).json()}catch(e){}
- await bridgeKey(HP.get('k')||'');SIG.start(onRelay,n=>tell({type:'relays',up:n,of:SIG.relays.length}));
+ LAST_TUN=CFG.tun||'';
+ await bridgeKey(HP.get('k')||'');
+ SIG.start(onRelay,n=>tell({type:'relays',up:n,of:SIG.relays.length,kinds:SIG.kinds()}));
+ SIG.relays.push(new LocalRelay(SIG));if(CFG.lad)SIG.changed();
  tell({type:'started'})})();
 """
 
@@ -627,7 +790,10 @@ def moved_page(target):
 
 
 def _core():
-    return CORE_JS.replace("__RELAYS__", json.dumps(list(RELAYS))).replace("__NTFY__", NTFY)
+    return (CORE_JS.replace("__RELAYS__", json.dumps(list(RELAYS)))
+            .replace("__NTFY__", NTFY)
+            .replace("__MQTT__", json.dumps(list(MQTT)))
+            .replace("__TUN__", TUNNEL))
 
 
 def receiver_page():
@@ -642,9 +808,9 @@ def phone_page(all_texts):
 
     head, rest = PAGE.split("/*SEND{*/", 1)
     _, tail = rest.split("/*}SEND*/", 1)
-    from . import drive, drive_page
+    from . import drive, drive_page, ladder_page
 
-    page = head + _core() + drive.BFP_JS + drive_page.drive_js() + PHONE_JS + tail
+    page = head + _core() + drive.BFP_JS + drive_page.drive_js() + ladder_page.LADDER_JS + PHONE_JS + tail
     page = page.replace("/*BOOT*/", BOOT_JS)
     return (page.replace("__LANG__", "en").replace("__DEFLANG__", "").replace("__DIR__", "ltr")
             .replace("__TEXTS__", json.dumps(all_texts, ensure_ascii=False, sort_keys=True).replace("</", "<\\/"))
@@ -656,6 +822,20 @@ def _origin(url):
     return f"{p.scheme}://{p.netloc}"
 
 
+def connect_sources(tunnel=False):
+    """Unique connect-src origins for public bridge pages."""
+    sources = [_origin(u) for u in RELAYS if u]
+    if NTFY:
+        nt = _origin(NTFY)
+        sources.extend([nt, re.sub(r"^http", "ws", nt)])
+    sources.extend(_origin(u) for u in MQTT if u)
+    if OWN:
+        sources.append(_origin(OWN))
+    if tunnel and TUNNEL:
+        sources.append(_origin(TUNNEL.replace("{h}", "*")))
+    return list(dict.fromkeys(sources))
+
+
 def with_csp(page, connect=(), frames=()):
     """The phone page with a Content-Security-Policy in a <meta>: only its own inline script and style run (by their
     SHA-256), and it talks only to the relays and ntfy (plus `connect`, and may frame only `frames`). The key is in
@@ -665,8 +845,7 @@ def with_csp(page, connect=(), frames=()):
         return "'sha256-" + base64.b64encode(hashlib.sha256(body.encode("utf-8")).digest()).decode() + "'"
 
     assert page.count("<script>") == 1 and page.count("<style>") == 1 and "<script " not in page, "one inline script"
-    nt = _origin(NTFY)
-    conn = list(dict.fromkeys([*RELAYS, nt, re.sub(r"^http", "ws", nt), *map(_origin, connect)]))
+    conn = list(dict.fromkeys([*connect_sources(True), *map(_origin, connect)]))
     frame = " ".join(map(_origin, frames)) or "'none'"
     csp = "; ".join([
         "default-src 'none'", f"script-src {sha('script')}", f"style-src {sha('style')}",

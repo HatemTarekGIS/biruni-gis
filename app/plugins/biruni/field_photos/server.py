@@ -11,6 +11,7 @@ Over the local network the page is HTTPS with this PC's own certificate (see
 gps/browser.py); from anywhere it goes through a temporary tunnel (tunnel.py) that only
 passes the bytes through. A random token in the address keeps everyone else out.
 """
+from collections import deque
 import datetime as dt
 import json
 import os
@@ -19,6 +20,7 @@ import re
 import secrets
 import ssl
 import threading
+import time
 import unicodedata
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlsplit
@@ -130,7 +132,8 @@ def clean_pos(m):
             # (ms; measured by the phone, or by this computer over the bridge), the route, the battery
             "net": net if net in NETS else "", "eff": eff if eff in ("slow-2g", "2g", "3g", "4g") else "",
             "down": _num(m.get("down"), 0, 10000), "ping": _num(m.get("ping"), 0, 120000),
-            "crtt": _num(m.get("crtt"), 0, 60000), "route": route if route in ("lan", "direct", "relay", "peer") else "",
+            "crtt": _num(m.get("crtt"), 0, 60000),
+            "route": route if route in ("lan", "direct", "relay", "peer", "mqtt", "own", "tunnel", "drive") else "",
             "bat": _num(m.get("bat"), 0, 1), "chg": m.get("chg") is True}
 
 
@@ -774,7 +777,25 @@ class PhotoServer:
         self.guide_v = 0
         self.drive_clean = "keep"   # the office's choice for the surveyors' Drive copies: keep / manual / auto
         self.guide = guide_bytes(0, [])[0]
+        self.ladder = None
+        self.xin = None
+        self.xout = None
+        self.tunnel_host = ""
+        self._xout_seq = 0
+        self._xlock = threading.Lock()
+        self._x_fails = deque()
+        self._x_block_until = 0.0
+        self._stopping = False
         server = self
+
+        def _x_fail():
+            now = time.monotonic()
+            with server._xlock:
+                while server._x_fails and now - server._x_fails[0] > 60.0:
+                    server._x_fails.popleft()
+                server._x_fails.append(now)
+                if len(server._x_fails) >= 30:
+                    server._x_block_until = now + 60.0
 
         class Handler(BaseHTTPRequestHandler):
             protocol_version = "HTTP/1.1"
@@ -790,14 +811,28 @@ class PhotoServer:
                     return None, parts
                 return "/".join(bits[1:]), parts
 
-            def _send(self, code, body=b"", ctype="application/json"):
+            def _send(self, code, body=b"", ctype="application/json", cors=False):
                 self.send_response(code)
                 self.send_header("Content-Type", ctype)
                 self.send_header("Content-Length", str(len(body)))
                 self.send_header("Cache-Control", "no-store")
+                if cors:
+                    self.send_header("Access-Control-Allow-Origin", "*")
                 self.end_headers()
                 if body:
                     self.wfile.write(body)
+
+            def do_OPTIONS(self):  # noqa: N802
+                bits = urlsplit(self.path).path.strip("/").split("/")
+                if len(bits) == 2 and bits[0] == "x":
+                    self.send_response(204)
+                    self.send_header("Access-Control-Allow-Origin", "*")
+                    self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
+                    self.send_header("Access-Control-Allow-Headers", "Content-Type")
+                    self.send_header("Content-Length", "0")
+                    self.end_headers()
+                    return
+                self._send(404)
 
             def do_GET(self):  # noqa: N802
                 route, parts = self._route()
@@ -823,14 +858,92 @@ class PhotoServer:
                 elif route == "guide":
                     self._send(200, server.guide)
                 elif route == "bridge-config" and self._local():
-                    self._send(200, server.bridge_config)
+                    self._send(200, server._bridge_config_bytes())
+                elif route == "x-pull" and self._local():
+                    if server.xin is None:
+                        self._send(404)
+                        return
+                    items = []
+                    if not server._stopping:
+                        try:
+                            first = server.xin.get(timeout=20)
+                            if first is not None:
+                                items.append(first)
+                            while len(items) < 32:
+                                nxt = server.xin.get_nowait()
+                                if nxt is not None:
+                                    items.append(nxt)
+                        except queue.Empty:
+                            pass
+                    if server._stopping:
+                        return
+                    self._send(200, json.dumps(items).encode("utf-8"))
                 else:
                     self._send(404)
 
             def _local(self):
-                return self.client_address[0] == "127.0.0.1"
+                if self.client_address[0] != "127.0.0.1":
+                    return False
+                for h in ("Cf-Connecting-Ip", "Cf-Ray", "X-Forwarded-For"):
+                    if self.headers.get(h) is not None:
+                        return False
+                return True
+
+            def _handle_x(self, topic, parts):
+                if server.ladder is None or not secrets.compare_digest(topic, server.ladder.topic):
+                    self.close_connection = True
+                    self._send(404, cors=True)
+                    return
+                with server._xlock:
+                    blocked = time.monotonic() < server._x_block_until
+                if blocked:
+                    self.close_connection = True
+                    self._send(429, cors=True)
+                    return
+                try:
+                    n = int(self.headers.get("Content-Length") or 0)
+                except ValueError:
+                    n = -1
+                if n < 0 or n > 90 * 1024:
+                    self.close_connection = True
+                    _x_fail()
+                    self._send(403, cors=True)
+                    return
+                if n > 0:
+                    data = _read(self.rfile, n)
+                    if data is None:
+                        self.close_connection = True
+                        return
+                    s = data.decode("utf-8", "replace")
+                    obj = server.ladder.open(s)
+                    if obj is None:
+                        _x_fail()
+                        self._send(403, cors=True)
+                        return
+                    if obj.get("t") == "lpos":
+                        ack = server.take_env(s, "tunnel")
+                        if ack and server.xout is not None:
+                            with server._xlock:
+                                server._xout_seq += 1
+                                server.xout.append((server._xout_seq, time.monotonic(), ack))
+                    elif server.xin is not None:
+                        server.xin.put(s)
+                try:
+                    a_cur = int(parse_qs(parts.query).get("a", ["0"])[0])
+                except ValueError:
+                    a_cur = 0
+                with server._xlock:
+                    now = time.monotonic()
+                    msgs = [m for mid, mt, m in server.xout if mid > a_cur and now - mt < 60.0]
+                    cur_out = server._xout_seq
+                self._send(200, json.dumps({"a": cur_out, "m": msgs}).encode("utf-8"), cors=True)
 
             def do_POST(self):  # noqa: N802
+                parts = urlsplit(self.path)
+                bits = parts.path.strip("/").split("/")
+                if len(bits) == 2 and bits[0] == "x":
+                    self._handle_x(bits[1], parts)
+                    return
                 route, parts = self._route()
                 if route == "bridge-event" and self._local():
                     try:
@@ -842,6 +955,48 @@ class PhotoServer:
                     if isinstance(ev, dict) and isinstance(ev.get("type"), str):
                         server.events.put(("bridge", ev))
                     self._send(200, b'{"ok":true}')
+                    return
+                if route == "x-push" and self._local():
+                    if server.xout is None:
+                        self.close_connection = True
+                        self._send(404)
+                        return
+                    try:
+                        n = int(self.headers.get("Content-Length") or 0)
+                    except ValueError:
+                        n = -1
+                    if n <= 0 or n > 90 * 1024:
+                        self.close_connection = True
+                        self._send(413 if n > 90 * 1024 else 400)
+                        return
+                    data = _read(self.rfile, n)
+                    if data is None:
+                        self.close_connection = True
+                        return
+                    with server._xlock:
+                        server._xout_seq += 1
+                        server.xout.append((server._xout_seq, time.monotonic(), data.decode("utf-8", "replace")))
+                    self._send(200, b'{"ok":true}')
+                    return
+                if route == "lpos" and self._local():
+                    try:
+                        n = int(self.headers.get("Content-Length") or 0)
+                    except ValueError:
+                        n = -1
+                    if n <= 0 or n > 90 * 1024:
+                        self.close_connection = True
+                        self._send(413 if n > 90 * 1024 else 400)
+                        return
+                    data = _read(self.rfile, n)
+                    if data is None:
+                        self.close_connection = True
+                        return
+                    via = parse_qs(parts.query).get("via", [""])[0]
+                    ack = server.take_env(data.decode("utf-8", "replace"), via)
+                    if ack:
+                        self._send(200, ack.encode("utf-8"), "text/plain; charset=utf-8")
+                    else:
+                        self._send(204)
                     return
                 if route == "drive-got" and self._local():   # the receiver page asks which originals are here
                     try:
@@ -913,6 +1068,37 @@ class PhotoServer:
         self.thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
         self.thread.start()
 
+    def set_ladder(self, key):
+        """Enable the fallback ladder envelope handler and tunnel relay queues."""
+        from .ladder import Ladder
+
+        self.ladder = Ladder(key)
+        self.xin = queue.Queue()
+        self.xout = deque(maxlen=64)
+        self.tunnel_host = ""
+        self._xout_seq = 0
+        self._x_fails = deque()
+        self._x_block_until = 0.0
+
+    def take_env(self, s, via):
+        """Process a sealed ladder envelope; queue positions and ladder info, return sealed ack."""
+        if self.ladder is None:
+            return None
+        positions, ack = self.ladder.take(s, via, clean_pos, self.store.resolve_pos)
+        for pos in positions:
+            self.events.put(("pos", pos))
+        if self.ladder.last_info is not None:
+            info = dict(self.ladder.last_info, via=via, at=time.time())
+            self.events.put(("ladder", info))
+        return ack
+
+    def _bridge_config_bytes(self):
+        d = json.loads(self.bridge_config.decode("utf-8"))
+        if self.ladder is not None:
+            d["lad"] = 1
+            d["tun"] = self.tunnel_host or ""
+        return json.dumps(d, ensure_ascii=False).encode("utf-8")
+
     def set_guide(self, items):
         """Send these to every phone (they read it within seconds); returns how many went."""
         self._guide_items = list(items)
@@ -941,6 +1127,9 @@ class PhotoServer:
         return f"/{self.token}/"
 
     def stop(self):
+        self._stopping = True
+        if self.xin is not None:
+            self.xin.put(None)
         self.httpd.shutdown()
         self.httpd.server_close()
 
@@ -1044,7 +1233,14 @@ def phone_texts(tr):
             "drivePickRO": tr("The folder is shared for viewing only. Ask the office to make you an Editor."),
             "driveGone": tr("The office folder can no longer be reached. Ask the office to share it again, then choose it."),
             "driveOwn": tr("in your own Google Drive. If the office uses another account, choose the folder it shared."),
-            "drivePickAgain": tr("Choose another folder"), "driveFolder": tr("Folder:")}
+            "drivePickAgain": tr("Choose another folder"), "driveFolder": tr("Folder:"),
+            # fallback ladder (ladder_page.py)
+            "ladKeep": tr("{n} positions kept on the phone - they are sent when the computer is in reach."),
+            "ladCatch": tr("Sending {n} earlier positions…"),
+            "ladVia": tr("Sending through: {name}"),
+            "chTunnel": tr("direct address"),
+            "chRelay": tr("public relay"),
+            "chOwn": tr("Biruni relay")}
 
 
 def all_phone_texts():
@@ -1598,7 +1794,10 @@ async function checkPrivate(){if(window.BIRUNI_INCOGNITO!=null){setPrivate(!!win
  setPrivate(false);return false}
 function chip(state){$('dot').className='dot '+state;$('chipText').textContent=state==='on'?T.online:state==='wait'?T.linking:T.offline}
 function status(on,key){lastSt=[on,key];const b=$('st');chip(on?'on':key==='connecting'?'wait':'off');
- if(on){b.classList.add('hide')}else{b.textContent=T[key]||key;b.classList.remove('hide')}}
+ if(on){b.classList.add('hide')}else{
+  b.textContent=key==='ladVia'&&typeof LAD==='object'
+   ?(T.ladVia||'Sending through: {name}').replace('{name}',LAD.viaName()):(T[key]||key);
+  b.classList.remove('hide')}}
 let tt=null;function toast(s){const t=$('toast');t.textContent=s;t.classList.add('show');clearTimeout(tt);
  tt=setTimeout(()=>t.classList.remove('show'),2200)}
 function mark(id,s){const e=document.querySelector('[data-id="'+id+'"] .badge');if(!e)return;e.textContent=s;
@@ -1609,7 +1808,9 @@ async function count(){const a=await all(),n=a.length,p=a.filter(x=>x.prevSent).
   pTxt=(T.previewSent||'{n} arrived as preview, original waiting for Wi-Fi').replace('{n}',p),
   dTxt=(T.drivePreview||'').replace('{n}',p),
   wt=p?(p===n?(typeof DRV==='object'&&DRV.on&&DRV.go()&&dTxt?dTxt:pTxt):wTxt+' · '+pTxt):(T.waitingPhotos||'{n} photos waiting').replace('{n}',n);
- if($('waitPill')){$('waitPill').textContent=wt;$('waitPill').classList.toggle('hide',!n)}
+ if($('waitPill')){if(n){$('waitPill').textContent=wt;$('waitPill').classList.remove('hide')}
+  else if(typeof LAD==='object'&&LAD._items.length)LAD.drawPill();
+  else $('waitPill').classList.add('hide')}
  $('lWait').textContent=n?wt:bare(T.queued);
  $('handInfo').textContent=c?T.handCarry.replace('{n}',c):'';
  $('waitBox').classList.toggle('warn',n>0)}

@@ -446,6 +446,8 @@ def _route_text(route):
         "peer": tr("Teammate"),
         "lan": tr("Local network"),
         "tunnel": tr("Tunnel"),
+        "mqtt": tr("Public relay (MQTT)"),
+        "own": tr("Biruni relay"),
         "drive": tr("Google Drive"),
     }.get(route or "", "—")
 
@@ -788,7 +790,7 @@ class FieldPhotosDock(QDockWidget):
         self.plugin = plugin
         self.iface = plugin.iface
         self.setObjectName("BiruniFieldPhotos")
-        self.server = self.tunnel = self.bridge = self.drive = None
+        self.server = self.tunnel = self.bridge = self.drive = self._bridge_tunnel = None
         self._drive_last = None
         self._bridge_since = 0
         self._relays_up = 0
@@ -1265,20 +1267,24 @@ class FieldPhotosDock(QDockWidget):
         self.plugin.activity.log("field_photos", "started", mode, mode, 1)
 
     def _start_bridge(self):
-        from . import bridge
+        from . import bridge, ladder
 
         key = bridge.load_key(QgsSettings())
+        self.server.set_ladder(key)
         try:
             self.bridge = bridge.BridgeHost(self.server.url("127.0.0.1") + "bridge#" + bridge.host_frag(key))
         except OSError as e:
             self.state.setText(tr("It could not be done: {e}").format(e=e))
             return
+        self._bridge_tunnel = ladder.TunnelLink(self.server.port)
         self._bridge_since = time.monotonic()
         self._relays_up = 0
         url = bridge.phone_url(key, lang(), self._drive_pk())
         from ..secure.door import door_ok
 
         if not door_ok(self, url):   # the phone page on the site is not the released one: no link, no QR
+            self._bridge_tunnel.stop()
+            self._bridge_tunnel = None
             self.bridge.stop()
             self.bridge = None
             self.state.setText(tr("The phone page could not be trusted: no link was shown."))
@@ -1321,6 +1327,9 @@ class FieldPhotosDock(QDockWidget):
         if self._downloading is not None:
             self._downloading["cancel"] = True
             self._downloading = None
+        if self._bridge_tunnel is not None:
+            self._bridge_tunnel.stop()
+            self._bridge_tunnel = None
         if self.tunnel is not None:
             self.tunnel.stop()
             self.tunnel = None
@@ -1396,6 +1405,21 @@ class FieldPhotosDock(QDockWidget):
                     self.qr.clear()
                     self.url.clear()
                     self.state.setText(tr("The internet address closed. Press Stop, then Start, for a new one."))
+        if self._bridge_tunnel is not None and self.server is not None and self.bridge is not None:
+            from . import bridge
+
+            while True:
+                ev = self._bridge_tunnel.poll()
+                if ev is None:
+                    break
+                if ev[0] == "url":
+                    self.server.tunnel_host = ev[1]
+                    key = bridge.load_key(QgsSettings())
+                    url = bridge.phone_url(key, lang(), self._drive_pk()) + f"&t={ev[1]}"
+                    self._base_qr_url = self._base_qr_tip = url
+                    if self.qr_mode.currentData() != "per_surveyor":
+                        self._show_qr(url, url)
+                        self.url.setText(bridge.PAGE_URL.split("://", 1)[1])
         if self.bridge is not None:
             while not self.bridge.events.empty():
                 kind, value = self.bridge.events.get_nowait()
@@ -2091,8 +2115,11 @@ class FieldPhotosDock(QDockWidget):
         if self.bridge is None or not self._base_qr_url.startswith(bridge.PAGE_URL):
             return
         url = bridge.phone_url(bridge.load_key(QgsSettings()), lang(), self._drive_pk())
+        if self.server is not None and getattr(self.server, "tunnel_host", ""):
+            url += f"&t={self.server.tunnel_host}"
         self._base_qr_url = self._base_qr_tip = url
         self._show_qr(url, url)
+        self.url.setText(bridge.PAGE_URL.split("://", 1)[1])
 
     def show_shared_qr(self):
         base = self._current_base_url()

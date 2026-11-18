@@ -8051,5 +8051,18 @@
  "{0} applied from teammates": "تم تطبيق {0} من الزملاء",
  "{0} waiting: a teammate's clock is ahead": "{0} بالانتظار: ساعة أحد الزملاء متقدمة",
  "This computer's clock is ahead. Fix the date and time; your edits wait until then.": "ساعة هذا الجهاز متقدمة. صحّح التاريخ والوقت؛ ستنتظر تعديلاتك حتى ذلك الحين.",
- "This room uses \"newest save wins\" for every field; these rules apply only when that is off.": "تستخدم هذه الغرفة قاعدة «الحفظ الأحدث يفوز» لكل حقل؛ ولا تسري هذه القواعد إلا عند إيقافها."
+ "This room uses \"newest save wins\" for every field; these rules apply only when that is off.": "تستخدم هذه الغرفة قاعدة «الحفظ الأحدث يفوز» لكل حقل؛ ولا تسري هذه القواعد إلا عند إيقافها.",
+ "Channel: {name}": "القناة: {name}",
+ "Public relay (MQTT)": "وسيط عام (MQTT)",
+ "Public relay (Nostr)": "وسيط عام (Nostr)",
+ "Biruni relay": "وسيط بيروني",
+ "Direct address (tunnel)": "عنوان مباشر (نفق)",
+ "Catching up - {n} earlier positions are still on the phone": "جارٍ الاستدراك - لا يزال {n} موقعاً سابقاً محفوظاً على الهاتف",
+ "Adding a direct address for networks that block the relays…": "جارٍ إضافة عنوان مباشر للشبكات التي تحجب الوسطاء…",
+ "Direct address ready. A phone that could not connect: scan the code again.": "العنوان المباشر جاهز. الهاتف الذي تعذّر اتصاله: امسح الرمز مجدداً.",
+ "{n} positions kept on the phone - they are sent when the computer is in reach.": "{n} مواقع محفوظة على الهاتف - تُرسل عندما يصبح الحاسوب في النطاق.",
+ "Sending {n} earlier positions…": "جارٍ إرسال {n} مواقع سابقة…",
+ "Sending through: {name}": "جارٍ الإرسال عبر: {name}",
+ "direct address": "عنوان مباشر",
+ "public relay": "وسيط عام"
 }

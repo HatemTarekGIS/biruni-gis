@@ -21,8 +21,9 @@ import shutil
 import sys
 
 # a test's fake relays or fake Google must never reach a published page
-_test = [v for v in ("BIRUNI_BRIDGE_RELAYS", "BIRUNI_BRIDGE_NTFY", "BIRUNI_DRIVE_API", "BIRUNI_DRIVE_HELPER",
-                     "BIRUNI_DRIVE_PARENT", "BIRUNI_DRIVE_GSI") if os.environ.get(v)]
+_test = [v for v in ("BIRUNI_BRIDGE_RELAYS", "BIRUNI_BRIDGE_NTFY", "BIRUNI_BRIDGE_MQTT",
+                     "BIRUNI_BRIDGE_TUNNEL", "BIRUNI_BRIDGE_OWN", "BIRUNI_DRIVE_API",
+                     "BIRUNI_DRIVE_HELPER", "BIRUNI_DRIVE_PARENT", "BIRUNI_DRIVE_GSI") if os.environ.get(v)]
 if _test:
     sys.exit("refusing to build with test settings: " + ", ".join(_test))
 

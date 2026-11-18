@@ -1,6 +1,7 @@
 """Writes tracks into the project: GPS points, the track line with its
 statistics, and the stops. Layers live in the project database (project
 folder) or in temporary layers that are kept when the map is saved."""
+import bisect
 import datetime as dt
 import os
 import uuid
@@ -126,6 +127,8 @@ class TrackRecorder:
         self.points = []        # (time, lat, lon, speed)
         self.line_fid = None
         self.source = ""
+        self.t0 = None
+        self._late_n = 0
 
     @property
     def recording(self):
@@ -140,19 +143,14 @@ class TrackRecorder:
         self.line_fid = None
         self._da = distance_area()
         self.distance_m = 0.0
+        self.t0 = dt.datetime.now(dt.timezone.utc)
+        self._late_n = 0
 
-    def add(self, fix):
-        if not self.recording or not fix.valid:
-            return False
-        if fix.accuracy_m is not None and fix.accuracy_m > self.MAX_ACCURACY_M:
-            return False
-        if self.points:
-            t0, la0, lo0, _ = self.points[-1]
-            step = self._da.measureLine(QgsPointXY(lo0, la0), QgsPointXY(fix.lon, fix.lat))
-            if step < self.MIN_STEP_M and (fix.time - t0).total_seconds() < self.MAX_GAP_S:
-                return False
-            self.distance_m += step
-        self.points.append((fix.time, fix.lat, fix.lon, fix.speed_kmh))
+    @staticmethod
+    def _utc(t):
+        return t if t.tzinfo else t.replace(tzinfo=dt.timezone.utc)
+
+    def _add_point_feature(self, fix):
         lyr = self.layers["points"]
         f = _feature(lyr, QgsGeometry.fromPointXY(QgsPointXY(fix.lon, fix.lat)), {
             "track_id": self.track_id, "time": _iso(fix.time), "lat": fix.lat, "lon": fix.lon, "alt": fix.alt,
@@ -161,7 +159,60 @@ class TrackRecorder:
         ok, out = lyr.dataProvider().addFeatures([f])
         if ok:
             team.notify_added(lyr, out)
+        return lyr
+
+    def add(self, fix):
+        if not self.recording or not fix.valid:
+            return False
+        if fix.accuracy_m is not None and fix.accuracy_m > self.MAX_ACCURACY_M:
+            return False
+        t = self._utc(fix.time)
+        if self.t0 is not None and (t - self.t0).total_seconds() < -5:
+            return False
+        if self.points and t <= self._utc(self.points[-1][0]):
+            return self._insert(fix)
+        if self.points:
+            t0, la0, lo0, _ = self.points[-1]
+            step = self._da.measureLine(QgsPointXY(lo0, la0), QgsPointXY(fix.lon, fix.lat))
+            if step < self.MIN_STEP_M and (t - self._utc(t0)).total_seconds() < self.MAX_GAP_S:
+                return False
+            self.distance_m += step
+        self.points.append((fix.time, fix.lat, fix.lon, fix.speed_kmh))
+        lyr = self._add_point_feature(fix)
         if len(self.points) < 50 or len(self.points) % 5 == 0:  # statistics are O(n): refresh less often
+            self._update_line()
+        lyr.triggerRepaint()
+        return True
+
+    def _insert(self, fix):
+        """Insert a late fix in time order, keeping distance_m and duplicate/step filters consistent."""
+        t = self._utc(fix.time)
+        times = [self._utc(p[0]) for p in self.points]
+        idx = bisect.bisect_left(times, t)
+        if idx > 0 and abs((t - times[idx - 1]).total_seconds()) < 0.5:
+            return False
+        if idx < len(times) and abs((times[idx] - t).total_seconds()) < 0.5:
+            return False
+        step_prev = 0.0
+        if idx > 0:
+            t_prev, la_prev, lo_prev, _ = self.points[idx - 1]
+            step_prev = self._da.measureLine(QgsPointXY(lo_prev, la_prev), QgsPointXY(fix.lon, fix.lat))
+            if step_prev < self.MIN_STEP_M and (t - self._utc(t_prev)).total_seconds() < self.MAX_GAP_S:
+                return False
+        if idx == 0:
+            nxt = self.points[0]
+            self.distance_m += self._da.measureLine(QgsPointXY(fix.lon, fix.lat), QgsPointXY(nxt[2], nxt[1]))
+        elif idx < len(self.points):
+            nxt = self.points[idx]
+            d_old = self._da.measureLine(QgsPointXY(lo_prev, la_prev), QgsPointXY(nxt[2], nxt[1]))
+            d_after = self._da.measureLine(QgsPointXY(fix.lon, fix.lat), QgsPointXY(nxt[2], nxt[1]))
+            self.distance_m += step_prev + d_after - d_old
+        else:
+            self.distance_m += step_prev
+        self.points.insert(idx, (fix.time, fix.lat, fix.lon, fix.speed_kmh))
+        lyr = self._add_point_feature(fix)
+        self._late_n += 1
+        if self._late_n % 25 == 0:
             self._update_line()
         lyr.triggerRepaint()
         return True

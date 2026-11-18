@@ -8051,5 +8051,18 @@
  "{0} applied from teammates": "{0} مورد از همکاران اعمال شد",
  "{0} waiting: a teammate's clock is ahead": "{0} در انتظار: ساعت یکی از همکاران جلو است",
  "This computer's clock is ahead. Fix the date and time; your edits wait until then.": "ساعت این رایانه جلو است. تاریخ و ساعت را تنظیم کنید؛ ویرایش‌های شما تا آن زمان منتظر می‌مانند.",
- "This room uses \"newest save wins\" for every field; these rules apply only when that is off.": "این اتاق برای هر فیلد از قانون «جدیدترین ذخیره برنده است» استفاده می‌کند؛ این قوانین تنها زمانی اعمال می‌شوند که آن گزینه خاموش باشد."
+ "This room uses \"newest save wins\" for every field; these rules apply only when that is off.": "این اتاق برای هر فیلد از قانون «جدیدترین ذخیره برنده است» استفاده می‌کند؛ این قوانین تنها زمانی اعمال می‌شوند که آن گزینه خاموش باشد.",
+ "Channel: {name}": "کانال: {name}",
+ "Public relay (MQTT)": "رله عمومی (MQTT)",
+ "Public relay (Nostr)": "رله عمومی (Nostr)",
+ "Biruni relay": "رله Biruni",
+ "Direct address (tunnel)": "نشانی مستقیم (تونل)",
+ "Catching up - {n} earlier positions are still on the phone": "در حال همگام‌سازی - {n} موقعیت قبلی هنوز روی گوشی است",
+ "Adding a direct address for networks that block the relays…": "در حال افزودن نشانی مستقیم برای شبکه‌هایی که رله‌ها را مسدود می‌کنند…",
+ "Direct address ready. A phone that could not connect: scan the code again.": "نشانی مستقیم آماده است. گوشی که نتوانست متصل شود: کد را دوباره اسکن کند.",
+ "{n} positions kept on the phone - they are sent when the computer is in reach.": "{n} موقعیت روی گوشی نگه داشته شد - هنگام دسترسی به رایانه ارسال می‌شوند.",
+ "Sending {n} earlier positions…": "در حال ارسال {n} موقعیت قبلی…",
+ "Sending through: {name}": "در حال ارسال از طریق: {name}",
+ "direct address": "نشانی مستقیم",
+ "public relay": "رله عمومی"
 }

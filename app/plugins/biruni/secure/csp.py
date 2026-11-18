@@ -229,8 +229,7 @@ def site_policies():
     """Return a dict mapping each built site HTML path to its add_csp() keyword arguments."""
     from ..field_photos import bridge
 
-    nt = _origin(bridge.NTFY)
-    br = tuple(dict.fromkeys([*(_origin(u) for u in bridge.RELAYS), nt, re.sub(r"^http", "ws", nt)]))
+    br = tuple(bridge.connect_sources())
     site_docs = {
         "style": ("https://fonts.googleapis.com",),
         "font": ("https://fonts.gstatic.com",),
