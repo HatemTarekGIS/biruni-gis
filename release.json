@@ -9,7 +9,7 @@
   "assets/overview.png": "22c2162add95c638cdf5d0866e9a1cad1ec2e7247b262f90d8f402699adaa74e",
   "assets/start.png": "2b1e895df5c23f00d1a8b0dcebb7bb2ccf0fac328d2cb5100846620dc8596b41",
   "assets/toolbox.png": "673c5986ae87f3bf266c8c32cb71822789e106725918e07410afc9a1fc51c30b",
-  "d/index.html": "273b5a8625abd0e596c2a49bc6c4521ab5eaba06701b9163adf38dfec38cb823",
+  "d/index.html": "ca7f5c88716ecea4edb0875eff71c1f768898ce6fa6ae45805e50816f920168e",
   "index.html": "1937beabce3cc04e2e33a74377559493c5bb1bcb3502ce4ea6d9ccda271369f5",
   "m/index.html": "72cc2203a3511823356cb1a2f682166ab945ea817f90318f8172a800e0eb009a",
   "p/index.html": "42441af7db24a9d7eda5bbe108a9c9d30432ba379484b7b9d865266a5d912774",
@@ -18,9 +18,9 @@
   "portal/index.html": "86aec4c888101b478cddc07018d5cf8555d17b629341cd71d415036b841ae020",
   "privacy.html": "9f53e9b24d7afad4143ef09df96ce0fe678f2062764e92b30c17e7c8d5b58fbf",
   "r/index.html": "41fbddc8bee3117c9c546de178f1971214caf1d5927cd670d41acc01ea1ddbed",
-  "s/index.html": "273846fe24b79ea0030d211a7aadf13e91f4cbcdd50d5791c2bbcc9f4ddcb6d7",
+  "s/index.html": "3be320a62f0ae566b8411f24ecc61ea1b9b1ff54eabdeb525c6a0cb7e088d622",
   "v/index.html": "01402f2d5602633693ce775c829950b3962d70b092cd5a9885bc51cdff6eaa81"
  },
  "format": "biruni-release",
- "version": "2026-11-18T07:55:02Z"
+ "version": "2026-11-18T09:39:35Z"
 }
