@@ -41,7 +41,7 @@ RELAYS = ("wss://relay.damus.io", "wss://nos.lol", "wss://relay.primal.net", "ws
 NTFY = "https://ntfy.sh/"
 MQTT = ("wss://broker.hivemq.com:8884/mqtt", "wss://broker.emqx.io:8084/mqtt", "wss://test.mosquitto.org:8081/mqtt")
 TUNNEL = "https://{h}.trycloudflare.com"
-OWN = ""  # after deploy: OWN = "wss://relay.biruni-gis.com/r/"
+OWN = "wss://relay.biruni-gis.com/r/"   # Biruni's own relay (relay/, deployed 2026-11-18)
 if os.environ.get("BIRUNI_BRIDGE_RELAYS"):  # tests: a relay on this PC
     RELAYS = tuple(os.environ["BIRUNI_BRIDGE_RELAYS"].split())
     NTFY = os.environ.get("BIRUNI_BRIDGE_NTFY", NTFY)
