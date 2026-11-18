@@ -32,7 +32,7 @@ import time
 
 MAGIC = b"BFP1"
 MAX_HEADER = 4096
-MAX_BODY = 40 * 1024 * 1024 + 4096      # the page uploads up to 40 MB; a sealed photo adds ~100 bytes
+MAX_BODY = 40 * 1024 * 1024 + 4096      # generous: the phone keeps photos at 5 MB (fitPhoto); a seal adds ~100 bytes
 SIG = 64
 NAME_RE = re.compile(r"^(\d{6})-([0-9a-f]{12})\.bfp$")
 DEV_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")

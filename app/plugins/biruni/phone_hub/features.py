@@ -68,8 +68,8 @@ class PhoneGps(Feature):
         dock = plugin.tracking
         if dock.source.is_active():
             return
-        if dock.mode.currentData() not in ("browser", "bridge"):  # the phone page, not a COM port or an app
-            dock.mode.setCurrentIndex(dock.mode.findData("browser"))
+        if dock.mode.currentData() != "bridge":   # the phone page over the bridge (the only phone-browser way now)
+            dock.mode.setCurrentIndex(dock.mode.findData("bridge"))
         dock.toggle_connection()
 
     def stop(self, plugin):
