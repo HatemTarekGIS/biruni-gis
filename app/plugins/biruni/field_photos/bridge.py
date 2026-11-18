@@ -35,17 +35,20 @@ import sys
 import threading
 import urllib.parse
 
+from . import relay_pool
+
 PAGE_URL = "https://photos.biruni-gis.com/p/"
-RELAYS = ("wss://relay.damus.io", "wss://nos.lol", "wss://relay.primal.net", "wss://nostr.mom",
-          "wss://relay.nostr.band")
+RELAYS = relay_pool.NOSTR
+LEGACY_RELAYS = relay_pool.LEGACY_NOSTR
 NTFY = "https://ntfy.sh/"
-MQTT = ("wss://broker.hivemq.com:8884/mqtt", "wss://broker.emqx.io:8084/mqtt", "wss://test.mosquitto.org:8081/mqtt")
+MQTT = relay_pool.MQTT
+LEGACY_MQTT = relay_pool.LEGACY_MQTT
 TUNNEL = "https://{h}.trycloudflare.com"
 OWN = "wss://relay.biruni-gis.com/r/"   # Biruni's own relay (relay/, deployed 2026-11-18)
 if os.environ.get("BIRUNI_BRIDGE_RELAYS"):  # tests: a relay on this PC
-    RELAYS = tuple(os.environ["BIRUNI_BRIDGE_RELAYS"].split())
+    RELAYS = LEGACY_RELAYS = tuple(os.environ["BIRUNI_BRIDGE_RELAYS"].split())
     NTFY = os.environ.get("BIRUNI_BRIDGE_NTFY", NTFY)
-    MQTT = tuple(os.environ.get("BIRUNI_BRIDGE_MQTT", "").split())
+    MQTT = LEGACY_MQTT = tuple(os.environ.get("BIRUNI_BRIDGE_MQTT", "").split())
     TUNNEL = os.environ.get("BIRUNI_BRIDGE_TUNNEL", "")
     OWN = os.environ.get("BIRUNI_BRIDGE_OWN", "")
 KEY = "biruni/field-photos/bridge-key"
@@ -172,15 +175,18 @@ def phone_url(key, lang="en", drive_pk=None):
     """The phone page's address (everything after # stays on the phone). drive_pk: this computer's handover public
     key when the project takes photos through Google Drive - the page then offers Drive and seals each photo for it
     (&d=1&pk=, see drive.py) even before it has ever reached this computer."""
-    url = f"{PAGE_URL}#k={key}&i={pin(key)}&l={lang}"
+    url = f"{PAGE_URL}#k={key}&i={pin(key)}&l={lang}&p=2"
     return url + f"&d=1&pk={drive_pk}" if drive_pk else url
 
 
 # ---- the shared script: encryption, Nostr signatures, relays ------------------------------
 CORE_JS = r"""
 /* ---- Biruni bridge core: shared by the phone page and the PC's hidden receiver ---- */
-const BR={relays:__RELAYS__,ntfy:'__NTFY__',mqtt:__MQTT__,tun:'__TUN__',own:'__OWN__',kind:25050,
+const BR={relays:__RELAYS__,legacyRelays:__LEGACY_RELAYS__,ntfy:'__NTFY__',mqtt:__MQTT__,legacyMqtt:__LEGACY_MQTT__,
+ poolK:__POOL_K__,tun:'__TUN__',own:'__OWN__',kind:25050,
  ice:[{urls:['stun:stun.l.google.com:19302','stun:stun.cloudflare.com:3478']}]};
+const HOSTSIDE=typeof location!=='undefined'&&location.hostname==='127.0.0.1';
+const POOLV=typeof location!=='undefined'&&new URLSearchParams((location.hash||'').slice(1)).get('p')==='2';
 const enc=new TextEncoder(),dec=new TextDecoder();
 const b64u={enc:b=>{let s='';const a=new Uint8Array(b);for(let i=0;i<a.length;i++)s+=String.fromCharCode(a[i]);
   return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')},
@@ -237,9 +243,14 @@ async function nostrEvent(content,topic){if(!NID){let sk=0n;
  ev.id=hex(id);ev.sig=hex(await schnorr(NID.sk,id,crypto.getRandomValues(new Uint8Array(32))));return ev}
 /* the key: AES-GCM for every message, and the meeting name the relays see */
 let BK=null;
+async function rankUrls(topic,urls){
+ const pairs=await Promise.all((urls||[]).map(async u=>({u:u,h:hex(await sha(enc.encode(topic+'|'+u)))})));
+ pairs.sort((a,b)=>(b.h>a.h?1:b.h<a.h?-1:0));return pairs.map(x=>x.u)}
 async function bridgeKey(k){const raw=b64u.dec(k);
+ const topic='biruni'+hex(await sha(cat(enc.encode('biruni-bridge-1:'),raw))).slice(0,40);
+ const order={nostr:await rankUrls(topic,BR.relays),mqtt:await rankUrls(topic,BR.mqtt||[])};
  BK={k:await crypto.subtle.importKey('raw',raw,'AES-GCM',false,['encrypt','decrypt']),
-  topic:'biruni'+hex(await sha(cat(enc.encode('biruni-bridge-1:'),raw))).slice(0,40)};await idInit(k);return BK}
+  topic:topic,order:order};await idInit(k);return BK}
 const canZ=typeof CompressionStream!=='undefined'&&typeof DecompressionStream!=='undefined';
 async function zz(d,pack){const s=new Blob([d]).stream().pipeThrough(pack?new CompressionStream('deflate-raw'):
  new DecompressionStream('deflate-raw'));return new Uint8Array(await new Response(s).arrayBuffer())}
@@ -274,12 +285,14 @@ const MQ={
 };
 /* the relays: control messages go to all; preview chunks go to at most 2 healthy relays with rate limiting */
 class NostrRelay{constructor(url,sig){this.kind='nostr';this.url=url;this.sig=sig;this.up=false;this.wait=3000;
-  this.fails=0;this.backoffUntil=0;this.oks=new Map();this.notices=[];this.open()}
- open(){let ws;try{ws=new WebSocket(this.url)}catch(e){return this.later()}this.ws=ws;
+  this.fails=0;this.backoffUntil=0;this.oks=new Map();this.notices=[];this.closed=false;this._tm=null;
+  this.openedAt=Date.now();this.open()}
+ open(){if(this.closed)return;this.openedAt=Date.now();let ws;
+  try{ws=new WebSocket(this.url)}catch(e){return this.later()}this.ws=ws;
   ws.onopen=()=>{this.up=true;this.wait=3000;ws.send(JSON.stringify(['REQ','b'+rid(),
    {kinds:[BR.kind],'#t':[BK.topic],since:Math.floor(Date.now()/1000)-60}]));this.sig.changed()};
   ws.onmessage=e=>{try{const m=JSON.parse(e.data);
-   if(m[0]==='EVENT'&&m[2]&&typeof m[2].content==='string')this.sig.arrived(m[2].content,'nostr');
+   if(m[0]==='EVENT'&&m[2]&&typeof m[2].content==='string')this.sig.arrived(m[2].content,'nostr',this);
    else if(m[0]==='OK'&&typeof m[1]==='string'){const ok=!!m[2];
     if(!ok){this.fails++;this.backoffUntil=Date.now()+Math.min(60000,4000*Math.pow(2,this.fails-1))}
     else{this.fails=0;this.backoffUntil=0}
@@ -287,8 +300,13 @@ class NostrRelay{constructor(url,sig){this.kind='nostr';this.url=url;this.sig=si
    else if(m[0]==='NOTICE'){const w=String(m[1]||'');this.notices.push(w);
     if(/rate|limit|slow|quota|ban|block|too/i.test(w)){this.fails++;this.backoffUntil=Date.now()+15000}}}catch(x){}};
   ws.onclose=()=>{const was=this.up;this.up=false;for(const [,cb] of this.oks)cb(false);this.oks.clear();
-   if(was)this.sig.changed();this.later()};ws.onerror=()=>{try{ws.close()}catch(x){}}}
- later(){setTimeout(()=>this.open(),this.wait+Math.random()*1000);this.wait=Math.min(this.wait*2,60000)}
+   if(was)this.sig.changed();if(!this.closed){this.openedAt=Date.now();this.later()}};
+  ws.onerror=()=>{try{ws.close()}catch(x){}}}
+ later(){if(this.closed)return;clearTimeout(this._tm);
+  this._tm=setTimeout(()=>this.open(),this.wait+Math.random()*1000);this.wait=Math.min(this.wait*2,60000)}
+ close(){this.closed=true;clearTimeout(this._tm);const was=this.up;this.up=false;
+  for(const [,cb] of this.oks)cb(false);this.oks.clear();
+  try{if(this.ws)this.ws.close()}catch(x){}if(was)this.sig.changed()}
  send(s,ev){if(this.up&&ev&&Date.now()>=this.backoffUntil)try{this.ws.send(JSON.stringify(['EVENT',ev]))}catch(e){}}
  sendWait(ev,_s,ms=3500){if(typeof _s==='number')ms=_s;
   if(!this.up||!ev||Date.now()<this.backoffUntil)return Promise.resolve(false);
@@ -296,13 +314,13 @@ class NostrRelay{constructor(url,sig){this.kind='nostr';this.url=url;this.sig=si
    this.oks.set(ev.id,ok=>{clearTimeout(t);r(ok)});
    try{this.ws.send(JSON.stringify(['EVENT',ev]))}catch(e){clearTimeout(t);this.oks.delete(ev.id);r(false)}})}}
 NostrRelay.prototype.kind='nostr';
-class NtfyRelay{constructor(sig){this.kind='ntfy';this.sig=sig;this.up=false;this.wait=3000;this.open()}
+class NtfyRelay{constructor(sig){this.kind='ntfy';this.url=BR.ntfy;this.sig=sig;this.up=false;this.wait=3000;this.open()}
  open(){let ws;try{ws=new WebSocket(BR.ntfy.replace(/^http/,'ws')+BK.topic+'/ws')}catch(e){return this.later()}this.ws=ws;
   ws.onopen=()=>{this.up=true;this.wait=3000;this.sig.changed()};
   ws.onmessage=e=>{try{const m=JSON.parse(e.data);if(m.event==='message'){
    if(m.attachment&&m.attachment.url)
-    fetch(m.attachment.url).then(r=>r.ok?r.text():'').then(t=>{if(t)this.sig.arrived(t,'ntfy')}).catch(()=>{});
-   else if(m.message)this.sig.arrived(m.message,'ntfy')}}catch(x){}};
+    fetch(m.attachment.url).then(r=>r.ok?r.text():'').then(t=>{if(t)this.sig.arrived(t,'ntfy',this)}).catch(()=>{});
+   else if(m.message)this.sig.arrived(m.message,'ntfy',this)}}catch(x){}};
   ws.onclose=()=>{const was=this.up;this.up=false;if(was)this.sig.changed();this.later()};ws.onerror=()=>{try{ws.close()}catch(x){}}}
  later(){setTimeout(()=>this.open(),this.wait+Math.random()*1000);this.wait=Math.min(this.wait*2,60000)}
  send(s){if(s.length<=4000)fetch(BR.ntfy+BK.topic+'?cache=no&firebase=no',{method:'POST',body:s}).catch(()=>{})}
@@ -311,12 +329,13 @@ class NtfyRelay{constructor(sig){this.kind='ntfy';this.sig=sig;this.up=false;thi
 class MqttRelay{
  constructor(url,sig){this.kind='mqtt';this.url=url;this.sig=sig;this.up=false;this.wait=3000;this.fails=0;
   this.backoffUntil=0;this.oks=new Map();this.notices=[];this.pid=1;this.buf=new Uint8Array(0);
-  this._ping=null;this._dead=null;this.open()}
+  this._ping=null;this._dead=null;this.closed=false;this._tm=null;this.openedAt=Date.now();this.open()}
  _cid(){let id='b';const r=crypto.getRandomValues(new Uint8Array(16));
   for(const x of r)id+=(x%36).toString(36);return id}
  _fail(){this.fails++;this.backoffUntil=Date.now()+Math.min(60000,4000*Math.pow(2,this.fails-1))}
  _touch(ws){clearTimeout(this._dead);this._dead=setTimeout(()=>{if(this.ws===ws)try{ws.close()}catch(x){}},60000)}
- open(){let ws;try{ws=new WebSocket(this.url,'mqtt')}catch(e){return this.later()}
+ open(){if(this.closed)return;this.openedAt=Date.now();let ws;
+  try{ws=new WebSocket(this.url,'mqtt')}catch(e){return this.later()}
   ws.binaryType='arraybuffer';this.ws=ws;this.buf=new Uint8Array(0);
   ws.onopen=()=>{this._touch(ws);try{ws.send(MQ.connect(this._cid()))}catch(x){try{ws.close()}catch(y){}}};
   ws.onmessage=e=>{this._touch(ws);
@@ -335,13 +354,18 @@ class MqttRelay{
     else if(p.type===3&&p.body.length>=2){
      const tl=(p.body[0]<<8)|p.body[1],qos=(p.flags>>1)&3,off=2+tl+(qos>0?2:0);
      if(qos===1&&p.body.length>=4+tl)try{ws.send(new Uint8Array([0x40,2,p.body[2+tl],p.body[3+tl]]))}catch(x){}
-     if(off<=p.body.length)this.sig.arrived(dec.decode(p.body.subarray(off)),'mqtt')}
+     if(off<=p.body.length)this.sig.arrived(dec.decode(p.body.subarray(off)),'mqtt',this)}
     else if(p.type===4&&p.body.length>=2){
      const pid=(p.body[0]<<8)|p.body[1],cb=this.oks.get(pid);if(cb){this.oks.delete(pid);cb(true)}}}};
   ws.onclose=()=>{clearInterval(this._ping);clearTimeout(this._dead);const was=this.up;this.up=false;
-   for(const [,cb] of this.oks)cb(false);this.oks.clear();if(was)this.sig.changed();this.later()};
+   for(const [,cb] of this.oks)cb(false);this.oks.clear();if(was)this.sig.changed();
+   if(!this.closed){this.openedAt=Date.now();this.later()}};
   ws.onerror=()=>{try{ws.close()}catch(x){}}}
- later(){setTimeout(()=>this.open(),this.wait+Math.random()*1000);this.wait=Math.min(this.wait*2,60000)}
+ later(){if(this.closed)return;clearTimeout(this._tm);
+  this._tm=setTimeout(()=>this.open(),this.wait+Math.random()*1000);this.wait=Math.min(this.wait*2,60000)}
+ close(){this.closed=true;clearTimeout(this._tm);clearInterval(this._ping);clearTimeout(this._dead);
+  const was=this.up;this.up=false;for(const [,cb] of this.oks)cb(false);this.oks.clear();
+  try{if(this.ws)this.ws.close()}catch(x){}if(was)this.sig.changed()}
  send(s){if(!this.up||Date.now()<this.backoffUntil||typeof s!=='string'||s.length>90000)return;
   try{this.ws.send(MQ.publish('biruni/1/'+BK.topic,s,0,0))}catch(e){}}
  sendWait(ev,s,ms=3500){if(typeof ev==='string'&&typeof s!=='string'){ms=typeof s==='number'?s:3500;s=ev}
@@ -363,7 +387,7 @@ class TunnelRelay{
    clearTimeout(t);
    if(r.status!==200)throw new Error(String(r.status));
    const j=await r.json();if(typeof j.a==='number'&&j.a>this.cur)this.cur=j.a;
-   if(Array.isArray(j.m))for(const m of j.m)if(typeof m==='string')this.sig.arrived(m,'tunnel');
+   if(Array.isArray(j.m))for(const m of j.m)if(typeof m==='string')this.sig.arrived(m,'tunnel',this);
    const was=this.up;this.up=true;this.fails=0;this.backoffUntil=0;if(!was)this.sig.changed();return true}
   catch(e){clearTimeout(t);this.fails++;
    if(this.fails>=3){this.backoffUntil=Date.now()+Math.min(60000,5000*Math.pow(2,this.fails-3));
@@ -376,7 +400,7 @@ class TunnelRelay{
   return this.post(s)}
  close(){this.closed=true;clearInterval(this._timer);const was=this.up;this.up=false;if(was)this.sig.changed()}}
 class OwnRelay{
- constructor(sig){this.kind='own';this.sig=sig;this.up=false;this.wait=3000;this.fails=0;
+ constructor(sig){this.kind='own';this.url=BR.own;this.sig=sig;this.up=false;this.wait=3000;this.fails=0;
   this._bo=0;this.backoffUntil=0;this._ping=null;this._opened=false;this._tm=0;this.open()}
  _backoff(){this._bo=this._bo?Math.min(600000,this._bo*2):60000;this.backoffUntil=Date.now()+this._bo}
  open(){if(!BR.own)return;const left=this.backoffUntil-Date.now();
@@ -388,7 +412,7 @@ class OwnRelay{
    clearInterval(this._ping);
    this._ping=setInterval(()=>{if(this.ws===ws&&ws.readyState===1)try{ws.send('p')}catch(x){}},25000);
    this.sig.changed()};
-  ws.onmessage=e=>{if(typeof e.data==='string'&&e.data!=='q')this.sig.arrived(e.data,'own')};
+  ws.onmessage=e=>{if(typeof e.data==='string'&&e.data!=='q')this.sig.arrived(e.data,'own',this)};
   ws.onclose=e=>{clearInterval(this._ping);const was=this.up;this.up=false;if(was)this.sig.changed();
    if(e&&e.code===1013)this._backoff();
    else if(!this._opened){this.fails++;if(this.fails>=3)this._backoff()}
@@ -401,16 +425,40 @@ class OwnRelay{
  sendWait(ev,s){if(typeof ev==='string'&&typeof s!=='string')s=ev;
   if(!this.up||Date.now()<this.backoffUntil||typeof s!=='string'||s.length>90000)return Promise.resolve(false);
   try{this.ws.send(s);return Promise.resolve(this.up)}catch(e){return Promise.resolve(false)}}}
-const SIG={relays:[],seen:new Set(),loose:new Set(),on:null,onchange:null,_lastChunk:0,_tun:null,
- start(onMsg,onChange){this.on=onMsg;this.onchange=onChange;
-  this.relays=BR.relays.map(u=>new NostrRelay(u,this)).concat([new NtfyRelay(this)])
-   .concat((BR.mqtt||[]).map(u=>new MqttRelay(u,this)))
-   .concat(BR.own?[new OwnRelay(this)]:[])},
+const SIG={relays:[],seen:new Set(),loose:new Set(),on:null,onchange:null,_lastChunk:0,_tun:null,_hc:null,_tried:null,
+ _pick(kind){
+  const pool=(BK&&BK.order&&BK.order[kind])||(kind==='nostr'?BR.relays:BR.mqtt)||[];
+  const leg=(kind==='nostr'?BR.legacyRelays:BR.legacyMqtt)||[];
+  const cfg=(BR.poolK&&BR.poolK[kind])||{phone:3,host:5,scan:8};
+  if(HOSTSIDE){const top=pool.slice(0,cfg.host),ls=new Set(leg),anc=pool.find(u=>ls.has(u))||leg[0];
+   if(anc&&!top.includes(anc))top.push(anc);return top}
+  if(POOLV)return pool.slice(0,cfg.phone);
+  return leg.slice()},
+ _health(){const now=Date.now();
+  for(let i=0;i<this.relays.length;i++){const r=this.relays[i];
+   if(r.kind!=='nostr'&&r.kind!=='mqtt')continue;
+   if(!((!r.up&&(now-(r.openedAt||0))>=8000)||(r.fails||0)>=2))continue;
+   const pool=(BK&&BK.order&&BK.order[r.kind])||(r.kind==='nostr'?BR.relays:BR.mqtt)||[];
+   const scan=((BR.poolK&&BR.poolK[r.kind])||{}).scan||pool.length;
+   const tried=this._tried[r.kind]||(this._tried[r.kind]=new Set());
+   const nextUrl=pool.slice(0,scan).find(u=>!tried.has(u));
+   if(!nextUrl)continue;
+   tried.add(nextUrl);r.close();
+   this.relays[i]=r.kind==='nostr'?new NostrRelay(nextUrl,this):new MqttRelay(nextUrl,this)}},
+ start(onMsg,onChange){this.on=onMsg;this.onchange=onChange;clearInterval(this._hc);
+  const nUrls=this._pick('nostr'),mUrls=this._pick('mqtt');
+  this._tried={nostr:new Set(nUrls),mqtt:new Set(mUrls)};
+  this.relays=nUrls.map(u=>new NostrRelay(u,this)).concat([new NtfyRelay(this)])
+   .concat(mUrls.map(u=>new MqttRelay(u,this)))
+   .concat(BR.own?[new OwnRelay(this)]:[]);
+  this._hc=setInterval(()=>this._health(),4000)},
  tunnel(h){if(!BR.tun||!/^[a-z0-9-]{3,80}$/.test(String(h||'')))return null;
   if(this._tun&&this._tun.h===h&&!this._tun.closed)return this._tun;
   if(this._tun){this._tun.close();this.relays=this.relays.filter(r=>r!==this._tun)}
   const r=new TunnelRelay(h,this);this._tun=r;this.relays.push(r);return r},
  up(){return this.relays.filter(r=>r.up).length},
+ hosts(){const out=[];for(const r of this.relays)if(r.up&&r.url){try{
+   const h=new URL(r.url).hostname;if(h&&!out.includes(h))out.push(h)}catch(e){}}return out},
  kinds(){const k={};for(const r of this.relays){const n=r.kind||'nostr';k[n]=(k[n]||0)+(r.up?1:0)}return k},
  healthyAck(){return this.relays.filter(r=>r.up&&typeof r.sendWait==='function'&&Date.now()>=(r.backoffUntil||0))
   .sort((a,b)=>(a.fails||0)-(b.fails||0))},
@@ -427,10 +475,15 @@ const SIG={relays:[],seen:new Set(),loose:new Set(),on:null,onchange:null,_lastC
   try{ev=await nostrEvent(s,BK.topic)}catch(e){}for(const r of this.relays)r.send(s,ev)},
  async sendRaw(s,kind){if(typeof s!=='string')return false;
   const list=this.relays.filter(r=>(r.kind||'nostr')===kind&&r.up&&Date.now()>=(r.backoffUntil||0))
-   .sort((a,b)=>(a.fails||0)-(b.fails||0)).slice(0,2);
+   .sort((a,b)=>(a.fails||0)-(b.fails||0)).slice(0,1);
   if(!list.length)return false;let ev=null;
   if(kind==='nostr')try{ev=await nostrEvent(s,BK.topic)}catch(e){return false}
   for(const r of list)r.send(s,ev);return true},
+ async sendOn(relay,s){
+  if(!relay||typeof s!=='string'||!relay.up||Date.now()<(relay.backoffUntil||0))return false;
+  let ev=null;
+  if((relay.kind||'nostr')==='nostr')try{ev=await nostrEvent(s,BK.topic)}catch(e){return false}
+  relay.send(s,ev);return true},
  async sendChunk(obj){
   const pace=BR.paceMs!=null?BR.paceMs:180,wait=Math.max(0,this._lastChunk+pace-Date.now());
   if(wait)await sleep(wait);this._lastChunk=Date.now();
@@ -442,7 +495,7 @@ const SIG={relays:[],seen:new Set(),loose:new Set(),on:null,onchange:null,_lastC
    pair.forEach(r=>tried.add(r));const res=await Promise.all(pair.map(r=>r.sendWait(ev,s)));
    if(res.some(Boolean))return true}
   const nr=this.relays.find(r=>r.kind==='ntfy');return nr?await nr.sendChunk(s):false},
- async arrived(s,kind){const o=await unseal(s);if(!o||!o.n||this.seen.has(o.n))return;this.seen.add(o.n);
+ async arrived(s,kind,relay){const o=await unseal(s);if(!o||!o.n||this.seen.has(o.n))return;this.seen.add(o.n);
   if(this.seen.size>4000)this.seen.delete(this.seen.values().next().value);
   if(Math.abs(Date.now()-(o.ts||0))>15*60000)return;
   /* answers and receipts to this phone must come from the PC (signed) */
@@ -456,7 +509,7 @@ const SIG={relays:[],seen:new Set(),loose:new Set(),on:null,onchange:null,_lastC
    this.refused=(this.refused||0)+1;return}
   if(o.t==='tun'&&ID.pin&&!await IDOK(o.ip,o.is,'BRTN1|'+o.h)){
    this.refused=(this.refused||0)+1;return}
-  if(this.on)this.on(o,kind,s)}};
+  if(this.on)this.on(o,kind,s,relay)}};
 /* a private line through a teammate's phone: the phone and the PC agree on a key of their own (ECDH on P-256),
    so the phone that carries the messages cannot read them. Every frame after the first is sealed; its first
    byte says what it is (0 a message, 1 a piece of a photo). */
@@ -479,7 +532,7 @@ BOOT_JS = r"""
 const HP=new URLSearchParams(location.hash.slice(1)),KEYB=HP.get('k')||'';HASHL=HP.get('l');ROOM=KEYB.slice(0,12);
 const _TH=HP.get('t')||'';
 const TUNH=/^[a-z0-9-]{3,80}$/.test(_TH)?(keep('biruni-tun-'+ROOM,_TH),_TH):(kept('biruni-tun-'+ROOM)||'');
-GPSMODE=HP.get('m')==='gps';const VIAONLY=HP.get('v')==='1',GDRIVE=GPSMODE&&HP.get('g')==='1';
+GPSMODE=HP.get('m')==='gps';const VIAONLY=HP.get('v')==='1',GDRIVE=GPSMODE&&HP.get('g')==='1',DRFULL=HP.get('f')==='1';
 /* d=1&pk=: this project takes photos through Google Drive; pk is the computer's key, so photos are sealed for it
    before the phone ever reaches the computer (drive_page.py) */
 const DPK=HP.get('pk')||'',DRIVE_ON=HP.get('d')==='1'&&/^[\w-]{81,99}$/.test(DPK)&&!GPSMODE;if(DRIVE_ON)PCKEY=DPK;
@@ -504,9 +557,11 @@ function lineText(s){if(direct())return dc.send(s);const v=VIA;if(!v||!v.ready)t
 function lineBin(u8){if(direct())return dc.send(u8);const v=VIA;if(!v||!v.ready)throw new Error('closed');
  v.pend+=u8.length;v.q=v.q.then(async()=>{v.ch.send(await E2E.seal(v.key,1,u8));v.pend-=u8.length}).catch(()=>{})}
 const lineBuffered=()=>direct()?dc.bufferedAmount:VIA?VIA.ch.bufferedAmount+VIA.pend:0;
-async function sendPos(p){if(typeof LAD==='object'&&LAD.cap)await LAD.push(p);
- else if(lineOpen())lineText(JSON.stringify({t:'pos',p:p}));
- else if(RELAY&&SIG.up())SIG.send({t:'rpos',p:p},true)}
+async function sendPos(p,force){
+ const pts=(GPSMODE&&!DRFULL&&typeof DR==='object')?DR.offer(p,force):[p];
+ for(const pt of pts){if(typeof LAD==='object'&&LAD.cap)await LAD.push(pt);
+  else if(lineOpen())lineText(JSON.stringify({t:'pos',p:pt}));
+  else if(RELAY&&SIG.up())SIG.send({t:'rpos',p:pt},true)}}
 function pollGuide(){}
 function hello(m){if(Array.isArray(m.kinds))KINDS=m.kinds.map(String).slice(0,24);drawKinds();
  if(typeof m.pk==='string'&&m.pk.length>80&&m.pk.length<100){PCKEY=m.pk;keep('biruni-pckey-'+ROOM,m.pk);sealWaiting()}
@@ -529,7 +584,8 @@ function failAcks(){for(const [id,f] of acks)if(f.kind==='original'||f.line){ack
 function drop(){const p=pc;pc=null;dc=null;linking=false;if(p)try{p.close()}catch(e){}
  for(const [k,c] of carried){try{if(c)c.close()}catch(e){}}carried.clear();if(!lineOpen())failAcks()}
 function dropVia(){const v=VIA;VIA=null;if(v&&v.pc)try{v.pc.close()}catch(e){}if(!lineOpen())failAcks()}
-function later(){clearTimeout(retry);retry=setTimeout(connect,backoff);backoff=Math.min(backoff*2,60000)}
+function later(){clearTimeout(retry);retry=setTimeout(connect,backoff);
+ const cap=typeof LAD==='object'&&LAD.primary()?300000:60000;backoff=Math.min(backoff*2,cap)}
 function startRelay(){if(lineOpen()||!SIG.up())return;SIG.send({t:'rhi',sid:rsid,ua:dev},true)}
 async function connect(){if(!BK||linking||lineOpen())return;
  if(!SIG.up()){say(false,'connecting');return later()}
@@ -669,11 +725,12 @@ async function onOffer(o){if(o.t!=='offer'||!o.sid||peers.has(o.sid))return;
  setTimeout(()=>{if(pc.iceConnectionState==='new'||pc.iceConnectionState==='checking')end()},45000);
  try{await pc.setRemoteDescription({type:'offer',sdp:o.sdp});await pc.setLocalDescription(await pc.createAnswer());
   await gathered(pc,3000);await SIG.send({t:'answer',sid:o.sid,sdp:pc.localDescription.sdp},!!o.z)}catch(e){end()}}
-async function onRelay(o,kind,s){
+async function onRelay(o,kind,s,relay){
  if(o.t==='lpos'&&typeof s==='string'){
   const via=kind==='nostr'||kind==='ntfy'?'relay':(kind||'relay');
   try{const r=await fetch('lpos?via='+encodeURIComponent(via),{method:'POST',body:s});
-   if(r.status===200){const ack=await r.text();if(ack)SIG.sendRaw(ack,kind)}}catch(x){}return}
+   if(r.status===200){const ack=await r.text();
+    if(ack&&!(await SIG.sendOn(relay,ack)))await SIG.sendRaw(ack,kind)}}catch(x){}return}
  if(o.t==='offer')return onOffer(o);
  if(o.t==='rhi'){tell({type:'phone',ua:String(o.ua||'').slice(0,160),relay:true});
   await SIG.send({t:'rhello',sid:String(o.sid||''),kinds:CFG.kinds,lang:CFG.lang,form:CFG.form||[],pk:CFG.pk||'',
@@ -762,7 +819,7 @@ class LocalRelay{
    if(r.status===404){if(this.up){this.up=false;this.sig.changed()}await sleep(30000);continue}
    if(!r.ok){if(this.up){this.up=false;this.sig.changed()}await sleep(3000);continue}
    if(!this.up){this.up=true;this.sig.changed()}
-   const a=await r.json();if(Array.isArray(a))for(const m of a)if(typeof m==='string')this.sig.arrived(m,'tunnel')}
+   const a=await r.json();if(Array.isArray(a))for(const m of a)if(typeof m==='string')this.sig.arrived(m,'tunnel',this)}
   catch(e){if(this.up){this.up=false;this.sig.changed()}await sleep(3000)}}}
  send(s){if(this.up&&typeof s==='string')fetch('x-push',{method:'POST',body:s}).catch(()=>{})}}
 let LAST_TUN='';
@@ -777,7 +834,7 @@ setInterval(async()=>{try{
 (async()=>{try{CFG=await (await fetch('bridge-config',{cache:'no-store'})).json()}catch(e){}
  LAST_TUN=CFG.tun||'';
  await bridgeKey(HP.get('k')||'');
- SIG.start(onRelay,n=>tell({type:'relays',up:n,of:SIG.relays.length,kinds:SIG.kinds()}));
+ SIG.start(onRelay,n=>tell({type:'relays',up:n,of:SIG.relays.length,kinds:SIG.kinds(),hosts:SIG.hosts()}));
  SIG.relays.push(new LocalRelay(SIG));if(CFG.lad)SIG.changed();
  tell({type:'started'})})();
 """
@@ -817,9 +874,17 @@ def moved_page(target):
 
 
 def _core():
-    return (CORE_JS.replace("__RELAYS__", json.dumps(list(RELAYS)))
+    relays = list(RELAYS)
+    mqtt = list(MQTT)
+    rset, mset = set(relays), set(mqtt)
+    leg_relays = [u for u in LEGACY_RELAYS if u in rset] or relays
+    leg_mqtt = [u for u in LEGACY_MQTT if u in mset] or mqtt
+    return (CORE_JS.replace("__RELAYS__", json.dumps(relays))
+            .replace("__LEGACY_RELAYS__", json.dumps(leg_relays))
             .replace("__NTFY__", NTFY)
-            .replace("__MQTT__", json.dumps(list(MQTT)))
+            .replace("__MQTT__", json.dumps(mqtt))
+            .replace("__LEGACY_MQTT__", json.dumps(leg_mqtt))
+            .replace("__POOL_K__", json.dumps(relay_pool.K))
             .replace("__TUN__", TUNNEL)
             .replace("__OWN__", OWN))
 
@@ -838,7 +903,8 @@ def phone_page(all_texts):
     _, tail = rest.split("/*}SEND*/", 1)
     from . import drive, drive_page, ladder_page
 
-    page = head + _core() + drive.BFP_JS + drive_page.drive_js() + ladder_page.LADDER_JS + PHONE_JS + tail
+    page = (head + _core() + drive.BFP_JS + drive_page.drive_js()
+            + ladder_page.DR_JS + ladder_page.LADDER_JS + PHONE_JS + tail)
     page = page.replace("/*BOOT*/", BOOT_JS)
     return (page.replace("__LANG__", "en").replace("__DEFLANG__", "").replace("__DIR__", "ltr")
             .replace("__TEXTS__", json.dumps(all_texts, ensure_ascii=False, sort_keys=True).replace("</", "<\\/"))

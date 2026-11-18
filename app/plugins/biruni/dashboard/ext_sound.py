@@ -343,8 +343,9 @@ async function listen(){const box=document.createElement('div');box.className='e
   finally{busy=false}},400)}
 function go(p){const lang=BD.lang();
  if(p.mode==='bridge'){const base=BD.transport==='bridge'?location.pathname:'https://biruni-gis.com/d/';
-  const url=(BD.transport==='bridge'?location.origin:'')+base+'#k='+p.key+'&j='+p.token+'&l='+lang;
-  if(BD.transport==='bridge'){location.hash='k='+p.key+'&j='+p.token+'&l='+lang;location.reload()}else location.href=url}
+  const frag='k='+p.key+'&j='+p.token+'&l='+lang+'&p=2';
+  const url=(BD.transport==='bridge'?location.origin:'')+base+'#'+frag;
+  if(BD.transport==='bridge'){location.hash=frag;location.reload()}else location.href=url}
  else location.href='https://'+p.ip+':'+p.port+'/d/'+p.path+'/#j='+p.token+'&l='+lang}
 const noCard=(typeof CARD==='undefined'||!CARD)&&!HP.get('s');
 if(noCard&&!J&&BD.transport!=='preview'){const b=BD.button('ext_sound_lis',BD.t('ext_sound_listen'),ANT,()=>listen());b.classList.add('ext_sound_listen')}

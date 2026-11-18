@@ -1453,9 +1453,13 @@ class FieldPhotosDock(QDockWidget):
             self._on_photos(photos)
 
     def _on_bridge(self, ev):
+        from . import relay_pool
+
         t = ev.get("type")
         if t == "relays":
             was, self._relays_up = self._relays_up, int(ev.get("up") or 0)
+            host_str = relay_pool.format_hosts(ev.get("hosts"))
+            self.state.setToolTip(tr("Relays connected: {list}").format(list=host_str) if host_str else "")
             if self._relays_up and not was:
                 self.state.setText(tr("Ready. Scan the code with the phone's camera - it works on mobile data too."))
             elif not self._relays_up:

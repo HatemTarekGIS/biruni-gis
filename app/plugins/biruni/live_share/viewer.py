@@ -14,7 +14,7 @@ PAGE_URL = "https://biruni-gis.com/s/"
 def share_url(key, lang="en"):
     from ..field_photos.bridge import pin
 
-    return f"{PAGE_URL}#k={key}&i={pin(key)}&l={lang}"
+    return f"{PAGE_URL}#k={key}&i={pin(key)}&l={lang}&p=2"
 
 
 TEXTS = {

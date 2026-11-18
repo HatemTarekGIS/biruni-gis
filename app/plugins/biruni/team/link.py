@@ -250,7 +250,8 @@ class _Link:
     def start_page(self):
         from ..field_photos.bridge import BridgeHost
 
-        self.host = BridgeHost(f"http://127.0.0.1:{self.port}/{self.token}/page#k={self.key}&r={self.role}")
+        self.host = BridgeHost(
+            f"http://127.0.0.1:{self.port}/{self.token}/page#k={self.key}&r={self.role}&p=2")
 
     def stop(self):
         if self.host is not None:

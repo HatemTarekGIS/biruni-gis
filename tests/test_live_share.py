@@ -84,7 +84,7 @@ check(sorted(texts) == sorted(["en", "ar", "es", "pt_BR", "fr", "tr", "fa"])
 check("Biruni" in texts["fa"]["by"], "Persian keeps Biruni in Latin letters")
 u = share_url("K" * 43, "ar")
 from biruni.field_photos.bridge import pin as _pin  # noqa: E402
-check(u.startswith(PAGE_URL) and u.endswith("#k=" + "K" * 43 + "&i=" + _pin("K" * 43) + "&l=ar"),
+check(u.startswith(PAGE_URL) and u.endswith("#k=" + "K" * 43 + "&i=" + _pin("K" * 43) + "&l=ar&p=2"),
       "the key and the PC's pin are after # (never sent)")
 if node:
     for name, html in (("viewer", page), ("host", ls_server.host_page().decode("utf-8"))):

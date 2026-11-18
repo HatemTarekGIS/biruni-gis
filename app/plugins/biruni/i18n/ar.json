@@ -8066,5 +8066,8 @@
  "direct address": "عنوان مباشر",
  "public relay": "وسيط عام",
  "Also send through Google Drive when nothing else works (slow)": "الإرسال أيضًا عبر Google Drive عندما لا يعمل أي مسار آخر (بطيء)",
- "Linked. When the computer cannot be reached any other way, positions go through Google Drive, up to a minute late.": "تم الربط. عندما يتعذّر الوصول إلى الكمبيوتر بأي طريقة أخرى، تُرسل المواقع عبر Google Drive بتأخير يصل إلى دقيقة."
+ "Linked. When the computer cannot be reached any other way, positions go through Google Drive, up to a minute late.": "تم الربط. عندما يتعذّر الوصول إلى الكمبيوتر بأي طريقة أخرى، تُرسل المواقع عبر Google Drive بتأخير يصل إلى دقيقة.",
+ "Detail": "التفاصيل",
+ "Full (every position)": "كامل (كل موقع)",
+ "Relays connected: {list}": "المرحّلات المتصلة: {list}"
 }

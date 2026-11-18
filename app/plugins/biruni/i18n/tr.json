@@ -8066,5 +8066,8 @@
  "direct address": "doğrudan adres",
  "public relay": "genel aktarıcı",
  "Also send through Google Drive when nothing else works (slow)": "Başka hiçbir yol çalışmadığında Google Drive üzerinden de gönder (yavaş)",
- "Linked. When the computer cannot be reached any other way, positions go through Google Drive, up to a minute late.": "Bağlandı. Bilgisayara başka hiçbir yoldan ulaşılamadığında konumlar en fazla bir dakika gecikmeyle Google Drive üzerinden gider."
+ "Linked. When the computer cannot be reached any other way, positions go through Google Drive, up to a minute late.": "Bağlandı. Bilgisayara başka hiçbir yoldan ulaşılamadığında konumlar en fazla bir dakika gecikmeyle Google Drive üzerinden gider.",
+ "Detail": "Ayrıntı",
+ "Full (every position)": "Tam (her konum)",
+ "Relays connected: {list}": "Bağlı aktarıcılar: {list}"
 }

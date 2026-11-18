@@ -19,7 +19,7 @@ MAX_VIEWERS = 30
 def viewer_url(card, key, lang="en", tv=False):
     from ..field_photos.bridge import pin
 
-    frag = f"c={card}&k={key}&i={pin(key)}&l={lang}" + ("&tv=1" if tv else "")
+    frag = f"c={card}&k={key}&i={pin(key)}&p=2&l={lang}" + ("&tv=1" if tv else "")
     return PAGE_URL + "#" + frag
 
 

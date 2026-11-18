@@ -8066,5 +8066,8 @@
  "direct address": "dirección directa",
  "public relay": "repetidor público",
  "Also send through Google Drive when nothing else works (slow)": "Enviar también a través de Google Drive cuando nada más funcione (lento)",
- "Linked. When the computer cannot be reached any other way, positions go through Google Drive, up to a minute late.": "Vinculado. Cuando no se puede alcanzar el equipo de ninguna otra manera, las posiciones pasan por Google Drive, con hasta un minuto de retraso."
+ "Linked. When the computer cannot be reached any other way, positions go through Google Drive, up to a minute late.": "Vinculado. Cuando no se puede alcanzar el equipo de ninguna otra manera, las posiciones pasan por Google Drive, con hasta un minuto de retraso.",
+ "Detail": "Detalle",
+ "Full (every position)": "Completo (cada posición)",
+ "Relays connected: {list}": "Repetidores conectados: {list}"
 }

@@ -24,7 +24,7 @@ def page_url(card, key, lang="en"):
     """The public (bridge) address of a dashboard for one card; everything after "#" stays on the phone."""
     from ..field_photos.bridge import pin
 
-    return f"{PAGE_URL}#c={card}&k={key}&i={pin(key)}&l={lang}"
+    return f"{PAGE_URL}#c={card}&k={key}&i={pin(key)}&p=2&l={lang}"
 
 
 TEXTS = {

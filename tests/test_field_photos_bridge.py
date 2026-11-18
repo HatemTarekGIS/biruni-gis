@@ -94,7 +94,7 @@ else:
 k = bridge.new_key()
 check(len(k) == 43 and bridge.new_key() != k, "a new random key each time")
 u = bridge.phone_url(k, "ar")
-check(u.startswith(bridge.PAGE_URL) and u.split("#", 1)[1] == f"k={k}&i={bridge.pin(k)}&l=ar",
+check(u.startswith(bridge.PAGE_URL) and u.split("#", 1)[1] == f"k={k}&i={bridge.pin(k)}&l=ar&p=2",
       "the key and the PC's pin are after # (never sent)")
 check(len(bridge.pin(k)) == 22 and bridge.pin(k) == bridge.identity(k)[1] and bridge.pin(bridge.new_key()) != bridge.pin(k),
       "each key has its own identity, and the same key keeps its pin")

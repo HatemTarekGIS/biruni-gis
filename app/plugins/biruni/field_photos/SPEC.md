@@ -75,3 +75,19 @@ The phone opens a static web page (served locally over Wi-Fi/hotspot or from `ht
     - **Unify name…:** unifies different spellings of a surveyor's name across `field_photos.gpkg`, `photos.jsonl`, and the live table.
     - **Block device…:** records `device_id` and the reason in `blocked_devices.json`. Future photo uploads from that `device_id` are refused with HTTP `403` and logged with timestamp and reason in `rejected.jsonl`, while the device's existing photos remain untouched.
   - **Daily report (`Daily report…`):** writes an HTML or PDF summary for the day showing each surveyor's photo count today, total photos, first and last photo time, previews waiting for originals, and average GPS accuracy.
+
+## Traffic and relay pool
+
+- **Send-on-change dead reckoning (`ladder_page.py` `DR_JS`, `gps/deadreckon.py`):**
+  - In GPS mode (unless the PC opens the link with *Full (every position)*, `&f=1`), fixes are filtered on the phone against flat-earth extrapolation (`111320 m/deg`, longitude scaled by `cos lat`) capped at `EXTRAP_MS = 10 s` (and only while moving with finite course).
+  - **Thresholds (`DRC`):** a fix triggers a send when `force` is set, on the first fix, after `HEARTBEAT_MS = 30 s`, when distance from the predicted position exceeds `max(5 m, 2 * min(acc, 50 m))`, when moving and course changes by more than `TURN_DEG = 25°`, or when moving state flips (`moving >= 0.8 m/s`, `stopped <= 0.4 m/s`). When distance, turn, or flip triggers and `skipped.t > last.t`, `[skipped, p]` is sent to preserve corners.
+  - **PC marker interpolation:** `tracking.py` runs a `500 ms` `QTimer` that moves only the map marker via `deadreckon.predict` from the last valid non-late fix while speed `>= 0.8 m/s` and course is known (elapsed time capped at `10 s`), leaving the recorder and value labels untouched.
+- **Batching and stickiness (`ladder_page.py`, `bridge.py`):**
+  - Relay channels (`own`, `mqtt`, `nostr`, `ntfy`) batch positions for `BATCH_MS = 10 s` while backlog `<= 60`, reverting to `minGap` (`2 s` / `3 s`) when backlog `> 60` so catch-up drains at full pace. `direct` (`900 ms`) and `tunnel` (`1 s`) keep `minGap`.
+  - `LAD.primary()` holds for `PRIMARY_TTL_MS = 90 s` (still falling back after a `3 s` stall), avoiding multi-channel races during sparse sending. Higher relay channels are probed at most once per `PROBE_RELAY_MS = 60 s` and only on ticks that also send to the primary; `direct` and `tunnel` probes stay at `15 s`.
+  - `SIG.sendRaw` sends on one healthy relay; `RECV_JS` replies with `SIG.sendOn(relay, ack)` on the relay that delivered the envelope (falling back to `sendRaw`). `PHONE_JS` `later()` caps reconnect backoff at `300 s` while `LAD.primary()` exists (`60 s` otherwise).
+- **Relay pool, per-room subsets, and legacy anchors (`relay_pool.py`, `bridge.py`):**
+  - Pools: `NOSTR` (5 legacy + 3 additional relays) and `MQTT` (3 legacy brokers), ranked per room topic by `SHA-256(topic + "|" + url)` hex descending (`K = nostr: {phone: 3, host: 5, scan: 8}, mqtt: {phone: 2, host: 3, scan: 5}`).
+  - **Subset rule:** the PC host (`127.0.0.1`) connects to the top `host` relays of the pool plus the top-ranked legacy relay per kind (**legacy anchor**, guaranteeing overlap with older un-updated pages). Viewers with `&p=2` connect to the top `phone` relays (a subset of `host`); viewers without `p=2` connect to all legacy relays.
+  - A `4 s` health check closes and replaces any pooled member not up `8 s` after opening or with `fails >= 2` with the next ranked URL down to `scan`.
+  - **Release order:** build and publish the updated static phone/viewer pages (`p/`, `d/`, `s/`) before releasing the desktop app update that adds `&p=2` to links and enables the expanded pool.

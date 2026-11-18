@@ -1,25 +1,91 @@
-"""Phone-side store-and-forward + fallback ladder script (inserted before PHONE_JS)."""
+"""Phone-side dead reckoning + store-and-forward + fallback ladder script (inserted before PHONE_JS)."""
+
+DR_JS = r"""
+/* ---- Biruni send-on-change dead reckoning (pure JS, no DOM) ---- */
+const DRC={MIN_M:5,ACC_K:2,ACC_CAP_M:50,TURN_DEG:25,MOVE_MS:0.8,STOP_MS:0.4,
+ HEARTBEAT_MS:30000,EXTRAP_MS:10000,VEL_GAP_MS:30000};
+const DR=(()=>{
+ const M_DEG=111320;
+ let last=null,skipped=null;
+ function normDeg(a){return ((a%360)+360)%360}
+ function distM(lat0,lon0,lat1,lon1){
+  const k=Math.max(1e-6,Math.abs(Math.cos(lat0*Math.PI/180)));
+  return Math.hypot((lon1-lon0)*M_DEG*k,(lat1-lat0)*M_DEG);
+ }
+ function predict(t){
+  if(!last)return null;
+  if(!last.moving||last.cog===null)return {lat:last.lat,lon:last.lon};
+  const dt=Math.max(0,Math.min(t-last.t,DRC.EXTRAP_MS))/1000;
+  const d=last.v*dt,r=last.cog*Math.PI/180;
+  const k=Math.max(1e-6,Math.abs(Math.cos(last.lat*Math.PI/180)));
+  return {lat:last.lat+(d*Math.cos(r))/M_DEG,lon:last.lon+(d*Math.sin(r))/(M_DEG*k)};
+ }
+ function velocity(p,t){
+  if(Number.isFinite(p.speed)&&Number.isFinite(p.cog)){
+   return {v:Math.max(0,p.speed),cog:normDeg(p.cog)};
+  }
+  if(Number.isFinite(p.speed)&&p.speed<=DRC.STOP_MS){
+   return {v:Math.max(0,p.speed),cog:null};
+  }
+  if(last&&t>last.t&&(t-last.t)<=DRC.VEL_GAP_MS){
+   const k=Math.max(1e-6,Math.abs(Math.cos(last.lat*Math.PI/180)));
+   const dx=(p.lon-last.lon)*M_DEG*k,dy=(p.lat-last.lat)*M_DEG,d=Math.hypot(dx,dy);
+   return {v:d/((t-last.t)/1000),cog:d>0?normDeg(Math.atan2(dx,dy)*180/Math.PI):null};
+  }
+  return {v:0,cog:null};
+ }
+ function offer(p,force){
+  const t=Number.isFinite(p.t)?p.t:Date.now();
+  const vel=velocity(p,t);
+  const moving=last?(last.moving?vel.v>DRC.STOP_MS:vel.v>=DRC.MOVE_MS):(vel.v>=DRC.MOVE_MS);
+  const next={lat:p.lat,lon:p.lon,t:t,v:vel.v,cog:vel.cog,moving:moving};
+  if(force||!last){last=next;skipped=null;return [p]}
+  const flip=moving!==last.moving;
+  const pred=predict(t);
+  const acc=Number.isFinite(p.acc)&&p.acc>0?p.acc:0;
+  const thresh=Math.max(DRC.MIN_M,DRC.ACC_K*Math.min(acc,DRC.ACC_CAP_M));
+  const distHit=distM(pred.lat,pred.lon,p.lat,p.lon)>thresh;
+  let turnHit=false;
+  if(moving&&vel.cog!==null&&last.cog!==null){
+   let diff=Math.abs(vel.cog-last.cog)%360;if(diff>180)diff=360-diff;
+   if(diff>DRC.TURN_DEG)turnHit=true;
+  }
+  if(distHit||turnHit||flip){
+   const st=skipped&&Number.isFinite(skipped.t)?skipped.t:-Infinity;
+   const out=st>last.t?[skipped,p]:[p];
+   last=next;skipped=null;return out;
+  }
+  if((t-last.t)>=DRC.HEARTBEAT_MS){last=next;skipped=null;return [p]}
+  skipped=p;return [];
+ }
+ function reset(){last=null;skipped=null}
+ return {predict:predict,offer:offer,reset:reset};
+})();
+"""
 
 LADDER_JS = r"""
 /* ---- Biruni fallback ladder: store-and-forward positions + channel race ---- */
 const LAD=(()=>{
+ const BATCH_MS=()=>typeof BR!=='undefined'&&BR.batchMs!=null?BR.batchMs:10000;
+ const PRIMARY_TTL_MS=()=>typeof BR!=='undefined'&&BR.primaryTtl!=null?BR.primaryTtl:90000;
+ const PROBE_RELAY_MS=60000;
  const CH=[
   {id:'direct',minGap:900,ready:()=>typeof lineOpen==='function'&&lineOpen(),
-   send:s=>{lineText(JSON.stringify({t:'lp',s:s}));return true},okAt:0,fails:0,unacked:0,waitMs:0,until:0,lastSent:0},
+   send:s=>{lineText(JSON.stringify({t:'lp',s:s}));return true},okAt:0,fails:0,unacked:0,waitMs:0,until:0,lastSent:-1},
   {id:'tunnel',minGap:1000,ready:()=>SIG.relays.some(r=>r.kind==='tunnel'),
    send:s=>{const r=SIG.relays.find(x=>x.kind==='tunnel');return r?r.post(s):false},
-   okAt:0,fails:0,unacked:0,waitMs:0,until:0,lastSent:0},
-  {id:'own',minGap:2000,ready:()=>(SIG.kinds().own||0)>0,
-   send:s=>SIG.sendRaw(s,'own'),okAt:0,fails:0,unacked:0,waitMs:0,until:0,lastSent:0},
-  {id:'mqtt',minGap:2000,ready:()=>(SIG.kinds().mqtt||0)>0,
-   send:s=>SIG.sendRaw(s,'mqtt'),okAt:0,fails:0,unacked:0,waitMs:0,until:0,lastSent:0},
-  {id:'nostr',minGap:3000,ready:()=>(SIG.kinds().nostr||0)>0,
-   send:s=>SIG.sendRaw(s,'nostr'),okAt:0,fails:0,unacked:0,waitMs:0,until:0,lastSent:0},
-  {id:'ntfy',minGap:2000,ready:()=>(SIG.kinds().ntfy||0)>0,
-   send:s=>SIG.sendRaw(s,'ntfy'),okAt:0,fails:0,unacked:0,waitMs:0,until:0,lastSent:0},
+   okAt:0,fails:0,unacked:0,waitMs:0,until:0,lastSent:-1},
+  {id:'own',relay:true,minGap:2000,ready:()=>(SIG.kinds().own||0)>0,
+   send:s=>SIG.sendRaw(s,'own'),okAt:0,fails:0,unacked:0,waitMs:0,until:0,lastSent:-1},
+  {id:'mqtt',relay:true,minGap:2000,ready:()=>(SIG.kinds().mqtt||0)>0,
+   send:s=>SIG.sendRaw(s,'mqtt'),okAt:0,fails:0,unacked:0,waitMs:0,until:0,lastSent:-1},
+  {id:'nostr',relay:true,minGap:3000,ready:()=>(SIG.kinds().nostr||0)>0,
+   send:s=>SIG.sendRaw(s,'nostr'),okAt:0,fails:0,unacked:0,waitMs:0,until:0,lastSent:-1},
+  {id:'ntfy',relay:true,minGap:2000,ready:()=>(SIG.kinds().ntfy||0)>0,
+   send:s=>SIG.sendRaw(s,'ntfy'),okAt:0,fails:0,unacked:0,waitMs:0,until:0,lastSent:-1},
   {id:'drive',minGap:20000,
    ready:()=>typeof GDRIVE!=='undefined'&&GDRIVE&&typeof DRV==='object'&&DRV.go(),
-   send:()=>false,okAt:0,fails:0,unacked:0,waitMs:0,until:0,lastSent:0}
+   send:()=>false,okAt:0,fails:0,unacked:0,waitMs:0,until:0,lastSent:-1}
  ];
  const pad=n=>String(n).padStart(9,'0');
  const keyFor=q=>ROOM+':'+pad(q);
@@ -29,11 +95,13 @@ const LAD=(()=>{
    q.onupgradeneeded=()=>{if(!q.result.objectStoreNames.contains('p'))q.result.createObjectStore('p')};
    q.onsuccess=()=>r(q.result);q.onerror=()=>r(null)}catch(e){r(null)}})}
  const lad={
-  epoch:'',seq:0,upto:0,cap:false,db:null,_items:[],_pushes:0,_waitSince:0,_lastProbe:0,_ticking:false,
-  _timer:null,_ready:null,_resolveReady:null,_startedAt:0,_lastDriveClean:0,_driveBusy:false,_cleaning:false,
+  epoch:'',seq:0,upto:0,cap:false,db:null,_items:[],_pushes:0,_waitSince:0,_lastProbe:0,_lastRelayProbe:0,
+  _ticking:false,_timer:null,_ready:null,_resolveReady:null,_startedAt:0,_lastDriveClean:0,_driveBusy:false,
+  _cleaning:false,
   init(){
    if(this._ready)return this._ready;
    this._startedAt=Date.now();
+   if(!this._lastRelayProbe)this._lastRelayProbe=this._startedAt;
    let e=kept('biruni-lad-e-'+ROOM);if(!e){e=rid();keep('biruni-lad-e-'+ROOM,e)}this.epoch=e;
    this.seq=parseInt(kept('biruni-lad-q-'+ROOM)||'0',10)||0;
    this.upto=parseInt(kept('biruni-lad-u-'+ROOM)||'0',10)||0;
@@ -61,7 +129,7 @@ const LAD=(()=>{
   onTun(h){if(typeof h==='string'&&/^[a-z0-9-]{3,80}$/.test(h)){
    keep('biruni-tun-'+ROOM,h);this.cap=true;SIG.tunnel(h)}},
   get backlog(){return this._items.length},
-  primary(now=Date.now()){return CH.find(c=>c.ready()&&c.okAt>0&&(now-c.okAt)<=10000)||null},
+  primary(now=Date.now()){return CH.find(c=>c.ready()&&c.okAt>0&&(now-c.okAt)<=PRIMARY_TTL_MS())||null},
   viaName(){const p=this.primary();if(!p||p.id==='direct')return '';
    if(p.id==='tunnel')return T.chTunnel||'direct address';
    if(p.id==='own')return T.chOwn||'Biruni relay';
@@ -97,8 +165,9 @@ const LAD=(()=>{
   },
   _markSent(c,now){
    c.lastSent=now;c.unacked=(c.unacked||0)+1;
+   const gap=(c.relay&&this._items.length<=60)?BATCH_MS():c.minGap;
    if(c.unacked>=3){c.waitMs=c.waitMs?Math.min(60000,c.waitMs*2):2000;c.until=now+c.waitMs}
-   else c.until=now+c.minGap;
+   else c.until=now+gap;
   },
   async _driveSend(todo,lo,bl){
    if(this._driveBusy)return;this._driveBusy=true;
@@ -188,17 +257,27 @@ const LAD=(()=>{
       if(!this._waitSince)this._waitSince=now;
      }
     }else{
+     let sentPrimary=false;
      if(now>=primary.until){
       const s=await pack();this._markSent(primary,now);
       Promise.resolve(primary.send(s)).catch(()=>{});
       if(!this._waitSince)this._waitSince=now;
+      sentPrimary=true;
      }
      const pi=live.indexOf(primary);
-     if(pi>0&&(now-this._lastProbe)>=15000){
+     if(pi>0){
       let probe=null;
-      for(let i=pi-1;i>=0;i--){if(live[i].ready()&&now>=live[i].until){probe=live[i];break}}
-      if(probe){this._lastProbe=now;const s=await pack();this._markSent(probe,now);
-       Promise.resolve(probe.send(s)).catch(()=>{})}
+      for(let i=pi-1;i>=0;i--){
+       const c=live[i];
+       if(!c.ready()||now<c.until)continue;
+       const ok=c.relay?(sentPrimary&&(now-this._lastRelayProbe)>=PROBE_RELAY_MS):(now-this._lastProbe)>=15000;
+       if(ok){probe=c;break}
+      }
+      if(probe){
+       if(probe.relay)this._lastRelayProbe=now;else this._lastProbe=now;
+       const s=await pack();this._markSent(probe,now);
+       Promise.resolve(probe.send(s)).catch(()=>{});
+      }
      }
     }
     const dch=CH.find(c=>c.id==='drive');
@@ -224,7 +303,12 @@ const LAD=(()=>{
      s=>s.delete(IDBKeyRange.bound(ROOM+':',ROOM+':'+pad(this.upto))))}catch(e){}}
    }
    const now=Date.now(),was=this.primary(now),ch=CH.find(c=>c.id===kind);
-   if(ch){ch.okAt=now;ch.unacked=0;ch.waitMs=0;ch.until=0;ch.fails=0}
+   if(ch){
+    const gap=(ch.relay&&this._items.length<=60)?BATCH_MS():ch.minGap;
+    ch.okAt=now;ch.unacked=0;ch.waitMs=0;ch.fails=0;
+    ch.until=ch.lastSent>=0?Math.min(ch.until,ch.lastSent+gap):0;
+   }
+   if(!this._lastRelayProbe)this._lastRelayProbe=now;
    this._waitSince=0;this.drawPill();
    if(typeof lineOpen==='function'&&!lineOpen()&&(!was||(ch&&was.id!==ch.id))&&typeof offline==='function')offline();
   },

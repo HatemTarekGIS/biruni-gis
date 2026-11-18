@@ -1,8 +1,9 @@
 """Phone GPS panel: connect a phone (or GNSS receiver), see the live position on
 the map, and record tracks into the project."""
 import datetime as dt
-import os
 import math
+import os
+import time
 
 from qgis.core import (Qgis, QgsCoordinateReferenceSystem, QgsCoordinateTransform, QgsGeometry, QgsPointXY,
                        QgsProject, QgsSettings)
@@ -13,6 +14,8 @@ from qgis.PyQt.QtWidgets import (QCheckBox, QComboBox, QDockWidget, QFormLayout,
                                  QLabel, QLineEdit, QPushButton, QSpinBox, QStackedWidget, QVBoxLayout, QWidget)
 
 from . import icons
+from .field_photos import relay_pool
+from .gps import deadreckon
 from .gps.recorder import TrackRecorder, default_track_name
 from .gps.source import DEFAULT_PORT, NmeaSource, local_addresses, serial_ports
 from .i18n import tr
@@ -50,6 +53,11 @@ def link_text(info):
             lines.append(tr("Direct address ready. A phone that could not connect: scan the code again."))
         elif info.get("tunnel_adding"):
             lines.append(tr("Adding a direct address for networks that block the relays…"))
+    rel = info.get("relays")
+    hosts = (rel.get("hosts") if isinstance(rel, dict) else None) or info.get("hosts")
+    host_str = relay_pool.format_hosts(hosts)
+    if host_str:
+        lines.append(tr("Relays connected: {list}").format(list=host_str))
     return "\n".join(lines)
 
 
@@ -84,6 +92,8 @@ class TrackingDock(QDockWidget):
         self._last_data = None
         self._zoomed = False
         self._link_info = {}
+        self._dr_fix = None
+        self._dr_at = None
         self.source.fixReceived.connect(self._on_fix)
         self.source.status.connect(self._on_status)
         self.source.link.connect(self._on_link)
@@ -91,6 +101,9 @@ class TrackingDock(QDockWidget):
         self._clock = QTimer(self)
         self._clock.setInterval(1000)
         self._clock.timeout.connect(self._refresh_clock)
+        self._dr_timer = QTimer(self)
+        self._dr_timer.setInterval(500)
+        self._dr_timer.timeout.connect(self._dr_step)
         self._build()
 
     # ---- UI --------------------------------------------------------------
@@ -197,6 +210,16 @@ class TrackingDock(QDockWidget):
         self.drive_box.setChecked(s.value(KEY + "drive", False, type=bool))
         self.drive_box.toggled.connect(lambda on: QgsSettings().setValue(KEY + "drive", bool(on)))
         f4.addWidget(self.drive_box)
+        detail_row = QHBoxLayout()
+        detail_row.addWidget(QLabel(tr("Detail")))
+        self.detail = QComboBox()
+        self.detail.addItem(tr("Normal"), "normal")
+        self.detail.addItem(tr("Full (every position)"), "full")
+        self.detail.setCurrentIndex(max(0, self.detail.findData(s.value(KEY + "detail", "normal"))))
+        self.detail.currentIndexChanged.connect(
+            lambda *_: QgsSettings().setValue(KEY + "detail", self.detail.currentData()))
+        detail_row.addWidget(self.detail, 1)
+        f4.addLayout(detail_row)
         self.pages.addWidget(p4)
         cv.addWidget(self.pages)
         self.connect_btn = QPushButton(tr("Connect"))
@@ -325,6 +348,7 @@ class TrackingDock(QDockWidget):
             self._zoomed = False
             self.connect_btn.setText(tr("Disconnect"))
             self._clock.start()
+            self._dr_timer.start()
             self.plugin.activity.log("gps", "connected", self.mode.currentText(), mode, 1)
 
     def _gps_drive_roots(self):
@@ -353,8 +377,11 @@ class TrackingDock(QDockWidget):
             self.pos_intake = None
         use_drive = self.drive_box.isChecked()
         QgsSettings().setValue(KEY + "drive", bool(use_drive))
+        detail = self.detail.currentData() or "normal"
+        QgsSettings().setValue(KEY + "detail", detail)
         folder = os.path.join(QgsApplication.qgisSettingsDirPath(), "biruni")
-        url = self.source.serve_bridge(folder, os.path.join(folder, "gps-bridge"), lang(), drive=use_drive)
+        url = self.source.serve_bridge(
+            folder, os.path.join(folder, "gps-bridge"), lang(), drive=use_drive, full=(detail == "full"))
         if not url:
             return False
         if use_drive and self.source.bridge_server is not None:
@@ -419,6 +446,9 @@ class TrackingDock(QDockWidget):
         self._link_info = {}
         self.link_lbl.clear()
         self._clock.stop()
+        self._dr_timer.stop()
+        self._dr_fix = None
+        self._dr_at = None
         self.connect_btn.setText(tr("Connect"))
         self.record_btn.setEnabled(False)
         self._clear_marker()
@@ -456,6 +486,12 @@ class TrackingDock(QDockWidget):
                 self._refresh_record_info()
             return
         self.last_fix = fix
+        if fix.valid:
+            self._dr_fix = fix
+            self._dr_at = time.monotonic()
+        else:
+            self._dr_fix = None
+            self._dr_at = None
         t = self.plugin.theme.tokens()
         quality = {1: "GPS", 2: "DGPS", 4: "RTK fixed", 5: "RTK float"}.get(fix.quality, "GPS")
         self.values["fix"].setText(quality if fix.valid else tr("No fix"))
@@ -519,6 +555,23 @@ class TrackingDock(QDockWidget):
         if force or (self.follow.isChecked() and not inner.contains(pt)):
             canvas.setCenter(pt)
             canvas.refresh()
+
+    def _dr_step(self):
+        if self._dr_fix is None or self._dr_at is None or self.marker is None:
+            return
+        fix = self._dr_fix
+        if not fix.valid or fix.speed_kmh is None or fix.course is None:
+            return
+        speed_ms = fix.speed_kmh / 3.6
+        if speed_ms < deadreckon.DRC["MOVE_MS"]:
+            return
+        dt_s = min(time.monotonic() - self._dr_at, deadreckon.DRC["EXTRAP_MS"] / 1000.0)
+        if dt_s <= 0:
+            return
+        lat, lon = deadreckon.predict(fix.lat, fix.lon, speed_ms, fix.course, dt_s)
+        canvas = self.iface.mapCanvas()
+        to_canvas = QgsCoordinateTransform(WGS84, canvas.mapSettings().destinationCrs(), QgsProject.instance())
+        self.marker.setCenter(to_canvas.transform(QgsPointXY(lon, lat)))
 
     def _clear_marker(self):
         canvas = self.iface.mapCanvas()

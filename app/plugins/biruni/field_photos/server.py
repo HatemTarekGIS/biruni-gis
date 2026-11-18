@@ -125,7 +125,8 @@ def clean_pos(m):
     when = dt.datetime.fromtimestamp(t / 1000, dt.timezone.utc) if t else dt.datetime.now(dt.timezone.utc)
     net, eff, route = str(m.get("net") or ""), str(m.get("eff") or ""), str(m.get("route") or "")
     return {"id": m["id"], "name": _text(m.get("name"), 40), "lat": lat, "lon": lon, "acc": _num(m.get("acc"), 0),
-            "heading": _num(m.get("heading"), 0, 360), "seen": when.isoformat(timespec="seconds"),
+            "heading": _num(m.get("heading"), 0, 360), "cog": _num(m.get("cog"), 0, 360),
+            "seen": when.isoformat(timespec="seconds"),
             "alt": _num(m.get("alt")), "speed": _num(m.get("speed"), 0, 200), "t": t,
             "sk": _text(m.get("sk"), 64),
             # the phone's link, for the team list: Wi-Fi or mobile data, the time to the computer and back
@@ -1563,8 +1564,10 @@ async function tellPos(force){const f=room&&indoorFix?indoorFix:fix;if(!f||(!GPS
  const now=Date.now();
  if(!force&&lastPos&&(GPSMODE?now-lastPos.at<1000:now-lastPos.at<15000&&meters(lastPos,f)<10))return;
  lastPos={lat:f.lat,lon:f.lon,at:now};
- try{await sendPos(Object.assign({id:DEVID,name:(SURVNAME||$('me').value).trim().slice(0,40),sk:SURVKEY||undefined,lat:f.lat,lon:f.lon,acc:f.acc,alt:f.alt,
-  speed:f.speed,heading:compass!=null?compass:f.heading,t:f.t,level:f.level,unit:f.unit},netInfo()))}catch(e){}}
+ try{await sendPos(Object.assign({id:DEVID,name:(SURVNAME||$('me').value).trim().slice(0,40),
+  sk:SURVKEY||undefined,lat:f.lat,lon:f.lon,acc:f.acc,alt:f.alt,speed:f.speed,
+  heading:compass!=null?compass:f.heading,cog:f.heading,t:f.t,level:f.level,unit:f.unit},
+  netInfo()),force)}catch(e){}}
 /* for the computer's list of the team: Wi-Fi or mobile data (Android tells it, iPhone does not), the battery, and
    how long the last message took to reach the computer and come back (the browser gives no signal bars) */
 let PING=null,BAT=null;
