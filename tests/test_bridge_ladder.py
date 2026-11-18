@@ -229,6 +229,115 @@ check(not CSP_REFUSED, f"no CSP violations logged ({CSP_REFUSED})")
 host.stop()
 wait(lambda: not host.running(), 10)
 srv.stop()
+
+# ---- 7. Biruni own relay (Nostr + MQTT dead) and 1013 backoff -> tunnel ---------------------
+from fake_own import FakeOwnRelay  # noqa: E402
+
+own_srv = FakeOwnRelay()
+SRV_PORT2 = free_port()
+DEAD_MQTT = f"ws://127.0.0.1:{free_port()}/mqtt"
+os.environ["BIRUNI_BRIDGE_MQTT"] = DEAD_MQTT
+os.environ["BIRUNI_BRIDGE_TUNNEL"] = f"https://127.0.0.1:{SRV_PORT2}"
+os.environ["BIRUNI_BRIDGE_OWN"] = own_srv.url
+bridge.MQTT = (DEAD_MQTT,)
+bridge.TUNNEL = os.environ["BIRUNI_BRIDGE_TUNNEL"]
+bridge.OWN = own_srv.url
+
+csp_page2 = bridge.with_csp(bridge.phone_page(texts))
+conn_src2 = csp_page2.split("connect-src", 1)[1].split(";", 1)[0]
+check(f"ws://127.0.0.1:{own_srv.port}" in conn_src2,
+      f"CSP connect-src includes own relay origin ({conn_src2})")
+
+srv2 = PhotoServer(os.path.join(work, "photos2"), os.path.join(work, "cert"), texts,
+                   "en", (), SRV_PORT2, ["127.0.0.1"], bind="127.0.0.1")
+key2 = bridge.new_key()
+srv2.set_ladder(key2)
+host2 = bridge.BridgeHost(srv2.url("127.0.0.1") + "bridge#" + bridge.host_frag(key2))
+evs2 = []
+
+
+def drain2():
+    while not srv2.events.empty():
+        evs2.append(srv2.events.get_nowait())
+    return evs2
+
+
+check(wait(lambda: any(e[0] == "bridge" and e[1].get("type") == "relays"
+                       and (e[1].get("kinds") or {}).get("own") == 1 for e in drain2()), 60),
+      "hidden receiver connected to Biruni own relay with Nostr/MQTT dead")
+
+phone2 = Phone(profile)
+phone2.setHtml(csp_page2, QUrl(f"https://phone.invalid/p/#k={key2}&i={bridge.pin(key2)}&l=en&m=gps"))
+
+
+def js2(expr):
+    res.pop("v", None)
+    phone2.runJavaScript(expr, lambda v: res.update(v=v))
+    wait(lambda: "v" in res, 10)
+    return res.get("v")
+
+
+check(wait(lambda: js2("typeof dc!=='undefined'&&!!(dc&&dc.readyState==='open')") is True, 60),
+      "signalling and direct WebRTC channel open over Biruni own relay alone")
+
+drain2().clear()
+js2(r"""(() => {
+ BR.ice = []; BR.directMs = 1000;
+ window._blockP2P = true;
+ const scrubSdp = s => String(s || '').replace(/a=candidate:(\S+) (\d+) udp (\d+) \S+ \d+ typ host/gi,
+  'a=candidate:$1 $2 udp $3 192.0.2.1 9 typ host');
+ const origSigSend = SIG.send.bind(SIG);
+ SIG.send = async (obj, z) => {
+  if (window._blockP2P && obj && obj.t === 'offer' && obj.sdp) obj = Object.assign({}, obj, {sdp: scrubSdp(obj.sdp)});
+  return await origSigSend(obj, z);
+ };
+ window._origRTC = window.RTCPeerConnection;
+ window.RTCPeerConnection = function() {
+  const p = new window._origRTC({iceServers: []});
+  const origSetRemote = p.setRemoteDescription.bind(p);
+  p.setRemoteDescription = async (desc) => {
+   const sdp = window._blockP2P ? scrubSdp(desc.sdp) : desc.sdp;
+   return await origSetRemote({type: desc.type, sdp: sdp});
+  };
+  return p;
+ };
+ drop(); RELAY = false;
+ fix = {lat: 24.7301, lon: 46.6901, acc: 5, t: Date.now()};
+ $('me').value = 'SurveyorOwn';
+ tellPos(true);
+})();1""")
+own_pos = []
+check(wait(lambda: bool(own_pos.extend(e[1] for e in drain2() if e[0] == "pos" and e[1].get("via") == "own")
+                        or own_pos), 20),
+      f"with P2P blocked and Nostr/MQTT dead, position arrives via=own ({own_pos[:1]})")
+own_dump = json.dumps(own_srv.frames)
+check(len(own_srv.frames) > 0 and key2 not in own_dump and "24.7301" not in own_dump
+      and "SurveyorOwn" not in own_dump,
+      f"Biruni own relay saw {len(own_srv.frames)} encrypted frames and zero plaintext")
+
+srv2.tunnel_host = "test"
+check(wait(lambda: (js2("SIG.kinds().tunnel||0") or 0) == 1, 20),
+      "phone2 receives signed tun and brings TunnelRelay up")
+
+own_srv.reject_code = 1013
+own_srv.kick_all(1013)
+check(wait(lambda: js2("(()=>{const r=SIG.relays.find(x=>x.kind==='own');"
+                       "return r&&!r.up&&(r.backoffUntil-Date.now())>=55000})()") is True, 15),
+      "1013 close gives OwnRelay a backoff of at least 60 s")
+
+drain2().clear()
+js2("fix={lat:24.7315,lon:46.6915,acc:4,t:Date.now()};tellPos(true);1")
+tun_pos2 = []
+check(wait(lambda: bool(tun_pos2.extend(e[1] for e in drain2() if e[0] == "pos" and e[1].get("via") == "tunnel")
+                        or tun_pos2), 20),
+      f"after 1013 close, positions continue via=tunnel ({tun_pos2[:1]})")
+
+check(not CSP_REFUSED, f"no CSP violations logged ({CSP_REFUSED})")
+
+host2.stop()
+wait(lambda: not host2.running(), 10)
+srv2.stop()
+own_srv.stop()
 shutil.rmtree(work, ignore_errors=True)
 print("ALL PASS" if not failures else f"{len(failures)} FAILED", flush=True)
 sys.exit(1 if failures else 0)

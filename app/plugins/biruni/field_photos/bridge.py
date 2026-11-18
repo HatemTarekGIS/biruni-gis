@@ -41,7 +41,7 @@ RELAYS = ("wss://relay.damus.io", "wss://nos.lol", "wss://relay.primal.net", "ws
 NTFY = "https://ntfy.sh/"
 MQTT = ("wss://broker.hivemq.com:8884/mqtt", "wss://broker.emqx.io:8084/mqtt", "wss://test.mosquitto.org:8081/mqtt")
 TUNNEL = "https://{h}.trycloudflare.com"
-OWN = ""
+OWN = ""  # after deploy: OWN = "wss://relay.biruni-gis.com/r/"
 if os.environ.get("BIRUNI_BRIDGE_RELAYS"):  # tests: a relay on this PC
     RELAYS = tuple(os.environ["BIRUNI_BRIDGE_RELAYS"].split())
     NTFY = os.environ.get("BIRUNI_BRIDGE_NTFY", NTFY)
@@ -179,7 +179,7 @@ def phone_url(key, lang="en", drive_pk=None):
 # ---- the shared script: encryption, Nostr signatures, relays ------------------------------
 CORE_JS = r"""
 /* ---- Biruni bridge core: shared by the phone page and the PC's hidden receiver ---- */
-const BR={relays:__RELAYS__,ntfy:'__NTFY__',mqtt:__MQTT__,tun:'__TUN__',kind:25050,
+const BR={relays:__RELAYS__,ntfy:'__NTFY__',mqtt:__MQTT__,tun:'__TUN__',own:'__OWN__',kind:25050,
  ice:[{urls:['stun:stun.l.google.com:19302','stun:stun.cloudflare.com:3478']}]};
 const enc=new TextEncoder(),dec=new TextDecoder();
 const b64u={enc:b=>{let s='';const a=new Uint8Array(b);for(let i=0;i<a.length;i++)s+=String.fromCharCode(a[i]);
@@ -375,10 +375,37 @@ class TunnelRelay{
   if(this.closed||Date.now()<this.backoffUntil||typeof s!=='string')return Promise.resolve(false);
   return this.post(s)}
  close(){this.closed=true;clearInterval(this._timer);const was=this.up;this.up=false;if(was)this.sig.changed()}}
+class OwnRelay{
+ constructor(sig){this.kind='own';this.sig=sig;this.up=false;this.wait=3000;this.fails=0;
+  this._bo=0;this.backoffUntil=0;this._ping=null;this._opened=false;this._tm=0;this.open()}
+ _backoff(){this._bo=this._bo?Math.min(600000,this._bo*2):60000;this.backoffUntil=Date.now()+this._bo}
+ open(){if(!BR.own)return;const left=this.backoffUntil-Date.now();
+  if(left>0){clearTimeout(this._tm);this._tm=setTimeout(()=>this.open(),left);return}
+  let ws;try{ws=new WebSocket(BR.own+BK.topic)}catch(e){this.fails++;
+   if(this.fails>=3)this._backoff();return this.later()}
+  this.ws=ws;this._opened=false;
+  ws.onopen=()=>{this._opened=true;this.up=true;this.wait=3000;this.fails=0;this._bo=0;this.backoffUntil=0;
+   clearInterval(this._ping);
+   this._ping=setInterval(()=>{if(this.ws===ws&&ws.readyState===1)try{ws.send('p')}catch(x){}},25000);
+   this.sig.changed()};
+  ws.onmessage=e=>{if(typeof e.data==='string'&&e.data!=='q')this.sig.arrived(e.data,'own')};
+  ws.onclose=e=>{clearInterval(this._ping);const was=this.up;this.up=false;if(was)this.sig.changed();
+   if(e&&e.code===1013)this._backoff();
+   else if(!this._opened){this.fails++;if(this.fails>=3)this._backoff()}
+   this.later()};
+  ws.onerror=()=>{try{ws.close()}catch(x){}}}
+ later(){const ms=Math.max(this.wait+Math.random()*1000,this.backoffUntil-Date.now());
+  clearTimeout(this._tm);this._tm=setTimeout(()=>this.open(),ms);this.wait=Math.min(this.wait*2,60000)}
+ send(s){if(this.up&&Date.now()>=this.backoffUntil&&typeof s==='string'&&s.length<=90000)
+  try{this.ws.send(s)}catch(e){}}
+ sendWait(ev,s){if(typeof ev==='string'&&typeof s!=='string')s=ev;
+  if(!this.up||Date.now()<this.backoffUntil||typeof s!=='string'||s.length>90000)return Promise.resolve(false);
+  try{this.ws.send(s);return Promise.resolve(this.up)}catch(e){return Promise.resolve(false)}}}
 const SIG={relays:[],seen:new Set(),loose:new Set(),on:null,onchange:null,_lastChunk:0,_tun:null,
  start(onMsg,onChange){this.on=onMsg;this.onchange=onChange;
   this.relays=BR.relays.map(u=>new NostrRelay(u,this)).concat([new NtfyRelay(this)])
-   .concat((BR.mqtt||[]).map(u=>new MqttRelay(u,this)))},
+   .concat((BR.mqtt||[]).map(u=>new MqttRelay(u,this)))
+   .concat(BR.own?[new OwnRelay(this)]:[])},
  tunnel(h){if(!BR.tun||!/^[a-z0-9-]{3,80}$/.test(String(h||'')))return null;
   if(this._tun&&this._tun.h===h&&!this._tun.closed)return this._tun;
   if(this._tun){this._tun.close();this.relays=this.relays.filter(r=>r!==this._tun)}
@@ -452,7 +479,7 @@ BOOT_JS = r"""
 const HP=new URLSearchParams(location.hash.slice(1)),KEYB=HP.get('k')||'';HASHL=HP.get('l');ROOM=KEYB.slice(0,12);
 const _TH=HP.get('t')||'';
 const TUNH=/^[a-z0-9-]{3,80}$/.test(_TH)?(keep('biruni-tun-'+ROOM,_TH),_TH):(kept('biruni-tun-'+ROOM)||'');
-GPSMODE=HP.get('m')==='gps';const VIAONLY=HP.get('v')==='1';
+GPSMODE=HP.get('m')==='gps';const VIAONLY=HP.get('v')==='1',GDRIVE=GPSMODE&&HP.get('g')==='1';
 /* d=1&pk=: this project takes photos through Google Drive; pk is the computer's key, so photos are sealed for it
    before the phone ever reaches the computer (drive_page.py) */
 const DPK=HP.get('pk')||'',DRIVE_ON=HP.get('d')==='1'&&/^[\w-]{81,99}$/.test(DPK)&&!GPSMODE;if(DRIVE_ON)PCKEY=DPK;
@@ -615,7 +642,7 @@ async function sendItem1(it){
 async function alive(){if(lineOpen())return true;if(RELAY&&SIG.up())return true;connect();return false}
 function offline(){if(lineOpen())return;drivePump();
  if(typeof LAD==='object'&&LAD.statusText()){say(false,'ladVia');return}
- if(DRV.on&&DRV.go()){say(false,'driveMode');connect();return}
+ if(DRV.on&&DRV.go()&&(typeof GDRIVE==='undefined'||!GDRIVE)){say(false,'driveMode');connect();return}
  if(RELAY&&SIG.up()){say(false,'relayMode');return}
  if(lastState==='connected'||!lastState||lastState==='driveMode')say(false,'connecting');else say(false,lastState);connect()}
 (async()=>{if(!KEYB||KEYB.length!==43||!window.isSecureContext||!window.RTCPeerConnection){
@@ -652,7 +679,7 @@ async function onRelay(o,kind,s){
   await SIG.send({t:'rhello',sid:String(o.sid||''),kinds:CFG.kinds,lang:CFG.lang,form:CFG.form||[],pk:CFG.pk||'',
    lad:CFG.lad?1:0,tun:CFG.tun||''},true);
   if(GV)try{await SIG.send({t:'rguide',g:JSON.parse(GUIDE_TXT)},true)}catch(e){}return}
- if(o.t==='rpos'){const p=Object.assign({},o.p||{},{route:'relay'});
+ if(o.t==='rpos'){const p=Object.assign({},o.p||{},{route:kind==='own'?'own':'relay'});
   fetch('pos',{method:'POST',body:JSON.stringify(p)}).catch(()=>{});return}
  if(o.t==='rchunk'&&o.id&&o.nonce&&+o.k>0&&+o.k<=128&&+o.i>=0&&+o.i<+o.k&&typeof o.d==='string'){
   const key=o.id+':'+o.nonce;let e=rphotos.get(key);
@@ -793,7 +820,8 @@ def _core():
     return (CORE_JS.replace("__RELAYS__", json.dumps(list(RELAYS)))
             .replace("__NTFY__", NTFY)
             .replace("__MQTT__", json.dumps(list(MQTT)))
-            .replace("__TUN__", TUNNEL))
+            .replace("__TUN__", TUNNEL)
+            .replace("__OWN__", OWN))
 
 
 def receiver_page():

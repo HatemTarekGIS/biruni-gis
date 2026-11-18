@@ -422,6 +422,95 @@ class DriveIntake:
             self.thread = None
 
 
+BGP_MAGIC = b"BGP1\n"
+BGP_RE = re.compile(r"^\d{9}-\d{9}-[\w-]{6}\.bgp$")
+BGP_MAX_BYTES = 120 * 1024
+BGP_MAX_AGE = 48 * 3600
+
+
+class PosIntake:
+    """Every interval seconds, reads new .bgp position files in office_folders(roots, k)/g-*/
+    and delivers each sealed lpos envelope to take(sealed, "drive") (PhotoServer.take_env)."""
+
+    def __init__(self, roots, k, take, interval=10):
+        self.roots = list(roots or ())
+        self.k = k
+        self.take = take
+        self.interval = interval
+        self.seen = {}
+        self._stop = threading.Event()
+        self.thread = None
+
+    def scan(self):
+        """One scan pass across g-* subfolders; returns count of newly opened files."""
+        now = time.time()
+        opened = 0
+        for top in office_folders(list(self.roots), self.k):
+            try:
+                devs = sorted(
+                    (e for e in os.scandir(top) if e.is_dir() and e.name.startswith("g-")),
+                    key=lambda e: e.name,
+                )
+            except OSError:
+                continue
+            for d in devs:
+                try:
+                    files = sorted(
+                        (e for e in os.scandir(d.path) if e.is_file() and BGP_RE.match(e.name)),
+                        key=lambda e: e.name,
+                    )
+                except OSError:
+                    continue
+                for e in files:
+                    if self._stop.is_set():
+                        return opened
+                    try:
+                        st = e.stat()
+                    except OSError:
+                        continue
+                    if st.st_size > BGP_MAX_BYTES or (now - st.st_mtime) > BGP_MAX_AGE:
+                        continue
+                    key = d.name + "/" + e.name
+                    stamp = [st.st_size, st.st_mtime_ns]
+                    if self.seen.get(key) == stamp:
+                        continue
+                    try:
+                        with open(e.path, "rb") as f:
+                            raw = f.read(BGP_MAX_BYTES + 1)
+                    except OSError:
+                        continue
+                    if len(raw) > BGP_MAX_BYTES or not raw.startswith(BGP_MAGIC):
+                        continue
+                    try:
+                        sealed = raw[len(BGP_MAGIC):].decode("ascii").strip()
+                    except UnicodeDecodeError:
+                        continue
+                    if self.take(sealed, "drive"):
+                        self.seen[key] = stamp
+                        opened += 1
+        return opened
+
+    def start(self):
+        if self.thread is None:
+            self._stop.clear()
+            self.thread = threading.Thread(target=self._run, name="biruni-pos-intake", daemon=True)
+            self.thread.start()
+
+    def _run(self):
+        while not self._stop.is_set():
+            try:
+                self.scan()
+            except Exception:  # noqa: BLE001 - keep scanning on transient Drive errors
+                pass
+            self._stop.wait(self.interval)
+
+    def stop(self):
+        self._stop.set()
+        if self.thread is not None:
+            self.thread.join(timeout=5)
+            self.thread = None
+
+
 # ---- the same on the phone page (field_photos/drive_page.py puts it in /p/) --------------------------------------
 # needs enc, hex, b64u and cat from bridge.CORE_JS
 BFP_JS = r"""

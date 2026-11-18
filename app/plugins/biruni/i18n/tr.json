@@ -8064,5 +8064,7 @@
  "Sending {n} earlier positions…": "Önceki {n} konum gönderiliyor…",
  "Sending through: {name}": "Gönderim kanalı: {name}",
  "direct address": "doğrudan adres",
- "public relay": "genel aktarıcı"
+ "public relay": "genel aktarıcı",
+ "Also send through Google Drive when nothing else works (slow)": "Başka hiçbir yol çalışmadığında Google Drive üzerinden de gönder (yavaş)",
+ "Linked. When the computer cannot be reached any other way, positions go through Google Drive, up to a minute late.": "Bağlandı. Bilgisayara başka hiçbir yoldan ulaşılamadığında konumlar en fazla bir dakika gecikmeyle Google Drive üzerinden gider."
 }

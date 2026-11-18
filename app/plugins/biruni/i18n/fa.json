@@ -8064,5 +8064,7 @@
  "Sending {n} earlier positions…": "در حال ارسال {n} موقعیت قبلی…",
  "Sending through: {name}": "در حال ارسال از طریق: {name}",
  "direct address": "نشانی مستقیم",
- "public relay": "رله عمومی"
+ "public relay": "رله عمومی",
+ "Also send through Google Drive when nothing else works (slow)": "ارسال از طریق Google Drive هنگامی که هیچ راه دیگری کار نمی‌کند (کند)",
+ "Linked. When the computer cannot be reached any other way, positions go through Google Drive, up to a minute late.": "متصل شد. وقتی از هیچ راه دیگری نتوان به رایانه دسترسی داشت، موقعیت‌ها با حداکثر یک دقیقه تأخیر از طریق Google Drive ارسال می‌شوند."
 }

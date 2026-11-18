@@ -1218,6 +1218,8 @@ def phone_texts(tr):
                                 "that only the office computer can open it."),
             "driveIdle": tr("Linked. Every photo goes to the office's Google Drive folder. When the computer is in "
                             "reach, it shows a small copy at once."),
+            "driveGps": tr("Linked. When the computer cannot be reached any other way, positions go through Google "
+                           "Drive, up to a minute late."),
             "drivePreview": tr("{n} shown on the computer, original going to Google Drive"),
             "driveAuth": tr("The link to Google Drive has ended. Tap to link again."),
             "driveUp": tr("Sending to Google Drive…"), "driveWait": tr("Google Drive is busy - trying again soon."),

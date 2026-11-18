@@ -8064,5 +8064,7 @@
  "Sending {n} earlier positions…": "Envoi de {n} positions antérieures…",
  "Sending through: {name}": "Envoi via : {name}",
  "direct address": "adresse directe",
- "public relay": "relais public"
+ "public relay": "relais public",
+ "Also send through Google Drive when nothing else works (slow)": "Envoyer aussi via Google Drive lorsque rien d'autre ne fonctionne (lent)",
+ "Linked. When the computer cannot be reached any other way, positions go through Google Drive, up to a minute late.": "Lié. Lorsque l'ordinateur est inaccessible par tout autre moyen, les positions transitent par Google Drive, avec jusqu'à une minute de retard."
 }

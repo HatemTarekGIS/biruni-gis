@@ -36,6 +36,7 @@ def link_text(info):
         "nostr": tr("Public relay (Nostr)"),
         "ntfy": tr("Public relay (Nostr)"),
         "relay": tr("Public relay (Nostr)"),
+        "drive": tr("Google Drive"),
     }
     lines = []
     via = info.get("via")
@@ -76,6 +77,7 @@ class TrackingDock(QDockWidget):
         self.setObjectName("BiruniGps")
         self.source = NmeaSource(self)
         self.recorder = TrackRecorder()
+        self.pos_intake = None
         self.last_fix = None
         self.marker = None
         self.accuracy_band = None
@@ -191,6 +193,10 @@ class TrackingDock(QDockWidget):
         f4.addWidget(self.qr)
         f4.addWidget(self.qr_url)
         f4.addWidget(hint4)
+        self.drive_box = QCheckBox(tr("Also send through Google Drive when nothing else works (slow)"))
+        self.drive_box.setChecked(s.value(KEY + "drive", False, type=bool))
+        self.drive_box.toggled.connect(lambda on: QgsSettings().setValue(KEY + "drive", bool(on)))
+        f4.addWidget(self.drive_box)
         self.pages.addWidget(p4)
         cv.addWidget(self.pages)
         self.connect_btn = QPushButton(tr("Connect"))
@@ -321,6 +327,17 @@ class TrackingDock(QDockWidget):
             self._clock.start()
             self.plugin.activity.log("gps", "connected", self.mode.currentText(), mode, 1)
 
+    def _gps_drive_roots(self):
+        import json
+        from .field_photos import dock, drive
+
+        try:
+            raw = json.loads(QgsSettings().value(dock.DRIVE_ROOTS, "") or "[]")
+        except (TypeError, ValueError):
+            raw = []
+        roots = [str(p).strip() for p in raw if str(p or "").strip()] if isinstance(raw, list) else []
+        return roots or drive.suggest_roots()
+
     def _serve_bridge(self):
         from qgis.core import QgsApplication
         from qgis.PyQt.QtGui import QPixmap
@@ -331,10 +348,25 @@ class TrackingDock(QDockWidget):
         ensure_vendor()  # certificate and QR code libraries
         from .gps.browser import qr_png
 
+        if self.pos_intake is not None:
+            self.pos_intake.stop()
+            self.pos_intake = None
+        use_drive = self.drive_box.isChecked()
+        QgsSettings().setValue(KEY + "drive", bool(use_drive))
         folder = os.path.join(QgsApplication.qgisSettingsDirPath(), "biruni")
-        url = self.source.serve_bridge(folder, os.path.join(folder, "gps-bridge"), lang())
+        url = self.source.serve_bridge(folder, os.path.join(folder, "gps-bridge"), lang(), drive=use_drive)
         if not url:
             return False
+        if use_drive and self.source.bridge_server is not None:
+            from .field_photos import bridge, drive
+            from .gps.source import GPS_BRIDGE_KEY
+
+            roots = self._gps_drive_roots()
+            if roots:
+                gps_key = bridge.load_key(QgsSettings(), name=GPS_BRIDGE_KEY)
+                drive.ensure_office_folder(roots, gps_key)
+                self.pos_intake = drive.PosIntake(roots, gps_key, self.source.bridge_server.take_env)
+                self.pos_intake.start()
         pm = QPixmap()
         pm.loadFromData(qr_png(url, 5))
         self.qr.setPixmap(pm)
@@ -375,6 +407,9 @@ class TrackingDock(QDockWidget):
         return True
 
     def disconnect_source(self):
+        if self.pos_intake is not None:
+            self.pos_intake.stop()
+            self.pos_intake = None
         if self.recorder.recording:
             self.toggle_recording()
         self.source.stop()

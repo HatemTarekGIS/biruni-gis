@@ -145,9 +145,10 @@ function driveUA(){const u=navigator.userAgent||'';
   ios:/iPad|iPhone|iPod/.test(u)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1)}}
 function driveEl(tag,cls,txt){const e=document.createElement(tag);if(cls)e.className=cls;if(txt!=null)e.textContent=txt;return e}
 function driveSay(state){DRV.state=state;const c=DRV.card;if(!c)return;
- const S={unlinked:T.driveUnlinked,auth:T.driveAuth,idle:T.driveIdle,up:T.driveUp,wait:T.driveWait,full:T.driveFull,
-  err:T.driveErr,denied:T.driveDenied,inapp:T.driveInApp,blocked:T.drivePopupBlocked,pick:T.drivePickHint,
-  ro:T.drivePickRO,gone:T.driveGone}[state]||'';
+ const isG=typeof GDRIVE!=='undefined'&&GDRIVE;
+ const S={unlinked:T.driveUnlinked,auth:T.driveAuth,idle:isG?(T.driveGps||T.driveIdle):T.driveIdle,up:T.driveUp,
+  wait:T.driveWait,full:T.driveFull,err:T.driveErr,denied:T.driveDenied,inapp:T.driveInApp,
+  blocked:T.drivePopupBlocked,pick:T.drivePickHint,ro:T.drivePickRO,gone:T.driveGone}[state]||'';
  c.querySelector('.dstate').textContent=String(S||'').replace('{name}',DRV.fname());
  const linked=DRV.ok();c.querySelector('.dcount').classList.toggle('hide',!linked&&!DRV.n);
  c.querySelector('.dcount').textContent=(T.driveIn||'')+' '+DRV.n;
@@ -159,7 +160,8 @@ function driveSay(state){DRV.state=state;const c=DRV.card;if(!c)return;
  const pop=c.querySelector('.dpop');pop.textContent=(state==='auth'&&dsendLabel())||T.driveOpen||'';
  if(typeof dshowFree==='function'&&!DFREEING)dshowFree()}
 function dcache(){try{const c=JSON.parse(kept('biruni-drive-f-'+ROOM)||'null');
-  if(c&&c.k===1&&c.t===DRV.tag&&typeof c.r==='string'&&typeof c.p==='string')return c}catch(e){}return null}
+  if(c&&c.k===1&&c.t===DRV.tag&&typeof c.r==='string'&&(typeof c.p==='string'||typeof c.g==='string'))return c}
+ catch(e){}return null}
 function driveHello(){const w=DRV.win&&!DRV.win.closed?DRV.win:null,t=w||(DRV.frame&&DRV.frame.contentWindow);if(!t)return;
  let label=DRV.ok()?T.driveRelink:(DRV.state==='auth'?dsendLabel()||T.driveRelink:T.driveLink);DRV.label=label;
  const m={v:1,type:'biruni-drive-hello',nonce:DRV.nonce,dir:document.documentElement.dir==='rtl'?'rtl':'ltr'};
@@ -185,8 +187,10 @@ function driveToken(m){if(typeof m.token!=='string'||!m.token||m.token.length>40
 async function drivePicked(m){const id=String(m.id||'');
  if(!DRV.tag||!DRV.ok()||!/^[\w-]{10,128}$/.test(id)||m.name!==DRV.fname())return;
  try{const v=await dverify(id);if(v==='ro'){driveSay('ro');return}
-  const p=await dfolder('p-'+DEVID,id,'biruniDev',DEVID);
-  const c={t:DRV.tag,r:id,p:p,k:1,own:v==='own',v:Date.now()};keep('biruni-drive-f-'+ROOM,JSON.stringify(c));
+  const c={t:DRV.tag,r:id,k:1,own:v==='own',v:Date.now()};
+  if(typeof DRIVE_ON!=='undefined'&&DRIVE_ON)c.p=await dfolder('p-'+DEVID,id,'biruniDev',DEVID);
+  if(typeof GDRIVE!=='undefined'&&GDRIVE)c.g=await dfolder('g-'+DEVID,id,'biruniGps',DEVID);
+  keep('biruni-drive-f-'+ROOM,JSON.stringify(c));
   DRV.fold=c;DRV.wantPick=false;DRV.bad=0;dsoon();driveSay('idle');drivePump()}
  catch(e){if(e instanceof DriveStop)return;driveSay(e.status===403||e.status===404||e.perm?'gone':'err')}}
 function driveDead(){DRV.tok='';DRV.exp=0;driveSay('auth');driveHello()}
@@ -202,7 +206,8 @@ window.addEventListener('message',e=>{
   if(c==='pick_cancel'){if(!DRV.fold)driveSay('pick')}
   else if(c==='gsi'||c==='popup_blocked'){drivePopupButton();driveSay(c==='popup_blocked'?'blocked':'err')}
   else if(c==='denied'||c==='scope')driveSay('denied');else if(c!=='closed')driveSay('err')}});
-function driveStart(){if(DRV.on||typeof DRIVE_ON==='undefined'||!DRIVE_ON||!DRV.ORIGIN)return;DRV.on=true;
+function driveStart(){const useD=typeof DRIVE_ON!=='undefined'&&DRIVE_ON,useG=typeof GDRIVE!=='undefined'&&GDRIVE;
+ if(DRV.on||(!useD&&!useG)||!DRV.ORIGIN)return;DRV.on=true;
  DRV.nonce=rid();DRV.n=+kept('biruni-drive-c-'+ROOM)||0;const ua=driveUA();
  const c=driveEl('div','card dcard');c.id='driveCard';
  const r=driveEl('div','row');r.appendChild(driveEl('span','lbl dtitle'));r.appendChild(driveEl('span','dcount hide'));c.appendChild(r);
@@ -295,12 +300,15 @@ async function dfresh(){const c=DRV.fold,ck='biruni-drive-f-'+ROOM;if(!c||Date.n
  c.v=Date.now();keep(ck,JSON.stringify(c))}
 async function dlost(){const c=DRV.fold,ck='biruni-drive-f-'+ROOM;if(!c)throw new DriveStop('pick');
  try{const v=await dverify(c.r);if(v==='ro'){const e=new Error('ro');e.perm=true;e.ro=true;throw e}
-  c.p=await dfolder('p-'+DEVID,c.r,'biruniDev',DEVID);keep(ck,JSON.stringify(c))}
+  if(typeof DRIVE_ON!=='undefined'&&DRIVE_ON)c.p=await dfolder('p-'+DEVID,c.r,'biruniDev',DEVID);
+  if(typeof GDRIVE!=='undefined'&&GDRIVE)c.g=await dfolder('g-'+DEVID,c.r,'biruniGps',DEVID);
+  keep(ck,JSON.stringify(c))}
  catch(e){if(e instanceof DriveStop)throw e;
   if(e.status===403||e.status===404||e.perm){keep(ck,null);DRV.fold=null;driveSay(e.ro?'ro':'gone');throw new DriveStop('gone')}
   throw e}}
 const DFALL=120000;   /* Drive failing this long while the line is open: the line takes the originals */
-function dfits(it){return !!(it&&it.meta&&it.meta.sealed&&!it.carried&&it.blob&&it.blob.size<=DMAX&&!DSKIP.has(it.id))}
+function dfits(it){return !!(typeof DRIVE_ON!=='undefined'&&DRIVE_ON&&it&&it.meta&&it.meta.sealed&&!it.carried
+ &&it.blob&&it.blob.size<=DMAX&&!DSKIP.has(it.id))}
 function deligible(it){return dfits(it)&&!DRV.HOLD.has(it.id)}
 function driveFirst(it){return DRV.on&&DRV.go()&&!(DRV.bad&&(DRV.bad===1||Date.now()-DRV.bad>DFALL))&&dfits(it)}
 async function dstill(id){return (await all()).some(x=>x.id===id)}
@@ -361,6 +369,8 @@ async function drivePump(){if(!DRV.on)return;
    record of it goes 30 days later */
 async function dall(){const d=await ddb();if(!d)return [];return new Promise(r=>{try{const g=d.transaction('d').objectStore('d').getAll();
  g.onsuccess=()=>r((g.result||[]).filter(x=>x&&x.id&&x.id[0]!=='#'));g.onerror=()=>r([])}catch(e){r([])}})}
+async function dgall(){const d=await ddb();if(!d)return [];return new Promise(r=>{try{const g=d.transaction('d').objectStore('d').getAll();
+ g.onsuccess=()=>r((g.result||[]).filter(x=>x&&x.id&&x.id.startsWith('#g')));g.onerror=()=>r([])}catch(e){r([])}})}
 async function ddrop(id){const d=await ddb();if(!d)return;return new Promise(r=>{try{const t=d.transaction('d','readwrite');
  t.objectStore('d').delete(id);t.oncomplete=()=>r();t.onerror=()=>r();t.onabort=()=>r()}catch(e){r()}})}
 async function dreceipts(){if(!DRV.on||typeof lineOpen!=='function'||!lineOpen()||!ID.pin)return;

@@ -130,7 +130,7 @@ class NmeaSource(QObject):
         self.status.emit("listening", True)
         return [self.browser.url(ip) for ip in local_addresses()] or [self.browser.url("127.0.0.1")]
 
-    def serve_bridge(self, cert_folder, work_folder, lang="en"):
+    def serve_bridge(self, cert_folder, work_folder, lang="en", drive=False):
         """The phone opens Biruni's page on GitHub (a real certificate: no warning) and sends its position
         directly to this PC over the bridge (field_photos/bridge.py). Returns the phone's address or None."""
         from ..field_photos import bridge, ladder
@@ -150,7 +150,7 @@ class NmeaSource(QObject):
             self.stop()
             return None
         self.mode = MODE_BRIDGE
-        self._bridge_url = bridge.phone_url(key, lang) + "&m=gps"
+        self._bridge_url = bridge.phone_url(key, lang) + "&m=gps" + ("&g=1" if drive else "")
         self._poll.start()
         self.status.emit("listening", True)
         return self._bridge_url

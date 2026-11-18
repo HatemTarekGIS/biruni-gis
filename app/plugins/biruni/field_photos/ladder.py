@@ -112,7 +112,8 @@ class Ladder:
     def take(self, s, via, clean, resolve):
         """Process a sealed `lpos` envelope; returns (accepted_positions, ack_sealed_or_None)."""
         env = self.open(s)
-        if not self._valid_env(env):
+        max_batch = 300 if via == "drive" else 60
+        if not self._valid_env(env, max_batch):
             self.last_info = None
             return [], None
         d, e, bl = env["d"], env["e"], env.get("bl", 0)
@@ -171,7 +172,7 @@ class Ladder:
         return accepted, self.seal(ack)
 
     @staticmethod
-    def _valid_env(env):
+    def _valid_env(env, max_batch=60):
         if not env or env.get("t") != "lpos":
             return False
         if type(env.get("v")) is not int or env["v"] != 1:
@@ -183,7 +184,7 @@ class Ladder:
         if not isinstance(e, str) or not (1 <= len(e) <= 64):
             return False
         b = env.get("b")
-        if not isinstance(b, list) or len(b) > 60:
+        if not isinstance(b, list) or len(b) > max_batch:
             return False
         ts = env.get("ts")
         if not isinstance(ts, (int, float)) or isinstance(ts, bool) or not math.isfinite(ts):
