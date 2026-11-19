@@ -6,8 +6,8 @@ import json
 TEXTS = {
     "en": {"title": "Room", "noted": "Noted. Go back to the Biruni photo page: the next photo is placed in this room.",
            "level": "Level {n}", "bad": "This code has no room in it."},
-    "ar": {"title": "الغرفة", "noted": "اتسجّلت. ارجع لصفحة صور البيروني: الصورة الجاية هتتحط في الغرفة دي.",
-           "level": "الدور {n}", "bad": "الكود ده مفيهوش غرفة."},
+    "ar": {"title": "الغرفة", "noted": "سُجّلت. ارجع إلى صفحة صور البيروني: ستُوضع الصورة التالية في هذه الغرفة.",
+           "level": "الطابق {n}", "bad": "لا يحتوي هذا الرمز على غرفة."},
     "es": {"title": "Sala", "noted": "Anotada. Vuelva a la página de fotos de Biruni: la próxima foto se ubica en esta sala.",
            "level": "Planta {n}", "bad": "Este código no contiene ninguna sala."},
     "pt_BR": {"title": "Sala", "noted": "Anotada. Volte à página de fotos do Biruni: a próxima foto fica nesta sala.",

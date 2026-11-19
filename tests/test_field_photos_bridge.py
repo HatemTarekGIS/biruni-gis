@@ -448,7 +448,7 @@ check(qc.get("sealed") == 1 and qc.get("metaKeys") == "id,sealed,t" and qc.get("
       and not qc.get("hasJpeg") and not qc.get("hasNote"),
       f"waiting photo on the phone is encrypted with the PC's key (no readable JPEG, note or coordinates: {qc})")
 check(qc.get("enWait") == "1 photos waiting" and not qc.get("enHide")
-      and qc.get("arWait") == "1 صور مستنية" and qc.get("arBox") == "1 صور مستنية",
+      and qc.get("arWait") == "1 صور منتظرة" and qc.get("arBox") == "1 صور منتظرة",
       f"the page shows the clear waiting counter in English and Arabic ({qc.get('enWait')} / {qc.get('arWait')})")
 js("flush();1")
 got4 = []
