@@ -859,7 +859,7 @@ def _run_desktop(only_part, platform):
                 fpd.widget().adjustSize()
                 app.processEvents()
             card_ch.setFixedHeight(card_ch.sizeHint().height() + 6)
-            save_grab(card_ch, "ch-relays-connected", "channels", width=440, temp_paths=[d_ch])
+            save_grab(card_ch, "ch-relays-connected", "channels", width=440, temp_paths=[d_root, d_ch])
 
             card_ch.setMinimumHeight(0)
             card_ch.setMaximumHeight(16777215)
