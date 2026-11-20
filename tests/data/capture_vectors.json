@@ -1,0 +1,188 @@
+{
+ "schemas": {
+  "building": {
+   "biruni_capture": 1,
+   "id": "building",
+   "rev": 1,
+   "title": "Building survey",
+   "job": [
+    {"name": "job_no", "label": "Job number", "type": "text", "req": true, "keep": false, "title": true}
+   ],
+   "nodes": [
+    {
+     "id": "facades",
+     "label": "Facades",
+     "req": true,
+     "nodes": [
+      {"id": "front", "label": "Front facade", "req": true, "photos": [1, 3]},
+      {"id": "back", "label": "Back facade", "req": true, "photos": [1, 3]}
+     ]
+    },
+    {"id": "roof", "label": "Roof", "req": false, "photos": [1, 4]},
+    {
+     "id": "floors",
+     "label": "Floor",
+     "req": true,
+     "repeat": {"min": 1, "max": 10},
+     "nodes": [
+      {
+       "id": "apts",
+       "label": "Apartment",
+       "req": true,
+       "repeat": {"min": 1, "max": 10},
+       "q": [
+        {"name": "apt_no", "label": "Apartment number", "type": "text", "req": true, "keep": false, "title": true},
+        {"name": "condition", "label": "Condition", "type": "choice", "req": true, "keep": false, "choices": ["Good", "Fair", "Poor"]}
+       ],
+       "nodes": [
+        {
+         "id": "rooms",
+         "label": "Room",
+         "req": true,
+         "repeat": {"min": 1, "max": 10},
+         "photos": [2, 6],
+         "q": [
+          {"name": "room_type", "label": "Room type", "type": "choice", "req": true, "keep": false, "title": true, "choices": ["Kitchen", "Bedroom", "Bathroom"]}
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "vectors": [
+  {
+   "name": "empty_state_lists_missing_facades_and_floors",
+   "schema": "building",
+   "state": {
+    "v": 1, "job": "J1000001", "dev": "dev00001", "rev": 1, "t": 1000,
+    "inst": {}, "ans": {}, "note": {}, "ph": {}, "skip": {}
+   },
+   "records": [],
+   "expected_missing_keys": [":front", ":back", ":floors"],
+   "expected_complete": false
+  },
+  {
+   "name": "one_floor_one_apt_missing_question_and_room_photos",
+   "schema": "building",
+   "state": {
+    "v": 1, "job": "J1000001", "dev": "dev00001", "rev": 2, "t": 2000,
+    "inst": {
+     "f1a1b1": {"n": "floors", "p": "", "o": 1, "t": 100, "del": 0},
+     "p1a1b1": {"n": "apts", "p": "f1a1b1", "o": 1, "t": 110, "del": 0},
+     "r1a1b1": {"n": "rooms", "p": "p1a1b1", "o": 1, "t": 120, "del": 0}
+    },
+    "ans": {
+     "p1a1b1:apts": {"apt_no": ["101", 110]},
+     "r1a1b1:rooms": {"room_type": ["Kitchen", 120]}
+    },
+    "note": {},
+    "ph": {
+     ":front": ["ph-front-1"],
+     ":back": ["ph-back-1"],
+     "r1a1b1:rooms": ["ph-room-1"]
+    },
+    "skip": {}
+   },
+   "records": [],
+   "expected_missing_keys": ["p1a1b1:apts", "r1a1b1:rooms"],
+   "expected_complete": false
+  },
+  {
+   "name": "skip_on_instance_covers_subtree",
+   "schema": "building",
+   "state": {
+    "v": 1, "job": "J1000001", "dev": "dev00001", "rev": 3, "t": 3000,
+    "inst": {
+     "f1a1b1": {"n": "floors", "p": "", "o": 1, "t": 100, "del": 0},
+     "p1a1b1": {"n": "apts", "p": "f1a1b1", "o": 1, "t": 110, "del": 0}
+    },
+    "ans": {},
+    "note": {},
+    "ph": {
+     ":front": ["ph-front-1"],
+     ":back": ["ph-back-1"]
+    },
+    "skip": {
+     "p1a1b1:apts": ["Apartment locked by owner", 250]
+    }
+   },
+   "records": [],
+   "expected_missing_keys": [],
+   "expected_complete": true
+  },
+  {
+   "name": "short_skip_reason_does_not_cover_item",
+   "schema": "building",
+   "state": {
+    "v": 1, "job": "J1000001", "dev": "dev00001", "rev": 4, "t": 4000,
+    "inst": {
+     "f1a1b1": {"n": "floors", "p": "", "o": 1, "t": 100, "del": 0},
+     "p1a1b1": {"n": "apts", "p": "f1a1b1", "o": 1, "t": 110, "del": 0}
+    },
+    "ans": {},
+    "note": {},
+    "ph": {
+     ":front": ["ph-front-1"],
+     ":back": ["ph-back-1"]
+    },
+    "skip": {
+     "p1a1b1:apts": ["no", 250]
+    }
+   },
+   "records": [],
+   "expected_missing_keys": ["p1a1b1:apts", "p1a1b1:rooms"],
+   "expected_complete": false
+  },
+  {
+   "name": "full_completion_with_records_and_state",
+   "schema": "building",
+   "state": {
+    "v": 1, "job": "J1000001", "dev": "dev00001", "rev": 5, "t": 5000,
+    "inst": {
+     "f1a1b1": {"n": "floors", "p": "", "o": 1, "t": 100, "del": 0},
+     "p1a1b1": {"n": "apts", "p": "f1a1b1", "o": 1, "t": 110, "del": 0},
+     "r1a1b1": {"n": "rooms", "p": "p1a1b1", "o": 1, "t": 120, "del": 0}
+    },
+    "ans": {
+     "p1a1b1:apts": {"apt_no": ["101", 110], "condition": ["Good", 115]},
+     "r1a1b1:rooms": {"room_type": ["Kitchen", 120]}
+    },
+    "note": {"r1a1b1:rooms": ["Clean kitchen", 125]},
+    "ph": {
+     ":front": ["ph-front-1"]
+    },
+    "skip": {}
+   },
+   "records": [
+    {"id": "ph-back-1", "cap": {"j": "J1000001", "k": ":back", "pl": "Facades › Back facade", "ch": []}},
+    {"id": "ph-room-1", "cap": {"j": "J1000001", "k": "r1a1b1:rooms", "pl": "Floor 1 › 101 › Kitchen", "ch": [["floors", "f1a1b1", 1], ["apts", "p1a1b1", 1], ["rooms", "r1a1b1", 1]]}},
+    {"id": "ph-room-2", "cap": {"j": "J1000001", "k": "r1a1b1:rooms", "pl": "Floor 1 › 101 › Kitchen", "ch": [["floors", "f1a1b1", 1], ["apts", "p1a1b1", 1], ["rooms", "r1a1b1", 1]]}}
+   ],
+   "expected_missing_keys": [],
+   "expected_complete": true
+  },
+  {
+   "name": "deleted_instance_does_not_satisfy_repeat_min",
+   "schema": "building",
+   "state": {
+    "v": 1, "job": "J1000001", "dev": "dev00001", "rev": 6, "t": 6000,
+    "inst": {
+     "f1a1b1": {"n": "floors", "p": "", "o": 1, "t": 100, "del": 200}
+    },
+    "ans": {},
+    "note": {},
+    "ph": {
+     ":front": ["ph-front-1"],
+     ":back": ["ph-back-1"]
+    },
+    "skip": {}
+   },
+   "records": [],
+   "expected_missing_keys": [":floors"],
+   "expected_complete": false
+  }
+ ]
+}

@@ -201,7 +201,7 @@ MAX_FIELDS, MAX_CHOICES = 30, 50
 # columns the photos layer has already (dock.FIELDS) - a question never takes one of these names
 RESERVED = {"fid", "geom", "geometry", "photo_id", "photo", "taken", "kind", "note", "accuracy_m", "altitude",
             "compass", "heading", "fix_age_s", "device", "avg_n", "avg_sd_m", "level_id", "unit_id",
-            "surveyor", "device_id"}
+            "surveyor", "device_id", "job_id", "job_item"}
 NAME_RE = re.compile(r"^[^\W\d]\w{0,29}$")
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
@@ -1114,13 +1114,23 @@ class PhotoServer:
         self._publish_guide()
         return len(payload["units"]) if payload else 0
 
+    def set_capture(self, payload):
+        """The capture schemas and open jobs go with the guide; None takes them away."""
+        self._capture = payload
+        self._publish_guide()
+        return len(payload.get("jobs", ())) if payload else 0
+
     def _publish_guide(self):
         self.guide_v += 1
         self.guide, n = guide_bytes(self.guide_v, getattr(self, "_guide_items", []))
         indoor = getattr(self, "_indoor", None)
-        if indoor:
+        cap = getattr(self, "_capture", None)
+        if indoor or cap:
             g = json.loads(self.guide)
-            g["indoor"] = indoor
+            if indoor:
+                g["indoor"] = indoor
+            if cap:
+                g["cap"] = cap
             self.guide = json.dumps(g, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         return n
 

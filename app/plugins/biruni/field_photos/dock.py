@@ -881,8 +881,12 @@ class FieldPhotosDock(QDockWidget):
         self.form_btn = QPushButton(tr("Form…"))
         self.form_btn.setToolTip(tr("Questions the phone asks with each photo: choices, numbers, yes / no, dates."))
         self.form_btn.clicked.connect(self._edit_form)
+        self.jobs_btn = QPushButton(tr("Jobs…"))
+        self.jobs_btn.setToolTip(tr("Create and manage capture jobs and checklist templates sent to the phones."))
+        self.jobs_btn.clicked.connect(self._open_jobs)
         frow.addWidget(self.form_info, 1)
         frow.addWidget(self.form_btn)
+        frow.addWidget(self.jobs_btn)
         cv.addLayout(frow)
         row = QHBoxLayout()
         self.folder = QLineEdit()
@@ -1132,6 +1136,26 @@ class FieldPhotosDock(QDockWidget):
             if self.server is not None:
                 self.state.setText(tr("The form is saved. Press Stop, then Start, to send it to the phone."))
 
+    def _publish_capture(self):
+        from .capture_jobs import JobStore
+
+        if self.server is None:
+            return
+        try:
+            payload = JobStore(self._active_folder()).payload()
+        except ValueError:
+            payload = None
+        if payload:
+            self.server.set_capture(payload)
+
+    def _open_jobs(self):
+        from .capture_jobs import JobStore, JobsDialog
+
+        store = JobStore(self._active_folder())
+        dlg = JobsDialog(store, server=self.server, iface=self.iface,
+                         records=self._all_photo_records(from_disk=True), parent=self)
+        dlg.exec()
+
     def _show_hint(self):
         self.own.setVisible(self.mode.currentData() == "own")
         self.new_code.setVisible(self.mode.currentData() == "bridge")
@@ -1245,6 +1269,7 @@ class FieldPhotosDock(QDockWidget):
                                       ["127.0.0.1"] if bridged else local_addresses(),
                                       bind="127.0.0.1" if bridged else "0.0.0.0", form=form)
             self.server.drive_clean = self.drive_clean()
+            self._publish_capture()
         except OSError as e:
             self.state.setText(tr("Port {p} is busy ({e}).").format(p=PHOTO_PORT, e=e))
             return

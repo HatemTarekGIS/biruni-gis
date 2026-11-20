@@ -35,8 +35,10 @@ def _num_text(v):
 
 
 class FormDialog(QDialog):
-    def __init__(self, form, parent=None):
+    def __init__(self, form, parent=None, keep=True, title=False):
         super().__init__(parent)
+        self._has_keep = bool(keep)
+        self._has_title = bool(title)
         self.setWindowTitle(tr("Form for the photos"))
         self.resize(820, 440)
         v = QVBoxLayout(self)
@@ -45,13 +47,18 @@ class FormDialog(QDialog):
                           "against their limits, and \"Keep\" leaves the answer filled in for the next photo."))
         intro.setWordWrap(True)
         v.addWidget(intro)
-        self.table = QTableWidget(0, 7)
-        self.table.setHorizontalHeaderLabels([tr("Question"), tr("Type"), tr("Choices (separated by commas)"),
-                                              tr("Min"), tr("Max"), tr("Required"), tr("Keep")])
+        self.table = QTableWidget(0, 8 if self._has_title else 7)
+        headers = [tr("Question"), tr("Type"), tr("Choices (separated by commas)"),
+                   tr("Min"), tr("Max"), tr("Required"), tr("Keep")]
+        if self._has_title:
+            headers.append(tr("Title"))
+        self.table.setHorizontalHeaderLabels(headers)
+        if not self._has_keep:
+            self.table.setColumnHidden(6, True)
         h = self.table.horizontalHeader()
         h.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         h.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
-        for c in (1, 3, 4, 5, 6):
+        for c in (1, 3, 4, 5, 6) + ((7,) if self._has_title else ()):
             h.setSectionResizeMode(c, QHeaderView.ResizeMode.ResizeToContents)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
@@ -70,8 +77,24 @@ class FormDialog(QDialog):
         buttons.accepted.connect(self._ok)
         buttons.rejected.connect(self.reject)
         v.addWidget(buttons)
-        self.form = clean_form(form)
+        self.form = self._clean(form)
         self._fill(self.form)
+
+    def _clean(self, raw):
+        raw_list = list(raw) if isinstance(raw, (list, tuple)) else []
+        cleaned = clean_form(raw_list)
+        if self._has_title:
+            titles = {str(f.get("label", "")).strip().lower(): bool(f.get("title"))
+                      for f in raw_list if isinstance(f, dict)}
+            by_name = {str(f.get("name", "")): bool(f.get("title"))
+                       for f in raw_list if isinstance(f, dict) and f.get("name")}
+            for f in cleaned:
+                if by_name.get(f["name"]) or titles.get(f["label"].lower()):
+                    f["title"] = True
+        if not self._has_keep:
+            for f in cleaned:
+                f["keep"] = False
+        return cleaned
 
     # ---- rows ------------------------------------------------------------------
     def _fill(self, form):
@@ -103,7 +126,7 @@ class FormDialog(QDialog):
         self.table.setItem(r, 2, QTableWidgetItem(", ".join(f.get("choices") or ())))
         self.table.setItem(r, 3, QTableWidgetItem(_num_text(f.get("min"))))
         self.table.setItem(r, 4, QTableWidgetItem(_num_text(f.get("max"))))
-        for c, key in ((5, "req"), (6, "keep")):
+        for c, key in ((5, "req"), (6, "keep")) + (((7, "title"),) if self._has_title else ()):
             it = QTableWidgetItem()
             it.setFlags(Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
             it.setCheckState(Qt.CheckState.Checked if f.get(key) else Qt.CheckState.Unchecked)
@@ -133,12 +156,16 @@ class FormDialog(QDialog):
                 return "bad"
 
         label = self.table.item(r, 0)
-        return {"name": label.data(Qt.ItemDataRole.UserRole) or "" if label else "", "label": text(0),
-                "type": self.table.cellWidget(r, 1).currentData(),
-                "choices": [c.strip() for c in text(2).replace("،", ",").split(",") if c.strip()],
-                "min": num(3), "max": num(4),
-                "req": self.table.item(r, 5).checkState() == Qt.CheckState.Checked,
-                "keep": self.table.item(r, 6).checkState() == Qt.CheckState.Checked}
+        d = {"name": label.data(Qt.ItemDataRole.UserRole) or "" if label else "", "label": text(0),
+             "type": self.table.cellWidget(r, 1).currentData(),
+             "choices": [c.strip() for c in text(2).replace("،", ",").split(",") if c.strip()],
+             "min": num(3), "max": num(4),
+             "req": self.table.item(r, 5).checkState() == Qt.CheckState.Checked,
+             "keep": self._has_keep and self.table.item(r, 6).checkState() == Qt.CheckState.Checked}
+        if self._has_title and self.table.item(r, 7) is not None:
+            if self.table.item(r, 7).checkState() == Qt.CheckState.Checked:
+                d["title"] = True
+        return d
 
     def rows(self):
         return [self._row(r) for r in range(self.table.rowCount())]
@@ -182,7 +209,7 @@ class FormDialog(QDialog):
         try:
             with open(path, encoding="utf-8") as f:
                 data = json.load(f)
-            form = clean_form(data.get("questions") if isinstance(data, dict) else data)
+            form = self._clean(data.get("questions") if isinstance(data, dict) else data)
         except (OSError, ValueError, AttributeError) as e:
             QMessageBox.warning(self, self.windowTitle(), tr("This file is not a form ({e}).").format(e=e))
             return
@@ -209,7 +236,7 @@ class FormDialog(QDialog):
                 return tr("The limits of \"{q}\" must be numbers.").format(q=f["label"]), None
             if f["min"] is not None and f["max"] is not None and f["min"] > f["max"]:
                 return tr("In \"{q}\" the minimum is larger than the maximum.").format(q=f["label"]), None
-        return None, clean_form([f for f in rows if f["label"]])
+        return None, self._clean([f for f in rows if f["label"]])
 
     def _ok(self):
         problem, form = self._check()
