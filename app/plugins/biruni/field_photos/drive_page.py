@@ -308,7 +308,7 @@ async function dlost(){const c=DRV.fold,ck='biruni-drive-f-'+ROOM;if(!c)throw ne
   throw e}}
 const DFALL=120000;   /* Drive failing this long while the line is open: the line takes the originals */
 function dfits(it){return !!(typeof DRIVE_ON!=='undefined'&&DRIVE_ON&&it&&it.meta&&it.meta.sealed&&!it.carried
- &&it.blob&&it.blob.size<=DMAX&&!DSKIP.has(it.id))}
+ &&!(it.cap&&typeof lineOpen==='function'&&lineOpen())&&it.blob&&it.blob.size<=DMAX&&!DSKIP.has(it.id))}
 function deligible(it){return dfits(it)&&!DRV.HOLD.has(it.id)}
 function driveFirst(it){return DRV.on&&DRV.go()&&!(DRV.bad&&(DRV.bad===1||Date.now()-DRV.bad>DFALL))&&dfits(it)}
 async function dstill(id){return (await all()).some(x=>x.id===id)}

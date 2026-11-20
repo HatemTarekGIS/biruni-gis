@@ -1257,7 +1257,21 @@ def phone_texts(tr):
             "chTunnel": tr("direct address"),
             "chRelay": tr("public relay"),
             "chOrg": tr("your organization's relay"),
-            "chOwn": tr("Biruni relay")}
+            "chOwn": tr("Biruni relay"),
+            # capture jobs and checklist (phase C)
+            "capJobs": tr("Capture job"), "capNoJob": tr("No job (free photos)"),
+            "capDoneOf": tr("{done} of {total}"), "capAdd": tr("+ Add {name}"),
+            "capRemove": tr("Remove"), "capMinWarn": tr("At least {n} required"),
+            "capMaxWarn": tr("At most {n} allowed"), "capTake": tr("Take a photo"),
+            "capTakeN": tr("Take a photo ({have}/{min})"), "capPhotosN": tr("{have}/{min} photos"),
+            "capExtra": tr("Extra photo for this job"), "capCannot": tr("Cannot do this item"),
+            "capReason": tr("Reason (at least 3 characters)"), "capReasonNeed": tr("Write a reason of at least 3 characters."),
+            "capClearSkip": tr("Clear skip"), "capSkipped": tr("Skipped: {r}"),
+            "capFinish": tr("Finish job"), "capReopen": tr("Reopen job"),
+            "capClosed": tr("Job finished on this phone"), "capMissingTitle": tr("Missing required items:"),
+            "capMissingNeed": tr("Complete every required item or give a reason before finishing."),
+            "capNeedPhotos": tr("needs {n} more photo(s)"), "capNeedQ": tr("missing required answers"),
+            "capNeedInst": tr("needs {have}/{min}"), "capDone": tr("Done"), "capOpt": tr("Optional")}
 
 
 def all_phone_texts():
@@ -1427,6 +1441,22 @@ input.in:focus{border-color:var(--accent)}
 .dframe{display:block;width:100%;height:84px;border:0;margin-top:8px;background:transparent}
 .dstate{font-size:14px;color:var(--dim);margin-top:4px}.dcount{font-weight:700;font-variant-numeric:tabular-nums}
 .dpop,.dpick{margin-top:8px}.dfold{font-size:13px;color:var(--dim);margin-top:4px;overflow-wrap:anywhere}
+.csel{width:100%;font:inherit;font-weight:600;padding:10px 12px;border-radius:13px;border:1px solid var(--line);
+ background:var(--bg);color:var(--text);margin:8px 0 10px;min-height:44px}
+.cprog{font-size:13px;font-weight:700;color:var(--dim);font-variant-numeric:tabular-nums}
+.ctree{margin-top:10px;display:flex;flex-direction:column;gap:6px}
+.cnode{border:1px solid var(--line);border-radius:13px;padding:9px 11px;background:var(--bg)}
+.cnode.sub{margin-inline-start:14px}
+.crow{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.cbtn{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;border:0;padding:2px 0;
+ background:transparent;color:var(--text);text-align:start;font-weight:600;font-size:15px}
+.cmeta{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--dim);flex:none}
+.cst{font-weight:700;font-size:15px}.cst.ok{color:var(--good)}.cst.no{color:var(--poor)}.cst.sk{color:var(--fair)}
+.cadd{margin-top:6px;width:100%;text-align:center}.cdel{padding:4px 9px;font-size:13px;border-color:var(--line);color:var(--dim)}
+.cfin{margin-top:12px;width:100%}.cmiss{margin-top:10px;padding:10px 12px;border-radius:12px;border:1px solid var(--poor);
+ background:var(--bg);font-size:13px;color:var(--poor)}.cmiss ul{margin:6px 0 0;padding-inline-start:18px}
+.cpanel{max-height:86vh;overflow-y:auto}.cpath{font-weight:700;font-size:16px;padding:2px 4px 10px}
+.cbox{margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style></head><body>
 <header class="top">
@@ -1459,7 +1489,14 @@ input.in:focus{border-color:var(--accent)}
    <span class="roomName" id="roomName"></span><button class="ghost hide" id="roomOff" type="button">×</button></div>
   <div class="hide" id="roomPlan"><canvas id="rmap"></canvas><span class="lbl" id="roomHint"></span></div>
  </div>
- <div class="card">
+ <div class="card hide" id="capCard">
+  <div class="row"><span class="lbl" id="lCap"></span><span class="cprog" id="capProg"></span></div>
+  <select class="csel" id="capJob"></select>
+  <div class="ctree" id="capTree"></div>
+  <div class="cmiss hide" id="capMiss"></div>
+  <button class="ghost cfin" id="capFin" type="button"></button>
+ </div>
+ <div class="card" id="formCard">
   <span class="lbl" id="lKind"></span><div class="kinds" id="kinds"></div>
   <div id="form"></div>
   <input type="text" class="in" id="note" enterkeyhint="done" autocomplete="off">
@@ -1488,6 +1525,15 @@ input.in:focus{border-color:var(--accent)}
  <div class="handStep" id="handStep" aria-live="polite"></div><canvas id="handQr" class="hide"></canvas>
  <div class="scan hide" id="handScan"><video id="handVideo" playsinline muted></video><i></i></div>
  <button type="button" id="handCancel"></button></div></div>
+<div class="sheet hide" id="capSheet"><div class="panel cpanel"><div class="grab"></div>
+ <div class="cpath" id="capPath"></div>
+ <div id="capForm"></div>
+ <div class="fld"><span class="lbl" id="lCapNote"></span><input type="text" class="in" id="capNote" enterkeyhint="done" autocomplete="off"></div>
+ <button class="primary" id="capShoot" type="button"></button>
+ <div class="cbox"><span class="lbl" id="lCapSkip"></span>
+  <div class="mrow"><input type="text" class="in" id="capReason" maxlength="300" autocomplete="off">
+   <button class="ghost" id="capSkipBtn" type="button"></button></div></div>
+ <button type="button" id="capDoneBtn"></button></div></div>
 <div class="toast" id="toast"></div>
 <script>
 let ALL=__TEXTS__,KINDS=__KINDS__,FORM=__FORM__,ROOM='',HASHL=null,GPSMODE=false,T={},LANG='en',PCKEY='__PCKEY__';const DEF='__DEFLANG__',$=i=>document.getElementById(i);
@@ -1514,13 +1560,13 @@ function label(){document.title=T.title;$('hero').textContent=T.hero;$('introTex
  $('share').setAttribute('aria-label',T.share);
  $('me').placeholder=T.me;$('roomBtn').textContent=T.scanRoom;$('roomOff').setAttribute('aria-label',T.leaveRoom);if(room)$('roomHint').textContent=T.tapRoom;if(!avg)$('avgBtn').textContent=T.avg;
  $('lHand').textContent=T.hand;$('giveBtn').textContent=T.handGiveBtn;$('takeBtn').textContent=T.handTakeBtn;
- $('handCancel').textContent=T.handCancel;$('lSent').textContent=bare(T.sent);$('lWait').textContent=bare(T.queued);$('shotHint').textContent=fix?T.shoot:T.waiting;
+ $('handCancel').textContent=T.handCancel;$('lSent').textContent=bare(T.sent);$('lWait').textContent=bare(T.queued);$('shotHint').textContent=shotFix()?T.shoot:T.waiting;
  $('shot').setAttribute('aria-label',T.shoot);$('langBtn').setAttribute('aria-label',T.language);
  $('langCode').textContent=LANG.split('_')[0].toUpperCase();const e=$('list').querySelector('.empty');if(e)e.textContent=T.none;
  if(privMode&&$('privWarn'))$('privWarn').textContent=T.incognito||'';if(typeof count==='function')count();
- if(typeof driveLabel==='function')driveLabel()}
+ if(typeof driveLabel==='function')driveLabel();if(typeof capLabel==='function')capLabel()}
 function setLang(l){LANG=l;T=Object.assign({},ALL.en||{},ALL[l]||{});const h=document.documentElement;
- h.lang=l.replace('_','-');h.dir=(l==='ar'||l==='fa')?'rtl':'ltr';label();drawKinds();drawForm();
+ h.lang=l.replace('_','-');h.dir=(l==='ar'||l==='fa')?'rtl':'ltr';label();drawKinds();drawForm();if(typeof capDraw==='function')capDraw();
  if(lastSt)status(lastSt[0],lastSt[1]);else chip('wait')}
 function uid(){const r=crypto.randomUUID?crypto.randomUUID():Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);
  return r.replace(/[^A-Za-z0-9-]/g,'')}
@@ -1533,37 +1579,40 @@ let vals={};try{vals=JSON.parse(kept('biruni-vals-'+ROOM)||'{}')||{}}catch(e){}
 const saveVals=()=>keep('biruni-vals-'+ROOM,JSON.stringify(vals));
 const digits=s=>String(s).replace(/[٠-٩]/g,d=>d.charCodeAt(0)-1632).replace(/[۰-۹]/g,d=>d.charCodeAt(0)-1776)
  .replace(/[٫,]/g,'.').replace(/[−–]/g,'-').trim();
-function chips(f,box){const multi=f.type==='multi',opts=f.type==='yesno'?[[true,T.yes],[false,T.no]]:f.choices.map(c=>[c,c]);
- const on=v=>multi?(vals[f.name]||[]).includes(v):vals[f.name]===v;
+function chips(f,box,vmap,onch){vmap=vmap||vals;onch=onch||saveVals;
+ const multi=f.type==='multi',opts=f.type==='yesno'?[[true,T.yes],[false,T.no]]:(f.choices||[]).map(c=>[c,c]);
+ const on=v=>multi?(vmap[f.name]||[]).includes(v):vmap[f.name]===v;
  opts.forEach(([v,t])=>{const b=document.createElement('button');b.type='button';b.textContent=t;b.classList.toggle('sel',on(v));
-  b.onclick=()=>{if(multi){const a=(vals[f.name]||[]).filter(x=>x!==v);if(!on(v))a.push(v);vals[f.name]=a}
-   else vals[f.name]=on(v)?undefined:v;if(vals[f.name]===undefined||(multi&&!vals[f.name].length))delete vals[f.name];
-   [...box.children].forEach((x,i)=>x.classList.toggle('sel',on(opts[i][0])));box.parentNode.classList.remove('bad');saveVals()};
+  b.onclick=()=>{if(multi){const a=(vmap[f.name]||[]).filter(x=>x!==v);if(!on(v))a.push(v);vmap[f.name]=a}
+   else vmap[f.name]=on(v)?undefined:v;if(vmap[f.name]===undefined||(multi&&!vmap[f.name].length))delete vmap[f.name];
+   [...box.children].forEach((x,i)=>x.classList.toggle('sel',on(opts[i][0])));box.parentNode.classList.remove('bad');onch(f.name,vmap[f.name])};
   box.appendChild(b)})}
-function drawForm(){const box=$('form');box.textContent='';FORM.forEach(f=>{const d=document.createElement('div');d.className='fld';
+function drawFormIn(box,form,vmap,onch){if(!box)return;box.textContent='';(form||[]).forEach(f=>{const d=document.createElement('div');d.className='fld';
  d.dataset.name=f.name;const l=document.createElement('span');l.className='lbl';l.textContent=f.label;
  if(f.req){const r=document.createElement('span');r.className='req';r.textContent='*';r.title=T.required;l.appendChild(r)}d.appendChild(l);
- if(['choice','multi','yesno'].includes(f.type)){const c=document.createElement('div');c.className='kinds';chips(f,c);d.appendChild(c)}
+ if(['choice','multi','yesno'].includes(f.type)){const c=document.createElement('div');c.className='kinds';chips(f,c,vmap,onch);d.appendChild(c)}
  else{const i=document.createElement('input');i.className='in';i.autocomplete='off';i.enterKeyHint='next';
   i.type=f.type==='date'?'date':'text';if(f.type==='number')i.inputMode='decimal';if(f.type==='integer')i.inputMode='numeric';if(f.type!=='text')i.dir='ltr';
   if(f.type==='text')i.maxLength=250;
   if(f.min!=null||f.max!=null)i.placeholder=(f.min!=null?f.min:'')+' – '+(f.max!=null?f.max:'');
-  i.value=vals[f.name]!=null?vals[f.name]:'';i.oninput=()=>{if(i.value==='')delete vals[f.name];else vals[f.name]=i.value;
-   d.classList.remove('bad');saveVals()};d.appendChild(i)}
+  i.value=vmap[f.name]!=null?vmap[f.name]:'';i.oninput=()=>{if(i.value==='')delete vmap[f.name];else vmap[f.name]=i.value;
+   d.classList.remove('bad');onch(f.name,vmap[f.name])};d.appendChild(i)}
  box.appendChild(d)})}
+function drawForm(){drawFormIn($('form'),FORM,vals,saveVals)}
 /* checked before the camera opens: null and the field marked when something is missing or wrong */
-function answers(){const out={};let first=null,why='';
- for(const f of FORM){let v=vals[f.name],ok=true;
+function checkForm(form,vmap,box){const out={};let first=null,why='';const root=box||document;
+ for(const f of form||[]){let v=vmap[f.name],ok=true;
   if(v==null||v===''||(Array.isArray(v)&&!v.length)){if(f.req){ok=false;why=why||'need'}}
   else if(f.type==='number'||f.type==='integer'){const n=Number(digits(v));
    if(digits(v)===''||!isFinite(n)||(f.type==='integer'&&!Number.isInteger(n))||(f.min!=null&&n<f.min)||(f.max!=null&&n>f.max)){
     ok=false;why=why||'bad'}else out[f.name]=n}
   else if(f.type==='text')out[f.name]=String(v).trim().slice(0,250);
   else out[f.name]=v;
-  const e=document.querySelector('.fld[data-name="'+f.name+'"]');
+  const e=root.querySelector('.fld[data-name="'+f.name+'"]');
   if(e){e.classList.remove('bad');if(!ok){void e.offsetWidth;e.classList.add('bad');first=first||e}}}
  if(first){first.scrollIntoView({behavior:'smooth',block:'center'});toast(T[why]);if(navigator.vibrate)navigator.vibrate([40,60,40]);return null}
  return out}
+function answers(){return checkForm(FORM,vals,$('form'))}
 function afterShot(){FORM.forEach(f=>{if(!f.keep)delete vals[f.name]});saveVals();drawForm()}
 /* distances on the ground: a flat local frame in metres around (lat0, lon0) is exact enough for a few km */
 function proj(lat0,lon0){const k=Math.cos(lat0*Math.PI/180);return (lon,lat)=>[(lon-lon0)*k*111320,(lat-lat0)*110540]}
@@ -1594,6 +1643,7 @@ try{navigator.connection.addEventListener('change',()=>tellPos(true))}catch(e){}
 let GUIDE={v:0,items:[]};
 function setGuide(g){if(!g||!Array.isArray(g.items))return;GUIDE=g;INDOOR=g.indoor&&Array.isArray(g.indoor.units)?g.indoor:null;
  showIndoor();if(room){const u=unitOf(room.id);if(u)room=u;else setRoom(null)}roomFromStore();
+ if('cap' in g)capSet(g.cap);
  try{const j=JSON.stringify(g);if(j.length<250000)keep('biruni-guide-'+ROOM,j)}catch(e){}
  $('guideCard').classList.toggle('hide',!g.items.length);drawGuide();if(room)drawRoom()}
 function segDist(p,a,b){const dx=b[0]-a[0],dy=b[1]-a[1],l=dx*dx+dy*dy;let t=l?((p[0]-a[0])*dx+(p[1]-a[1])*dy)/l:0;
@@ -1653,7 +1703,7 @@ function roomLabel(u){return [u.num,u.n].filter(Boolean).join(' · ')||u.id}
 function showIndoor(){const on=!!(INDOOR&&INDOOR.units.length);$('roomRow').classList.toggle('hide',!on);
  if(!on&&room)setRoom(null);$('roomBtn').textContent=T.scanRoom}
 function setRoom(u){room=u||null;$('roomOff').classList.toggle('hide',!room);$('roomPlan').classList.toggle('hide',!room);
- if(!room){indoorFix=null;$('roomName').textContent='';if(!fix){$('shot').disabled=true;$('shotHint').textContent=T.waiting;
+ if(!room){indoorFix=null;$('roomName').textContent='';if(!fix){const sf=shotFix();$('shot').disabled=!sf;$('shotHint').textContent=sf?T.shoot:T.waiting;
   $('pos').classList.remove('inroom');$('pos').textContent='—';$('acc').textContent=''}
   else showFix();return}
  indoorFix={lat:u.p[1],lon:u.p[0],acc:u.r,alt:null,heading:null,t:Date.now(),level:u.lv,unit:u.id};
@@ -1732,7 +1782,8 @@ function toggleAvg(){if(avg){avg=null;$('avgBar').classList.add('hide');$('avgBt
 setInterval(tickAvg,500);
 /* the averaged position is used when it is recent and the phone has not moved away from it */
 function shotFix(){if(room&&indoorFix)return indoorFix;if(avgFix&&fix&&Date.now()-avgFix.t<120000&&meters(avgFix,fix)<Math.max(15,2*(fix.acc||0))){
-  const a=avgFix;avgFix=null;$('avgInfo').textContent='';return a}return fix}
+  const a=avgFix;avgFix=null;$('avgInfo').textContent='';return a}if(fix)return fix;
+ if(typeof capFallbackFix==='function')return capFallbackFix();return null}
 /* photos not yet on the PC wait in the phone's browser storage, sealed with the PC's key (ECDH P-256 + AES-GCM) */
 /* a photo is kept at 5 MB at most (Hatem's choice): one plain upload carries it to Drive and the line sends it in
    one go; a bigger one is saved again as JPEG, first only a little more compressed, then smaller, until it fits.
@@ -1775,10 +1826,11 @@ async function makePreview(blob){
  return new Blob([out],{type:blob.type||'image/jpeg'})}
 async function sealRecord(it){if(!PCKEY||!it||!it.meta||it.meta.sealed||!it.blob)return it;
  try{const orig=await sealItem({meta:it.meta,blob:it.blob});let prev=null;
-  if(!it.carried&&!it.prevSent){const pb=await makePreview(it.blob);
+  if(!it.carried&&!it.prevSent){const pb=it.cap?it.blob:await makePreview(it.blob);
    prev=await sealItem({meta:Object.assign({},it.meta,{preview:true}),blob:pb})}
-  return {id:it.id,blob:orig,prev:prev,prevSent:!!it.prevSent,meta:{id:it.id,sealed:1,t:it.meta.t||Date.now()},
-   room:it.room||ROOM,carried:!!it.carried,pk:PCKEY}}catch(e){return it}}   /* pk: the key it is sealed for (.bfp kid) */
+  const r={id:it.id,blob:orig,prev:prev,prevSent:!!it.prevSent,meta:{id:it.id,sealed:1,t:it.meta.t||Date.now()},
+   room:it.room||ROOM,carried:!!it.carried,pk:PCKEY};
+  if(it.cap){r.cap=1;if(it.csj)r.csj=it.csj}return r}catch(e){return it}}   /* pk: the key it is sealed for (.bfp kid) */
 function openDb(){return new Promise(r=>{try{const q=indexedDB.open('biruni-photos',1);
  q.onupgradeneeded=()=>q.result.createObjectStore('q',{keyPath:'id'});q.onsuccess=()=>r(q.result);
  q.onerror=()=>r(null)}catch(e){r(null)}})}
@@ -1821,7 +1873,7 @@ let tt=null;function toast(s){const t=$('toast');t.textContent=s;t.classList.add
  tt=setTimeout(()=>t.classList.remove('show'),2200)}
 function mark(id,s){const e=document.querySelector('[data-id="'+id+'"] .badge');if(!e)return;e.textContent=s;
  e.className='badge'+(s==='✓'?' ok':s==='✗'?' bad':'')}
-async function count(){const a=await all(),n=a.length,p=a.filter(x=>x.prevSent).length,c=a.filter(x=>x.carried).length;
+async function count(){const a=(await all()).filter(x=>!x.cap),n=a.length,p=a.filter(x=>x.prevSent).length,c=a.filter(x=>x.carried).length;
  $('nSent').textContent=sent;$('nWait').textContent=n;
  const wTxt=(T.waitingPhotos||'{n} photos waiting').replace('{n}',n-p),
   pTxt=(T.previewSent||'{n} arrived as preview, original waiting for Wi-Fi').replace('{n}',p),
@@ -2010,6 +2062,240 @@ function handReceive(h,ch){ch.binaryType='arraybuffer';let cur=null,q=Promise.re
   else if(m.t==='done'){h.done=true;await sleepH(300);handClose();toast(T.handTook.replace('{n}',h.n));count();flush()}}).catch(()=>{})};
  ch.onclose=()=>{if(HAND===h&&!h.done){h.done=true;handClose();toast(h.n?T.handTook.replace('{n}',h.n):T.handFail);count()}}}
 /*}HAND*/
+/*CAP{*/
+let CAP=null,CAPJOB='',CAPSEL=null,CAPSHEET=null,CAPTM=0,CAPLASTFIX=null,CAPST=null;
+function capRand(n){const a='abcdefghijklmnopqrstuvwxyz0123456789',r=crypto.getRandomValues(new Uint8Array(n));
+ let s='';for(let i=0;i<n;i++)s+=a[r[i]%36];return s}
+const capEl=(tag,cls,txt)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(txt!=null)e.textContent=txt;return e};
+const capJobObj=()=>CAP&&Array.isArray(CAP.jobs)&&CAP.jobs.find(j=>j&&j.id===CAPJOB&&j.st!=='closed')||null;
+const capSchema=()=>{const j=capJobObj();return j&&CAP&&CAP.schemas&&CAP.schemas[j.s]||null};
+const capStateKey=jid=>'biruni-job-'+ROOM+'-'+jid;
+const capWho=()=>(SURVNAME||$('me').value||kept('biruni-me')||'').trim().slice(0,40);
+function capLoadState(jid,sref){if(!jid)return null;
+ try{const st=JSON.parse(kept(capStateKey(jid))||'null');
+  if(st&&st.job===jid&&typeof st.inst==='object')return st}catch(e){}
+ return {v:1,job:jid,dev:DEVID,by:capWho(),rev:0,t:Date.now(),s:sref||'',inst:{},ans:{},note:{},ph:{},skip:{},closed:null}}
+const capSaveLocal=()=>{if(CAPST&&CAPJOB)keep(capStateKey(CAPJOB),JSON.stringify(CAPST))};
+function capTouch(){if(!CAPST)return;CAPST.rev=(+CAPST.rev||0)+1;CAPST.t=Date.now();CAPST.by=capWho();
+ capSaveLocal();clearTimeout(CAPTM);CAPTM=setTimeout(capSnap,3000)}
+async function capSnap(){clearTimeout(CAPTM);CAPTM=0;if(!CAPST||!CAPJOB)return null;
+ const jid=CAPJOB,rev=+CAPST.rev||1,now=Date.now(),id='js'+rev.toString(36)+'-'+capRand(9);
+ const snap=Object.assign({},CAPST,{dev:DEVID,rev:rev,t:CAPST.t||now});
+ const blob=new Blob(['BCS1'+JSON.stringify(snap)],{type:'application/octet-stream'});
+ const meta={id:id,t:now,cs:{j:jid,rev:rev},device_id:DEVID,surveyor:snap.by||'',by:snap.by||'',sk:SURVKEY||undefined};
+ for(const x of await all()){if(x.cap&&(x.csj===jid||(x.meta&&x.meta.cs&&x.meta.cs.j===jid))){
+  if((typeof DRV==='object'&&DRV.holds&&DRV.holds(x.id))||(typeof acks==='object'&&acks&&acks.has(x.id)))continue;
+  await del(x.id)}}
+ const it=await put({id:id,blob:blob,meta:meta,room:ROOM,cap:1,csj:jid});
+ flush();if(typeof drivePump==='function')drivePump();return it}
+function capFallbackFix(){const j=capJobObj();if(!j)return null;
+ if(CAPLASTFIX&&CAPLASTFIX.j===j.id)return {lat:CAPLASTFIX.lat,lon:CAPLASTFIX.lon,acc:CAPLASTFIX.acc||999,alt:null,heading:null,t:Date.now()};
+ const l=j.loc;return Array.isArray(l)&&l.length===2&&isFinite(l[0])&&isFinite(l[1])?{lat:+l[1],lon:+l[0],acc:999,alt:null,heading:null,t:Date.now()}:null}
+function capSyncShutter(){const sf=shotFix();$('shot').disabled=!sf;$('shotHint').textContent=sf?T.shoot:T.waiting}
+function capCleanVal(q,val){if(val==null||val===''||(Array.isArray(val)&&!val.length))return undefined;
+ const t=q.type;
+ if(t==='text'){const s=String(val).trim().slice(0,250);return s||undefined}
+ if(t==='number'||t==='integer'){if(typeof val==='boolean')return undefined;
+  const raw=typeof val==='number'?String(val):digits(val),n=Number(raw);
+  if(!raw||!isFinite(n)||(t==='integer'&&!Number.isInteger(n))||(q.min!=null&&n<q.min)||(q.max!=null&&n>q.max))return undefined;
+  return t==='integer'?Math.trunc(n):n}
+ if(t==='choice'){const s=String(val).trim().slice(0,60);return s||undefined}
+ if(t==='multi'){const s=(Array.isArray(val)?val:[val]).map(x=>String(x??'').trim().slice(0,60)).filter(Boolean).join('; ').slice(0,500);
+  return s||undefined}
+ if(t==='yesno')return typeof val==='boolean'?val:undefined;
+ if(t==='date'){const s=String(val).trim().slice(0,10);if(!/^\d{4}-\d{2}-\d{2}$/.test(s))return undefined;
+  const [y,m,d]=s.split('-').map(Number),dt=new Date(Date.UTC(y,m-1,d));
+  return dt.getUTCFullYear()===y&&dt.getUTCMonth()===m-1&&dt.getUTCDate()===d?s:undefined}
+ return val}
+function capQAnswered(q,qv){if(!qv||!(q.name in qv))return false;const r=qv[q.name];return capCleanVal(q,Array.isArray(r)?r[0]:r)!==undefined}
+function capInstTitle(node,k,ansMap,order){const qv=(ansMap&&ansMap[k])||{};
+ for(const q of node.q||[])if(q.title){const r=qv[q.name],v=Array.isArray(r)?r[0]:r;if(v!=null&&v!=='')return String(v)}
+ return node.label+' '+order}
+function capTree(schema,state,records){const s=schema||{nodes:[]},st=state||{},jobId=st.job||'',inst={},rawInst=st.inst||{};
+ for(const iid of Object.keys(rawInst))inst[iid]=Object.assign({},rawInst[iid]);
+ for(const r of records||[]){const c=r&&r.cap;if(!c||!c.j||(jobId&&c.j!==jobId))continue;
+  let p='';for(const e of c.ch||[])if(Array.isArray(e)&&e.length>=3){const [nid,iid,ord]=e;if(!inst[iid])inst[iid]={n:nid,p:p,o:ord,t:0,del:0};p=iid}}
+ const ansMap=st.ans||{},noteMap=st.note||{},phMap=st.ph||{},skipMap=st.skip||{},recBySlot={},extraRecs=[];
+ for(const r of records||[]){if(!r||!r.id||!r.cap||!r.cap.j||!r.cap.k||(jobId&&r.cap.j!==jobId))continue;
+  if(r.cap.k==='*')extraRecs.push(r);else(recBySlot[r.cap.k]||(recBySlot[r.cap.k]=[])).push(r)}
+ const skipOf=(k,inh)=>{if(inh)return inh;const p=skipMap[k],txt=String((Array.isArray(p)?p[0]:p)||'').trim();return txt.length>=3?txt:''};
+ function evalSlot(node,iid,pathParts,chain,inhSkip,order){
+  const nid=node.id,k=iid+':'+nid,req=node.req!==false,ownSkip=skipOf(k,''),skipReason=inhSkip||ownSkip,skipped=!!skipReason;
+  const ph=node.photos||[0,0],pmin=ph[0]||0,pmax=ph[1]||0,sRecs=recBySlot[k]||[];
+  const allPids=[];for(const pid of sRecs.map(r=>r.id).concat(Array.isArray(phMap[k])?phMap[k]:[]))if(pid&&!allPids.includes(pid))allPids.push(pid);
+  const qDefs=node.q||[],qVals=ansMap[k]||{},ansOut={},missingQ=[];
+  for(const q of qDefs){if(capQAnswered(q,qVals)){const rv=qVals[q.name];ansOut[q.name]=Array.isArray(rv)?rv[0]:rv}else if(q.req)missingQ.push(q.name)}
+  const np=noteMap[k],noteTxt=String((Array.isArray(np)?np[0]:np)||'');
+  const children=(node.nodes||[]).map(ch=>evalNode(ch,iid,pathParts,chain,skipReason));
+  const ownOk=allPids.length>=pmin&&!missingQ.length,chOk=children.every(c=>c.done||c.skipped||!c.req);
+  return {kind:order!=null?'instance':'node',id:nid,iid:iid,order:order!=null?order:null,k:k,
+   label:pathParts[pathParts.length-1],path:pathParts.slice(),path_label:pathParts.join(' › '),
+   ch:chain.slice(),req:req,photos:[pmin,pmax],photo_count:allPids.length,photo_ids:allPids,
+   q:qDefs,answers:ansOut,missing_q:missingQ,note:noteTxt,own_skip:ownSkip,skip:skipReason,
+   skipped:skipped,own_done:ownOk,done:ownOk&&chOk,children:children,node:node}}
+ function evalNode(node,pIid,pPath,pChain,inhSkip){
+  const nid=node.id,rep=node.repeat;if(!rep)return evalSlot(node,pIid,pPath.concat([node.label]),pChain,inhSkip,null);
+  const k=pIid+':'+nid,req=node.req!==false,ownSkip=skipOf(k,''),skipReason=inhSkip||ownSkip,skipped=!!skipReason,rmin=rep.min||0,rmax=rep.max||1;
+  const live=Object.keys(inst).filter(iid=>{const inf=inst[iid];return inf&&inf.n===nid&&(inf.p||'')===pIid&&!inf.del})
+   .map(iid=>[iid,inst[iid]]).sort((a,b)=>((a[1].o||1)-(b[1].o||1))||(a[0]<b[0]?-1:a[0]>b[0]?1:0));
+  const instances=live.map(([iid,inf],idx)=>{const ord=inf.o||(idx+1),ttl=capInstTitle(node,iid+':'+nid,ansMap,ord);
+   return evalSlot(node,iid,pPath.concat([ttl]),pChain.concat([[nid,iid,ord]]),skipReason,ord)});
+  const countOk=instances.length>=rmin,instOk=instances.every(it=>it.done||it.skipped);
+  return {kind:'repeat',id:nid,iid:pIid,k:k,label:node.label,path:pPath.concat([node.label]),
+   path_label:pPath.concat([node.label]).join(' › '),ch:pChain.slice(),req:req,
+   repeat:{min:rmin,max:rmax},instance_count:instances.length,instances:instances,
+   own_skip:ownSkip,skip:skipReason,skipped:skipped,count_ok:countOk,done:countOk&&instOk,node:node}}
+ const roots=(s.nodes||[]).map(n=>evalNode(n,'',[],[],'')),extraIds=[];
+ for(const pid of extraRecs.map(r=>r.id).concat(Array.isArray(phMap['*'])?phMap['*']:[]))if(pid&&!extraIds.includes(pid))extraIds.push(pid);
+ return {schema:s,job:jobId,roots:roots,extra_photo_ids:extraIds}}
+function capMissing(schemaOrTree,state,records){
+ const t=(schemaOrTree&&Array.isArray(schemaOrTree.roots))?schemaOrTree:capTree(schemaOrTree,state,records),out=[];
+ function walkSlot(it){if(!it.req||it.skipped)return;
+  const needPh=Math.max(0,it.photos[0]-it.photo_count);
+  if(needPh>0||it.missing_q.length)out.push({k:it.k,id:it.id,iid:it.iid,path_label:it.path_label,reason:'slot',need_photos:needPh,missing_q:it.missing_q.slice()});
+  for(const ch of it.children||[])walk(ch)}
+ function walk(it){if(!it.req||it.skipped)return;
+  if(it.kind==='repeat'){const rmin=it.repeat.min;
+   if(it.instance_count<rmin)out.push({k:it.k,id:it.id,iid:it.iid,path_label:it.path_label,reason:'repeat_min',have:it.instance_count,min:rmin});
+   for(const sub of it.instances)walkSlot(sub)}
+  else walkSlot(it)}
+ for(const r of t.roots)walk(r);return out}
+const capLive=(nid,pIid)=>Object.keys(CAPST.inst).filter(iid=>{const inf=CAPST.inst[iid];return inf&&inf.n===nid&&(inf.p||'')===pIid&&!inf.del});
+function capEnsureMin(nodes,pIid){if(!capSchema()||!CAPST)return false;let changed=false;
+ for(const n of nodes||[]){if(n.repeat){const live=capLive(n.id,pIid);
+   let maxO=live.reduce((m,iid)=>Math.max(m,CAPST.inst[iid].o||0),0);
+   while(live.length<(n.repeat.min||0)){const iid=capRand(6);CAPST.inst[iid]={n:n.id,p:pIid,o:++maxO,t:Date.now(),del:0};live.push(iid);changed=true}
+   for(const iid of live)if(n.nodes&&capEnsureMin(n.nodes,iid))changed=true}
+  else if(n.nodes&&capEnsureMin(n.nodes,pIid))changed=true}
+ return changed}
+function capSelectJob(jid){CAPJOB=jid||'';CAPSEL=null;CAPSHEET=null;keep('biruni-cap-job-'+ROOM,CAPJOB||null);
+ const j=capJobObj(),s=capSchema();
+ if(j&&s){CAPST=capLoadState(j.id,j.s);if(capEnsureMin(s.nodes,''))capSaveLocal()}else CAPST=null;
+ if($('capMiss'))$('capMiss').classList.add('hide');capSyncShutter();capDraw()}
+function capSet(c){CAP=(c&&typeof c==='object'&&Array.isArray(c.jobs)&&c.jobs.some(j=>j&&j.st!=='closed'))?c:null;
+ keep('biruni-cap-'+ROOM,CAP?JSON.stringify(CAP):null);
+ if(!CAP){CAPJOB='';CAPST=null;CAPSEL=null;CAPSHEET=null;$('capCard').classList.add('hide');$('formCard').classList.remove('hide');capSyncShutter();return}
+ const open=CAP.jobs.filter(j=>j&&j.st!=='closed'),saved=kept('biruni-cap-job-'+ROOM);
+ capSelectJob((CAPJOB&&open.some(j=>j.id===CAPJOB))?CAPJOB:(saved&&open.some(j=>j.id===saved))?saved:open[0].id)}
+function capAdd(node,pIid){if(!CAPST||!node||!node.repeat)return null;
+ const live=capLive(node.id,pIid),rmax=node.repeat.max||200;
+ if(live.length>=rmax){toast((T.capMaxWarn||'At most {n} allowed').replace('{n}',rmax));return null}
+ const maxO=live.reduce((m,iid)=>Math.max(m,CAPST.inst[iid].o||0),0),iid=capRand(6);
+ CAPST.inst[iid]={n:node.id,p:pIid,o:maxO+1,t:Date.now(),del:0};
+ if(node.nodes)capEnsureMin(node.nodes,iid);capTouch();capDraw();return iid}
+function capRemove(node,iid){if(!CAPST||!node||!node.repeat||!CAPST.inst[iid])return false;
+ const pIid=CAPST.inst[iid].p||'',rmin=node.repeat.min||0;
+ if(capLive(node.id,pIid).length<=rmin){toast((T.capMinWarn||'At least {n} required').replace('{n}',rmin));return false}
+ const now=Date.now(),markDel=id=>{if(CAPST.inst[id]&&!CAPST.inst[id].del)CAPST.inst[id].del=now;
+  for(const c of Object.keys(CAPST.inst))if((CAPST.inst[c].p||'')===id)markDel(c)};
+ markDel(iid);if(CAPSHEET&&CAPSHEET.iid===iid)capCloseSheet();capTouch();capDraw();return true}
+function capProgress(t){let done=0,total=0;
+ function walkSlot(it){if(!(it.children&&it.children.length)||it.photos[0]>0||it.q.length>0){
+   if(it.req||it.own_done||it.skipped){total++;if(it.own_done||it.skipped)done++}}
+  for(const ch of it.children||[])walk(ch)}
+ function walk(it){if(it.kind==='repeat'){if(it.req&&it.instance_count<it.repeat.min)total+=it.repeat.min-it.instance_count;
+   for(const sub of it.instances)walkSlot(sub)}else walkSlot(it)}
+ for(const r of t.roots)walk(r);return {done:done,total:total}}
+function capDraw(){const card=$('capCard');if(!card)return;
+ const open=CAP&&Array.isArray(CAP.jobs)?CAP.jobs.filter(j=>j&&j.st!=='closed'):[];
+ if(!open.length){card.classList.add('hide');$('formCard').classList.remove('hide');return}
+ card.classList.remove('hide');$('lCap').textContent=T.capJobs||'Capture job';
+ const sel=$('capJob');sel.textContent='';
+ const opt0=capEl('option','',T.capNoJob||'No job (free photos)');opt0.value='';sel.appendChild(opt0);
+ open.forEach(j=>{const o=capEl('option','',j.title||j.id);o.value=j.id;sel.appendChild(o)});
+ sel.value=capJobObj()?CAPJOB:'';
+ const s=capSchema(),treeBox=$('capTree'),finBtn=$('capFin'),prog=$('capProg');
+ $('formCard').classList.toggle('hide',!!(capJobObj()&&s));
+ if(!capJobObj()||!s||!CAPST){treeBox.textContent='';prog.textContent='';finBtn.classList.add('hide');$('capMiss').classList.add('hide');return}
+ finBtn.classList.remove('hide');const t=capTree(s,CAPST,[]),pr=capProgress(t);
+ prog.textContent=(T.capDoneOf||'{done} of {total}').replace('{done}',pr.done).replace('{total}',pr.total);
+ finBtn.textContent=CAPST.closed?(T.capReopen||'Reopen job'):(T.capFinish||'Finish job');
+ treeBox.textContent='';
+ function renderSlot(it,depth,repNode){
+  const wrap=capEl('div','cnode'+(depth>0?' sub':''));wrap.dataset.k=it.k;
+  const row=capEl('div','crow'),btn=capEl('button','cbtn');btn.type='button';
+  const m=capEl('span','cmeta');
+  if(it.photos[1]>0||it.photo_count>0)m.appendChild(capEl('span','','\u2066'+(it.photos[0]>0?it.photo_count+'/'+it.photos[0]:it.photo_count)+'\u2069'));
+  if(!it.req)m.appendChild(capEl('span','',T.capOpt||'Optional'));
+  m.appendChild(capEl('span','cst '+(it.skipped?'sk':it.done?'ok':'no'),it.skipped?'⏭':it.done?'✓':'✗'));
+  btn.append(capEl('span','',it.label),m);btn.onclick=()=>capOpen(it.k);row.appendChild(btn);
+  if(repNode&&it.iid){const delB=capEl('button','ghost cdel',T.capRemove||'Remove');delB.type='button';
+   delB.disabled=repNode.instance_count<=(repNode.repeat.min||0);
+   delB.onclick=e=>{e.stopPropagation();capRemove(repNode.node,it.iid)};row.appendChild(delB)}
+  wrap.appendChild(row);for(const ch of it.children||[])wrap.appendChild(renderItem(ch,depth+1));return wrap}
+ function renderItem(it,depth){if(it.kind!=='repeat')return renderSlot(it,depth,null);
+  const box=capEl('div','cnode'+(depth>0?' sub':''));box.dataset.k=it.k;
+  const hdr=capEl('div','crow'),btn=capEl('button','cbtn');btn.type='button';const m=capEl('span','cmeta');
+  m.append(capEl('span','','\u2066'+it.instance_count+'/'+it.repeat.min+'\u2069'),
+   capEl('span','cst '+(it.skipped?'sk':it.done?'ok':'no'),it.skipped?'⏭':it.done?'✓':'✗'));
+  btn.append(capEl('span','',it.label),m);btn.onclick=()=>capOpen(it.k);hdr.appendChild(btn);box.appendChild(hdr);
+  for(const sub of it.instances)box.appendChild(renderSlot(sub,depth+1,it));
+  const addB=capEl('button','ghost cadd',(T.capAdd||'+ Add {name}').replace('{name}',it.label));
+  addB.type='button';addB.disabled=it.instance_count>=(it.repeat.max||200);
+  addB.onclick=()=>capAdd(it.node,it.iid);box.appendChild(addB);return box}
+ for(const r of t.roots)treeBox.appendChild(renderItem(r,0));
+ if(CAPSHEET)capRefreshSheet(t)}
+function capFindItem(t,k){let hit=null;
+ const walk=it=>{if(hit)return;if(it.k===k){hit=it;return}for(const s of it.instances||[])walk(s);for(const c of it.children||[])walk(c)};
+ for(const r of t.roots)walk(r);return hit}
+function capRefreshSheet(t){if(!CAPSHEET||!CAPST)return;const s=capSchema();if(!s)return;
+ t=t||capTree(s,CAPST,[]);const it=capFindItem(t,CAPSHEET.k);if(!it){capCloseSheet();return}
+ CAPSHEET=it;$('capPath').textContent=it.path_label;const shBtn=$('capShoot');
+ if(it.kind==='repeat')shBtn.classList.add('hide');
+ else{shBtn.classList.remove('hide');const pmin=it.photos[0]||0,have=it.photo_count||0;
+  shBtn.textContent=pmin>0?(T.capTakeN||'Take a photo ({have}/{min})').replace('{have}',have).replace('{min}',pmin):(T.capTake||T.shoot||'Take a photo')}
+ $('capSkipBtn').textContent=it.own_skip?(T.capClearSkip||'Clear skip'):(T.capCannot||'Cannot do this item')}
+function capOpen(k){const s=capSchema();if(!s||!CAPST)return;
+ const t=capTree(s,CAPST,[]),it=capFindItem(t,k);if(!it)return;CAPSHEET=it;
+ const vmap={},qDefs=it.q||[],curAns=(CAPST.ans&&CAPST.ans[k])||{};
+ for(const q of qDefs)if(q.name in curAns)vmap[q.name]=Array.isArray(curAns[q.name])?curAns[q.name][0]:curAns[q.name];
+ CAPSHEET.vmap=vmap;
+ drawFormIn($('capForm'),qDefs,vmap,(qname,val)=>{
+  if(!CAPST)return;const now=Date.now();
+  if(val===undefined||(Array.isArray(val)&&!val.length)){if(CAPST.ans[k]){delete CAPST.ans[k][qname];if(!Object.keys(CAPST.ans[k]).length)delete CAPST.ans[k]}}
+  else{const q=qDefs.find(x=>x.name===qname),cv=q?capCleanVal(q,val):val;(CAPST.ans[k]||(CAPST.ans[k]={}))[qname]=[cv!==undefined?cv:val,now]}
+  capTouch();const it2=capFindItem(capTree(s,CAPST,[]),k);if(it2)$('capPath').textContent=it2.path_label});
+ $('lCapNote').textContent=T.note||'Note (optional)';$('capNote').placeholder=T.note||'';
+ const np=CAPST.note&&CAPST.note[k];$('capNote').value=np?(Array.isArray(np)?np[0]:np):'';
+ $('capNote').oninput=()=>{if(!CAPST)return;const v=$('capNote').value.trim();if(v)CAPST.note[k]=[v,Date.now()];else delete CAPST.note[k];capTouch()};
+ $('lCapSkip').textContent=T.capCannot||'Cannot do this item';$('capReason').placeholder=T.capReason||'Reason (at least 3 characters)';
+ $('capReason').value=it.own_skip||'';$('capDoneBtn').textContent=T.capDone||'Done';
+ capRefreshSheet(t);$('capSheet').classList.remove('hide')}
+function capCloseSheet(){CAPSHEET=null;$('capSheet').classList.add('hide');capDraw()}
+function capSkip(){if(!CAPSHEET||!CAPST)return;const k=CAPSHEET.k,r=$('capReason').value.trim();
+ if(CAPST.skip[k]&&(!r||r===CAPST.skip[k][0])){delete CAPST.skip[k];$('capReason').value='';capTouch();capDraw();return}
+ if(r.length<3){toast(T.capReasonNeed||'Write a reason of at least 3 characters.');$('capReason').focus();return}
+ CAPST.skip[k]=[r,Date.now()];capTouch();capCloseSheet()}
+function capShot(){if(!CAPSHEET||!CAPST||CAPSHEET.kind==='repeat')return;
+ const sf=shotFix();if(!sf){toast(T.waiting);return}if(!requireName())return;
+ const qDefs=CAPSHEET.q||[],checked=checkForm(qDefs,CAPSHEET.vmap||{},$('capForm'));if(!checked)return;
+ const now=Date.now(),k=CAPSHEET.k;
+ for(const q of qDefs)if(q.name in checked)(CAPST.ans[k]||(CAPST.ans[k]={}))[q.name]=[checked[q.name],now];
+ const it=capFindItem(capTree(capSchema(),CAPST,[]),k)||CAPSHEET;
+ CAPSEL={j:CAPJOB,k:k,pl:it.path_label,ch:it.ch||[]};if(navigator.vibrate)navigator.vibrate(25);
+ pending={fix:sf,compass:compass,at:now,f:{},cap:CAPSEL,note:($('capNote').value||'').trim()};$('file').click()}
+function capFinish(){const s=capSchema();if(!s||!CAPST)return false;const box=$('capMiss');
+ if(CAPST.closed){CAPST.closed=null;box.classList.add('hide');capTouch();capDraw();return true}
+ const miss=capMissing(s,CAPST,[]);
+ if(miss.length){box.textContent='';
+  box.appendChild(capEl('div','',T.capMissingNeed||'Complete every required item or give a reason before finishing.'));
+  const ul=capEl('ul','');
+  miss.forEach(m=>{const why=m.reason==='repeat_min'
+   ?(T.capNeedInst||'needs {have}/{min}').replace('{have}',m.have).replace('{min}',m.min)
+   :[m.need_photos?(T.capNeedPhotos||'needs {n} more photo(s)').replace('{n}',m.need_photos):'',
+     m.missing_q&&m.missing_q.length?(T.capNeedQ||'missing required answers'):''].filter(Boolean).join(', ');
+   ul.appendChild(capEl('li','',m.path_label+(why?' — '+why:'')))});
+  box.appendChild(ul);box.classList.remove('hide');toast(T.capMissingNeed||'Complete every required item or give a reason before finishing.');return false}
+ box.classList.add('hide');CAPST.closed=Date.now();capTouch();capDraw();toast(T.capClosed||'Job finished on this phone');return true}
+function capLabel(){if($('lCap'))$('lCap').textContent=T.capJobs||'Capture job';
+ if($('lCapNote'))$('lCapNote').textContent=T.note||'Note (optional)';
+ if($('lCapSkip'))$('lCapSkip').textContent=T.capCannot||'Cannot do this item';
+ if($('capReason'))$('capReason').placeholder=T.capReason||'Reason (at least 3 characters)';
+ if($('capDoneBtn'))$('capDoneBtn').textContent=T.capDone||'Done';
+ capDraw()}
+$('capJob').onchange=()=>capSelectJob($('capJob').value);$('capFin').onclick=capFinish;$('capShoot').onclick=capShot;
+$('capSkipBtn').onclick=capSkip;$('capDoneBtn').onclick=capCloseSheet;$('capSheet').onclick=e=>{if(e.target===$('capSheet'))capCloseSheet()};
+/*}CAP*/
 async function flush(){if(busy)return;busy=true;
  let arrived=0;try{const allItems=(await all()).sort((a,b)=>a.meta.t-b.meta.t),
    rOnly=typeof relayOnly==='function'&&relayOnly(),items=rOnly?allItems.filter(x=>!x.prevSent&&!x.carried):allItems;
@@ -2017,10 +2303,11 @@ async function flush(){if(busy)return;busy=true;
    const st=await sendItem(it);
    if(!st)continue;   /* 0: another way (Google Drive) is sending this one */
    tried++;
-   if(st===200){await del(it.id);sent++;arrived++;mark(it.id,'✓')}
-   else if(st===202){if(await prevDone(it.id))mark(it.id,'◐')}
-   else if(st===403){await del(it.id);mark(it.id,'✗');status(false,'blocked')}
-   else if(st===400||st===413){await del(it.id);mark(it.id,'✗')}
+   if(st===200){await del(it.id);if(!it.cap){sent++;arrived++;mark(it.id,'✓')}}
+   else if(st===202){if(it.cap)await del(it.id);else if(await prevDone(it.id))mark(it.id,'◐')}
+   else if(st===403){await del(it.id);if(!it.cap)mark(it.id,'✗');status(false,'blocked')}
+   else if(st===400||st===413){await del(it.id);if(!it.cap)mark(it.id,'✗')}
+    else if(it.cap&&st>=400&&st<500&&st!==429){await del(it.id)}
    else throw new Error(st);count()}
   const ok=tried?true:await alive();
   if(ok&&!rOnly)status(true,'connected');else if(!ok)offline()}catch(e){offline()}
@@ -2069,14 +2356,21 @@ $('me').value=SURVNAME||kept('biruni-me')||'';if(SURVNAME)$('me').readOnly=true;
 $('me').oninput=()=>{if($('me').value.trim()&&$('meCard'))$('meCard').classList.remove('bad');keep('biruni-me',$('me').value.trim())};
 $('me').onchange=()=>{keep('biruni-me',$('me').value.trim());if($('meCard'))$('meCard').classList.remove('bad');tellPos(true)};
 $('share').checked=kept('biruni-share')!=='0';$('share').onchange=()=>{keep('biruni-share',$('share').checked?'1':'0');tellPos(true)};
-$('shot').onclick=()=>{if(!fix&&!indoorFix)return;if(!requireName())return;const f=answers();if(!f)return;if(navigator.vibrate)navigator.vibrate(25);
- pending={fix:shotFix(),compass:compass,at:Date.now(),f:f};$('file').click()};
+$('shot').onclick=()=>{const sf=shotFix();if(!sf)return;if(!requireName())return;
+ const inJob=!!(capJobObj()&&capSchema());
+ const f=inJob?{}:answers();if(!f)return;if(navigator.vibrate)navigator.vibrate(25);
+ CAPSEL=inJob?{j:CAPJOB,k:'*',pl:'*',ch:[]}:null;
+ pending={fix:sf,compass:compass,at:Date.now(),f:f,cap:CAPSEL};$('file').click()};
 $('file').onchange=async()=>{const f=$('file').files[0];$('file').value='';if(!f||!pending)return;
  const who=requireName();if(!who)return;
- const p=pending.fix,blob=await fitPhoto(new Blob([await f.arrayBuffer()],{type:f.type||'image/jpeg'}));
+ const p=pending.fix,capBind=pending.cap||CAPSEL,pnote=pending.note!=null?pending.note:$('note').value.trim();
+ const blob=await fitPhoto(new Blob([await f.arrayBuffer()],{type:f.type||'image/jpeg'}));
  const meta={id:uid(),lat:p.lat,lon:p.lon,acc:p.acc,alt:p.alt,heading:p.heading,compass:pending.compass,
-  t:pending.at,fix_age:Math.max(0,Math.round((pending.at-p.t)/1000)),kind:kind,note:$('note').value.trim(),device:dev,device_id:DEVID,surveyor:who.slice(0,40),by:who.slice(0,40),sk:SURVKEY||undefined,f:pending.f,avg_n:p.n,avg_sd:p.sd,level:p.level,unit:p.unit};
- const it={id:meta.id,blob:blob,meta:meta,room:ROOM};pending=null;await put(it);thumb(it,'⏳');$('note').value='';afterShot();
+  t:pending.at,fix_age:Math.max(0,Math.round((pending.at-p.t)/1000)),kind:kind,note:pnote,device:dev,device_id:DEVID,surveyor:who.slice(0,40),by:who.slice(0,40),sk:SURVKEY||undefined,f:pending.f,avg_n:p.n,avg_sd:p.sd,level:p.level,unit:p.unit};
+ if(capBind){meta.cap=capBind;CAPLASTFIX={j:capBind.j,lat:p.lat,lon:p.lon,acc:p.acc};
+  if(CAPST&&CAPST.job===capBind.j){const arr=CAPST.ph[capBind.k]||(CAPST.ph[capBind.k]=[]);
+   if(!arr.includes(meta.id))arr.push(meta.id);capTouch();capDraw()}}
+ const it={id:meta.id,blob:blob,meta:meta,room:ROOM};pending=null;CAPSEL=null;await put(it);thumb(it,'⏳');$('note').value='';if(!capBind)afterShot();
  toast(T.kept);count();flush();if(typeof drivePump==='function')drivePump()};
 $('langBtn').onclick=()=>{const box=$('langs');box.textContent='';Object.keys(ALL).forEach(k=>{const b=document.createElement('button');
  b.type='button';b.textContent=NAMES[k]||k;b.lang=k.replace('_','-');b.classList.toggle('sel',k===LANG);
@@ -2084,7 +2378,8 @@ $('langBtn').onclick=()=>{const box=$('langs');box.textContent='';Object.keys(AL
  $('sheet').classList.remove('hide')};
 $('sheet').onclick=e=>{if(e.target===$('sheet'))$('sheet').classList.add('hide')};
 setLang(pick(kept('biruni-lang'))||pick(HASHL)||pick(DEF)||pick(navigator.language)||'en');
+try{const c=JSON.parse(kept('biruni-cap-'+ROOM)||'null');if(c)capSet(c)}catch(e){}
 try{const g=JSON.parse(kept('biruni-guide-'+ROOM)||'null');if(g)setGuide(g)}catch(e){}
 {const e=document.createElement('div');e.className='empty';e.textContent=T.none;$('list').appendChild(e)}
-(async()=>{db=await openDb();await checkPrivate();await sealWaiting();if(typeof driveStart==='function')driveStart();const w=await all();w.filter(it=>!it.carried).slice(-9).forEach(it=>thumb(it,it.prevSent?'◐':'⏳'));count();flush()})();
+(async()=>{db=await openDb();await checkPrivate();await sealWaiting();if(typeof driveStart==='function')driveStart();const w=await all();w.filter(it=>!it.carried&&!it.cap).slice(-9).forEach(it=>thumb(it,it.prevSent?'◐':'⏳'));count();flush()})();
 </script></body></html>"""
