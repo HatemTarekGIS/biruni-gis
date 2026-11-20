@@ -41,7 +41,8 @@ FIELDS = (("photo_id", QMetaType.Type.QString), ("photo", QMetaType.Type.QString
           ("fix_age_s", QMetaType.Type.Double), ("device", QMetaType.Type.QString),
           ("avg_n", QMetaType.Type.Int), ("avg_sd_m", QMetaType.Type.Double),
           ("level_id", QMetaType.Type.Int), ("unit_id", QMetaType.Type.QString),
-          ("surveyor", QMetaType.Type.QString), ("device_id", QMetaType.Type.QString))
+          ("surveyor", QMetaType.Type.QString), ("device_id", QMetaType.Type.QString),
+          ("job_id", QMetaType.Type.QString), ("job_item", QMetaType.Type.QString))
 ROOM_URL = "https://photos.biruni-gis.com/r/"
 TEAM_LAYER = "field_team_track"
 TEAM_FIELDS = (("device", QMetaType.Type.QString), ("name", QMetaType.Type.QString),
@@ -197,16 +198,24 @@ def add_records(lyr, records):
     if sub:
         lyr.setSubsetString("")
     try:
+        missing = [QgsField(n, t) for n, t in FIELDS if lyr.fields().indexOf(n) < 0]
+        if missing and lyr.dataProvider().addAttributes(missing):
+            lyr.updateFields()
         existing = {f["photo_id"]: f for f in lyr.getFeatures()}
         have = set(existing)
         feats = []
         p_idx = lyr.fields().indexOf("photo")
         s_idx = lyr.fields().indexOf("surveyor")
         d_idx = lyr.fields().indexOf("device_id")
+        j_idx = lyr.fields().indexOf("job_id")
+        ji_idx = lyr.fields().indexOf("job_item")
         updates = {}
         for r in records:
             surveyor = r.get("surveyor") or r.get("by") or tr("Unknown")
             dev_id = r.get("device_id") or None
+            cap = r.get("cap") if isinstance(r.get("cap"), dict) else None
+            job_id = (cap.get("j") or None) if cap else None
+            job_item = (cap.get("k") or None) if cap else None
             if r["id"] in have:
                 old_f = existing.get(r["id"])
                 if old_f is not None:
@@ -217,6 +226,10 @@ def add_records(lyr, records):
                         chg[s_idx] = surveyor
                     if d_idx >= 0 and dev_id and old_f["device_id"] != dev_id:
                         chg[d_idx] = dev_id
+                    if j_idx >= 0 and job_id and old_f["job_id"] != job_id:
+                        chg[j_idx] = job_id
+                    if ji_idx >= 0 and job_item and old_f["job_item"] != job_item:
+                        chg[ji_idx] = job_item
                     if chg:
                         updates[old_f.id()] = chg
                 continue
@@ -229,7 +242,8 @@ def add_records(lyr, records):
                                 ("fix_age_s", r.get("fix_age")), ("device", r.get("device") or None),
                                 ("avg_n", r.get("avg_n")), ("avg_sd_m", r.get("avg_sd")),
                                 ("level_id", r.get("level")), ("unit_id", r.get("unit") or None),
-                                ("surveyor", surveyor), ("device_id", dev_id)):
+                                ("surveyor", surveyor), ("device_id", dev_id),
+                                ("job_id", job_id), ("job_item", job_item)):
                 if f.fields().indexOf(name) >= 0:
                     f[name] = value
             for name, value in (r.get("fields") or {}).items():
@@ -807,6 +821,8 @@ class FieldPhotosDock(QDockWidget):
         self._active_today_filter = False
         self.team_live = self.team_track = None
         self._last_photo = None
+        self._jobs_dlg = None
+        self._progress_dlg = None
         self._poll = QTimer(self)
         self._poll.setInterval(400)
         self._poll.timeout.connect(self._read_events)
@@ -1154,7 +1170,20 @@ class FieldPhotosDock(QDockWidget):
         store = JobStore(self._active_folder())
         dlg = JobsDialog(store, server=self.server, iface=self.iface,
                          records=self._all_photo_records(from_disk=True), parent=self)
-        dlg.exec()
+        self._jobs_dlg = dlg
+        try:
+            dlg.exec()
+        finally:
+            self._jobs_dlg = None
+
+    def _refresh_jobs_views(self):
+        from qgis.PyQt import sip
+
+        recs = self._all_photo_records(from_disk=True)
+        if self._jobs_dlg is not None and not sip.isdeleted(self._jobs_dlg):
+            self._jobs_dlg.set_records(recs)
+        if self._progress_dlg is not None and not sip.isdeleted(self._progress_dlg):
+            self._progress_dlg.set_records(recs)
 
     def _show_hint(self):
         self.own.setVisible(self.mode.currentData() == "own")
@@ -1466,12 +1495,15 @@ class FieldPhotosDock(QDockWidget):
         if self.server is None:
             return
         photos = []
+        job_events = []
         while not self.server.events.empty():
             kind, value = self.server.events.get_nowait()
             if kind == "phone":
                 self.state.setText(tr("A phone opened the page."))
             elif kind == "photo":
                 photos.append(value)
+            elif kind == "job":
+                job_events.append(value)
             elif kind == "bridge":
                 self._on_bridge(value)
             elif kind == "pos":
@@ -1483,6 +1515,8 @@ class FieldPhotosDock(QDockWidget):
                     d=value.get("device_id", ""), r=value.get("reason", "")))
         if photos:
             self._on_photos(photos)
+        if photos or job_events:
+            self._refresh_jobs_views()
 
     def _on_bridge(self, ev):
         from . import relay_pool

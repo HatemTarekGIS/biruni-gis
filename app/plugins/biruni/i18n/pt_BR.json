@@ -8123,5 +8123,15 @@
  "needs {have}/{min}": "tem {have}/{min}",
  "needs {n} more photo(s)": "falta(m) {n} foto(s)",
  "{done} of {total}": "{done} de {total}",
- "{have}/{min} photos": "{have}/{min} fotos"
+ "{have}/{min} photos": "{have}/{min} fotos",
+ "Unknown job": "Trabalho desconhecido",
+ "Progress…": "Progresso…",
+ "Job progress": "Progresso do trabalho",
+ "Missing only": "Apenas faltantes",
+ "Photos (have/min)": "Fotos (atuais/mín.)",
+ "Answers": "Respostas",
+ "On the phone, not here yet": "No telefone, ainda não recebidas",
+ "Double-click an item to select its photos on the map layer.": "Clique duas vezes em um item para selecionar suas fotos na camada do mapa.",
+ "Photos without an item during this job ({n})": "Fotos sem item durante este trabalho ({n})",
+ "Duplicate instances ({n})": "Instâncias duplicadas ({n})"
 }

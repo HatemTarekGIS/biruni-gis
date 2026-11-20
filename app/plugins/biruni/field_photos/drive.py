@@ -298,6 +298,8 @@ class DriveIntake:
     def __init__(self, roots, store, handover, k, events, interval=INTERVAL):
         self.roots = list(roots or ())
         self.store, self.handover, self.k, self.events = store, handover, k, events
+        if getattr(self.store, "on_job", None) is None and self.events is not None:
+            self.store.on_job = lambda jid: self.events.put(("job", jid))
         self.interval = interval
         self.kid, self.room = key_id(handover.public), room_tag(k)
         self.path = os.path.join(store.folder, SEEN_NAME)

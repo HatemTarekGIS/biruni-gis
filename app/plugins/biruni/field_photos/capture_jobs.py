@@ -2,6 +2,7 @@
 import copy
 import json
 import os
+import re
 import threading
 
 from qgis.core import QgsCoordinateReferenceSystem, QgsCoordinateTransform, QgsPointXY, QgsProject
@@ -12,8 +13,133 @@ from qgis.PyQt.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QDateE
                                  QWidget)
 
 from ..i18n import tr
-from .capture import JOB_ID_RE, MAX_CAP, cap_payload, clean_schema, clean_state, merge_states, new_job, stats
-from .capture_dialog import SchemaDialog, load_office_schemas
+from .capture import (DEV_RE, JOB_ID_RE, MAX_CAP, NODE_ID_RE, cap_payload, clean_cap, clean_schema, clean_state,
+                      merge_states, new_job, progress_counts, schema_key, stats)
+
+ITEM_ID_RE = re.compile(r"^[A-Za-z0-9_-]{4,64}$")
+
+
+def resolve_job_schema(store, job_id, merged=None, records=()):
+    """Return the frozen schema for a known job, or resolve/synthesize one for an unknown job."""
+    from .capture_dialog import load_office_schemas
+
+    job = store.get(job_id) if store is not None else None
+    if job and isinstance(job.get("schema"), dict):
+        return job["schema"], False
+    s_ref = str((merged or {}).get("s") or "")
+    office = load_office_schemas()
+    if s_ref:
+        for s in office:
+            if schema_key(s) == s_ref:
+                return s, True
+        sid = s_ref.split("@", 1)[0]
+        for s in office:
+            if s["id"] == sid:
+                return s, True
+
+    # Synthesize a fallback schema from state instances, answers, photos, skips, and photo records
+    nodes_by_id = {}
+    parent_of = {}
+    root_ids = []
+
+    def _ensure_node(nid, is_repeat=False, has_photos=False):
+        if not NODE_ID_RE.fullmatch(str(nid or "")):
+            return None
+        n = nodes_by_id.get(nid)
+        if n is None:
+            n = {"id": nid, "label": nid.replace("_", " ").title(), "req": True}
+            nodes_by_id[nid] = n
+        if is_repeat and "repeat" not in n:
+            n["repeat"] = {"min": 1, "max": 200}
+        if has_photos and "photos" not in n:
+            n["photos"] = [1, 50]
+        return n
+
+    inst = (merged or {}).get("inst") or {}
+    for iid, info in inst.items():
+        if not isinstance(info, dict):
+            continue
+        nid = info.get("n")
+        if not _ensure_node(nid, is_repeat=True):
+            continue
+        p_iid = info.get("p") or ""
+        if p_iid and p_iid in inst:
+            p_nid = inst[p_iid].get("n")
+            if p_nid and p_nid != nid and nid not in parent_of:
+                parent_of[nid] = p_nid
+        elif nid not in root_ids:
+            root_ids.append(nid)
+
+    for r in records or ():
+        cap = clean_cap(r.get("cap") if isinstance(r, dict) else None)
+        if not cap or cap["j"] != job_id:
+            continue
+        prev_nid = None
+        for nid, _iid, _ord in cap.get("ch") or ():
+            if not _ensure_node(nid, is_repeat=True):
+                continue
+            if prev_nid and prev_nid != nid and nid not in parent_of:
+                parent_of[nid] = prev_nid
+            elif not prev_nid and nid not in root_ids:
+                root_ids.append(nid)
+            prev_nid = nid
+        k = cap["k"]
+        if k != "*" and ":" in k:
+            iid_part, leaf_nid = k.split(":", 1)
+            if _ensure_node(leaf_nid, is_repeat=bool(iid_part and not prev_nid), has_photos=True):
+                if prev_nid and prev_nid != leaf_nid and leaf_nid not in parent_of:
+                    parent_of[leaf_nid] = prev_nid
+                elif leaf_nid not in parent_of and leaf_nid not in root_ids:
+                    root_ids.append(leaf_nid)
+
+    for mapping_key, has_ph in (("ph", True), ("ans", False), ("skip", False), ("note", False)):
+        for k, val in ((merged or {}).get(mapping_key) or {}).items():
+            if k == "*" or ":" not in str(k):
+                continue
+            iid_part, nid = str(k).split(":", 1)
+            n = _ensure_node(nid, is_repeat=bool(iid_part and iid_part in inst), has_photos=has_ph)
+            if n is None:
+                continue
+            if iid_part and iid_part in inst:
+                p_nid = inst[iid_part].get("n")
+                if p_nid and p_nid != nid and nid not in parent_of:
+                    parent_of[nid] = p_nid
+            if nid not in parent_of and nid not in root_ids:
+                root_ids.append(nid)
+            if mapping_key == "ans" and isinstance(val, dict):
+                existing_q = {q["name"] for q in (n.get("q") or ())}
+                q_list = list(n.get("q") or ())
+                for qname in val:
+                    if qname not in existing_q:
+                        q_list.append({"name": qname, "label": qname, "type": "text", "req": False})
+                        existing_q.add(qname)
+                if q_list:
+                    n["q"] = q_list
+
+    for nid, p_nid in list(parent_of.items()):
+        p_node = nodes_by_id.get(p_nid)
+        c_node = nodes_by_id.get(nid)
+        if p_node and c_node and p_nid != nid:
+            ch_list = p_node.setdefault("nodes", [])
+            if c_node not in ch_list:
+                ch_list.append(c_node)
+
+    roots = [nodes_by_id[nid] for nid in root_ids if nid in nodes_by_id and nid not in parent_of]
+    for nid, n in nodes_by_id.items():
+        if nid not in parent_of and n not in roots:
+            roots.append(n)
+    if not roots:
+        roots = [{"id": "item", "label": tr("Checklist item"), "req": True, "photos": [1, 10]}]
+
+    raw_s = {
+        "biruni_capture": 1,
+        "id": "unknown",
+        "rev": 1,
+        "title": tr("Unknown job"),
+        "job": [],
+        "nodes": roots,
+    }
+    return clean_schema(raw_s), True
 
 
 class JobStore:
@@ -94,33 +220,137 @@ class JobStore:
     def reopen_job(self, job_id):
         return self.set_status(job_id, "open")
 
-    def save_state(self, raw_state):
-        """Save a device state snapshot (`state-<dev>.json`) if its rev is newer."""
+    def _safe_job_dir(self, job_id):
+        if not isinstance(job_id, str):
+            raise ValueError("bad job id")
+        jid = job_id.strip()
+        if not JOB_ID_RE.fullmatch(jid):
+            raise ValueError(f"bad job id: {job_id!r}")
+        base = os.path.abspath(self.jobs_dir)
+        jdir = os.path.abspath(os.path.join(base, jid))
+        if os.path.dirname(jdir) != base:
+            raise ValueError("unsafe job path")
+        return jid, jdir
+
+    def _safe_state_path(self, job_id, dev):
+        jid, jdir = self._safe_job_dir(job_id)
+        if not isinstance(dev, str):
+            raise ValueError("bad dev id")
+        did = dev.strip()
+        if not DEV_RE.fullmatch(did):
+            raise ValueError(f"bad dev id: {dev!r}")
+        spath = os.path.abspath(os.path.join(jdir, f"state-{did}.json"))
+        if os.path.dirname(spath) != jdir:
+            raise ValueError("unsafe state path")
+        return jid, did, jdir, spath
+
+    @staticmethod
+    def _atomic_write_json(path, obj):
+        part = path + ".part"
+        with open(part, "w", encoding="utf-8") as f:
+            json.dump(obj, f, ensure_ascii=False, indent=1)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(part, path)
+
+    def take_state(self, job_id, dev, state, item_id=None):
+        """Keep the highest rev per (job_id, dev) in `jobs/<jobId>/state-<dev>.json`; ignore older or replayed snapshots."""
+        if not isinstance(state, dict):
+            raise ValueError("state must be an object")
+        jid, did, jdir, spath = self._safe_state_path(job_id, dev)
+        if state.get("job") not in (None, "") and str(state.get("job")).strip() != jid:
+            raise ValueError("job id mismatch")
+        if state.get("dev") not in (None, "") and str(state.get("dev")).strip() != did:
+            raise ValueError("dev id mismatch")
+        iid = str(item_id or state.get("id") or "").strip()
+        if iid and not ITEM_ID_RE.fullmatch(iid):
+            iid = ""
         with self.lock:
-            job_id = str((raw_state or {}).get("job") or "")
-            job = self.jobs.get(job_id)
+            job = self.jobs.get(jid)
             schema = job["schema"] if job else None
-            st = clean_state(raw_state, schema)
-            jdir = os.path.join(self.jobs_dir, st["job"])
-            os.makedirs(jdir, exist_ok=True)
-            spath = os.path.join(jdir, f"state-{st['dev']}.json")
+            raw = dict(state, job=jid, dev=did)
+            st = clean_state(raw, schema)
+            prev_ids = []
             if os.path.isfile(spath):
                 try:
-                    old = json.load(open(spath, encoding="utf-8"))
-                    if isinstance(old, dict) and int(old.get("rev", -1)) >= st["rev"]:
-                        return old, False
+                    with open(spath, encoding="utf-8") as f:
+                        old = json.load(f)
+                    if isinstance(old, dict):
+                        prev_ids = [x for x in (old.get("ids") or ()) if isinstance(x, str)]
+                        if isinstance(old.get("id"), str) and old["id"] not in prev_ids:
+                            prev_ids.append(old["id"])
+                        if int(old.get("rev", -1)) >= st["rev"]:
+                            if iid and iid not in prev_ids:
+                                old["ids"] = (prev_ids + [iid])[-200:]
+                                self._atomic_write_json(spath, old)
+                            return old, False
                 except (OSError, ValueError):
                     pass
-            part = spath + ".part"
-            with open(part, "w", encoding="utf-8") as f:
-                json.dump(st, f, ensure_ascii=False, indent=1)
-                f.flush()
-                os.fsync(f.fileno())
-            os.replace(part, spath)
+            if iid and iid not in prev_ids:
+                prev_ids.append(iid)
+            if prev_ids:
+                st["ids"] = prev_ids[-200:]
+            os.makedirs(jdir, exist_ok=True)
+            self._atomic_write_json(spath, st)
             return st, True
 
+    def save_state(self, raw_state):
+        """Save a device state snapshot (`state-<dev>.json`) if its rev is newer."""
+        if not isinstance(raw_state, dict):
+            raise ValueError("state must be an object")
+        return self.take_state(raw_state.get("job"), raw_state.get("dev"), raw_state, item_id=raw_state.get("id"))
+
+    def state_ids(self):
+        """Return all state item ids recorded across `jobs/*/state-*.json` (for Drive cleanup receipts)."""
+        out = set()
+        if not os.path.isdir(self.jobs_dir):
+            return out
+        for jid in os.listdir(self.jobs_dir):
+            if not JOB_ID_RE.fullmatch(jid):
+                continue
+            jdir = os.path.join(self.jobs_dir, jid)
+            if not os.path.isdir(jdir):
+                continue
+            for name in os.listdir(jdir):
+                if name.startswith("state-") and name.endswith(".json"):
+                    try:
+                        with open(os.path.join(jdir, name), encoding="utf-8") as f:
+                            d = json.load(f)
+                        if isinstance(d, dict):
+                            if isinstance(d.get("id"), str) and d["id"]:
+                                out.add(d["id"])
+                            for x in d.get("ids") or ():
+                                if isinstance(x, str) and x:
+                                    out.add(x)
+                    except (OSError, ValueError):
+                        continue
+        return out
+
+    def unknown_job_ids(self, records=()):
+        """List safe job IDs that have `state-*.json` files or bound photo records but no `job.json`."""
+        with self.lock:
+            known = set(self.jobs)
+        found = set()
+        if os.path.isdir(self.jobs_dir):
+            for jid in sorted(os.listdir(self.jobs_dir)):
+                if not JOB_ID_RE.fullmatch(jid) or jid in known:
+                    continue
+                jdir = os.path.join(self.jobs_dir, jid)
+                if not os.path.isdir(jdir) or os.path.isfile(os.path.join(jdir, "job.json")):
+                    continue
+                if any(n.startswith("state-") and n.endswith(".json") for n in os.listdir(jdir)):
+                    found.add(jid)
+        for r in records or ():
+            cap = clean_cap(r.get("cap") if isinstance(r, dict) else None)
+            if cap and cap["j"] not in known:
+                found.add(cap["j"])
+        return sorted(found)
+
     def states(self, job_id):
-        jdir = os.path.join(self.jobs_dir, job_id)
+        try:
+            _jid, jdir = self._safe_job_dir(job_id)
+        except ValueError:
+            return []
         if not os.path.isdir(jdir):
             return []
         out = []
@@ -136,7 +366,10 @@ class JobStore:
     def merged_state(self, job_id):
         job = self.get(job_id)
         schema = job["schema"] if job else None
-        return merge_states(self.states(job_id), schema)
+        m = merge_states(self.states(job_id), schema)
+        if not m.get("job") and isinstance(job_id, str) and JOB_ID_RE.fullmatch(job_id.strip()):
+            m["job"] = job_id.strip()
+        return m
 
     def payload(self, limit=MAX_CAP):
         """Build the `guide.cap` payload for all open jobs."""
@@ -310,6 +543,7 @@ class JobsDialog(QDialog):
         self.records = list(records)
         self.on_changed = on_changed
         self.last_error = ""
+        self.progress_dlg = None
 
         v = QVBoxLayout(self)
         intro = QLabel(tr("Create field jobs from a capture template. Open jobs are sent to the phones with the guide; "
@@ -322,6 +556,7 @@ class JobsDialog(QDialog):
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.table.setHeaderLabels([tr("ID"), tr("Title"), tr("Template"), tr("Status"), tr("Progress"), tr("Assigned to")])
         self.table.header().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.table.itemDoubleClicked.connect(lambda *_: self._open_progress())
         v.addWidget(self.table, 1)
 
         row = QHBoxLayout()
@@ -329,11 +564,13 @@ class JobsDialog(QDialog):
         self.new_btn.clicked.connect(self._new_job)
         self.tpl_btn = QPushButton(tr("Templates…"))
         self.tpl_btn.clicked.connect(self._edit_templates)
+        self.prog_btn = QPushButton(tr("Progress…"))
+        self.prog_btn.clicked.connect(self._open_progress)
         self.close_btn = QPushButton(tr("Close job"))
         self.close_btn.clicked.connect(self._close_selected)
         self.reopen_btn = QPushButton(tr("Reopen job"))
         self.reopen_btn.clicked.connect(self._reopen_selected)
-        for b in (self.new_btn, self.tpl_btn, self.close_btn, self.reopen_btn):
+        for b in (self.new_btn, self.tpl_btn, self.prog_btn, self.close_btn, self.reopen_btn):
             row.addWidget(b)
         row.addStretch(1)
         v.addLayout(row)
@@ -349,13 +586,27 @@ class JobsDialog(QDialog):
 
         self.refresh()
 
+    def set_records(self, records):
+        self.records = list(records or ())
+        self.refresh()
+        if self.progress_dlg is not None:
+            try:
+                self.progress_dlg.set_records(self.records)
+            except RuntimeError:
+                self.progress_dlg = None
+
     def refresh(self):
+        cur_jid = self.selected_job_id()
         self.table.clear()
+        self.store.reload()
         for j in self.store.list_jobs():
             merged = self.store.merged_state(j["id"])
             st_info = stats(j["schema"], merged, self.records)
+            pc = progress_counts(j["schema"], merged, self.records)
             miss_n = len(st_info["missing"])
-            prog = tr("Complete") if miss_n == 0 else tr("{n} missing").format(n=miss_n)
+            pct = pc["percent"]
+            detail = tr("Complete") if miss_n == 0 else tr("{n} missing").format(n=miss_n)
+            prog = f"{pct}% ({detail})"
             status_txt = tr("Open") if j.get("st", "open") == "open" else tr("Closed")
             it = QTreeWidgetItem([
                 j["id"],
@@ -366,9 +617,49 @@ class JobsDialog(QDialog):
                 j.get("to") or "—",
             ])
             it.setData(0, Qt.ItemDataRole.UserRole, j["id"])
+            it.setData(4, Qt.ItemDataRole.UserRole, pct)
+            self.table.addTopLevelItem(it)
+        for ujid in self.store.unknown_job_ids(self.records):
+            merged = self.store.merged_state(ujid)
+            schema, _ = resolve_job_schema(self.store, ujid, merged, self.records)
+            pc = progress_counts(schema, merged, self.records)
+            miss_n = pc["missing"]
+            pct = pc["percent"]
+            detail = tr("Complete") if miss_n == 0 else tr("{n} missing").format(n=miss_n)
+            prog = f"{pct}% ({detail})"
+            s_ref = merged.get("s") or f"{schema['id']}@{schema['rev']}"
+            it = QTreeWidgetItem([
+                ujid,
+                f"{tr('Unknown job')} ({ujid})",
+                f"{schema['title']} ({s_ref})",
+                tr("Unknown job"),
+                prog,
+                "—",
+            ])
+            it.setData(0, Qt.ItemDataRole.UserRole, ujid)
+            it.setData(4, Qt.ItemDataRole.UserRole, pct)
             self.table.addTopLevelItem(it)
         if self.table.topLevelItemCount() > 0:
-            self.table.setCurrentItem(self.table.topLevelItem(0))
+            picked = self.table.topLevelItem(0)
+            if cur_jid:
+                for i in range(self.table.topLevelItemCount()):
+                    cand = self.table.topLevelItem(i)
+                    if cand.data(0, Qt.ItemDataRole.UserRole) == cur_jid:
+                        picked = cand
+                        break
+            self.table.setCurrentItem(picked)
+
+    def _open_progress(self):
+        jid = self.selected_job_id()
+        if not jid:
+            return None
+        from .capture_progress import ProgressDialog
+
+        dlg = ProgressDialog(self.store, jid, self.records, self.iface, parent=self)
+        self.progress_dlg = dlg
+        dlg.exec()
+        self.progress_dlg = None
+        return dlg
 
     def selected_job_id(self):
         it = self.table.currentItem()
@@ -404,6 +695,8 @@ class JobsDialog(QDialog):
         return job
 
     def _new_job(self):
+        from .capture_dialog import load_office_schemas
+
         schemas = load_office_schemas()
         dlg = NewJobDialog(schemas, iface=self.iface, parent=self)
         if dlg.exec():
@@ -418,6 +711,8 @@ class JobsDialog(QDialog):
                 QMessageBox.warning(self, self.windowTitle(), self.last_error)
 
     def _edit_templates(self):
+        from .capture_dialog import SchemaDialog, load_office_schemas
+
         schemas = load_office_schemas()
         dlg = SchemaDialog(schemas[0] if schemas else None, self)
         dlg.exec()

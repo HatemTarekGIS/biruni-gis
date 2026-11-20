@@ -220,8 +220,11 @@ def clean_cap(raw):
     """Clean photo metadata cap binding: {j, k, pl, ch} or None."""
     if not isinstance(raw, dict):
         return None
-    j = _text(raw.get("j"), 32)
-    if not j or not JOB_ID_RE.match(j):
+    raw_j = raw.get("j")
+    if not isinstance(raw_j, str):
+        return None
+    j = raw_j.strip()
+    if not j or not JOB_ID_RE.fullmatch(j):
         return None
     k = _text(raw.get("k"), 48)
     if not k:
@@ -260,11 +263,17 @@ def clean_state(raw, schema=None):
     """Validate and normalize a job state snapshot from a phone."""
     if not isinstance(raw, dict):
         raise ValueError("state must be an object")
-    job = _text(raw.get("job"), 32)
-    if not job or not JOB_ID_RE.match(job):
+    raw_job = raw.get("job")
+    if not isinstance(raw_job, str):
         raise ValueError("bad job id")
-    dev = _text(raw.get("dev"), 64)
-    if not dev or not DEV_RE.match(dev):
+    job = raw_job.strip()
+    if not job or not JOB_ID_RE.fullmatch(job):
+        raise ValueError("bad job id")
+    raw_dev = raw.get("dev")
+    if not isinstance(raw_dev, str):
+        raise ValueError("bad dev id")
+    dev = raw_dev.strip()
+    if not dev or not DEV_RE.fullmatch(dev):
         raise ValueError("bad dev id")
     rev = _int(raw.get("rev", 0), 0, 1_000_000_000)
     if rev is None:
@@ -380,8 +389,13 @@ def new_job_id():
 def new_job(schema, data=None, title="", loc=None, to="", job_id=None):
     """Create a job record with a frozen cleaned schema snapshot."""
     s = clean_schema(schema)
-    jid = _text(job_id, 32) if job_id else new_job_id()
-    if not JOB_ID_RE.match(jid):
+    if job_id is not None:
+        if not isinstance(job_id, str):
+            raise ValueError("bad job id")
+        jid = job_id.strip()
+    else:
+        jid = new_job_id()
+    if not JOB_ID_RE.fullmatch(jid):
         raise ValueError("bad job id")
     cleaned_data = clean_values(s.get("job") or (), data or {})
     if not title:
@@ -815,6 +829,81 @@ def stats(schema, state=None, records=()):
         "missing": miss,
         "complete": len(miss) == 0,
     }
+
+
+def progress_counts(schema, state=None, records=()):
+    """Compute checklist completion counts and percent (matches phone capProgress + missing)."""
+    t = tree(schema, state, records) if not (isinstance(schema, dict) and "roots" in schema) else schema
+    done = [0]
+    total = [0]
+
+    def _walk_slot(it):
+        if not (it.get("children")) or it["photos"][0] > 0 or len(it.get("q") or ()) > 0:
+            if it["req"] or it["own_done"] or it["skipped"]:
+                total[0] += 1
+                if it["own_done"] or it["skipped"]:
+                    done[0] += 1
+        for ch in it.get("children") or ():
+            _walk(ch)
+
+    def _walk(it):
+        if it["kind"] == "repeat":
+            if it["req"] and it["instance_count"] < it["repeat"]["min"]:
+                total[0] += it["repeat"]["min"] - it["instance_count"]
+            for sub in it["instances"]:
+                _walk_slot(sub)
+        else:
+            _walk_slot(it)
+
+    for r in t["roots"]:
+        _walk(r)
+
+    miss = missing(t)
+    if len(miss) == 0:
+        pct = 100 if (total[0] > 0 or not t["roots"]) else 100
+    elif total[0] > 0:
+        pct = min(99, round(100 * done[0] / total[0]))
+    else:
+        pct = 0
+    return {"done": done[0], "total": total[0], "missing": len(miss), "percent": pct}
+
+
+def duplicate_instances(schema, state=None, records=()):
+    """Detect duplicate repeat instances (e.g. two surveyors offline creating the same order/title instance)."""
+    t = tree(schema, state, records) if not (isinstance(schema, dict) and "roots" in schema) else schema
+    dups = []
+
+    def _walk(it):
+        if it["kind"] == "repeat":
+            by_label = {}
+            by_order = {}
+            for inst_it in it["instances"]:
+                by_label.setdefault(inst_it["label"], []).append(inst_it)
+                if inst_it.get("order") is not None:
+                    by_order.setdefault(inst_it["order"], []).append(inst_it)
+            seen_iids = set()
+            for group in list(by_label.values()) + list(by_order.values()):
+                if len(group) > 1:
+                    iids = tuple(sorted(g["iid"] for g in group))
+                    if iids not in seen_iids:
+                        seen_iids.add(iids)
+                        dups.append({
+                            "repeat_id": it["id"],
+                            "repeat_k": it["k"],
+                            "path_label": group[0]["path_label"],
+                            "iids": [g["iid"] for g in group],
+                            "instances": group,
+                        })
+            for inst_it in it["instances"]:
+                for ch in inst_it.get("children") or ():
+                    _walk(ch)
+        else:
+            for ch in it.get("children") or ():
+                _walk(ch)
+
+    for r in t["roots"]:
+        _walk(r)
+    return dups
 
 
 def cap_payload(jobs, limit=MAX_CAP):

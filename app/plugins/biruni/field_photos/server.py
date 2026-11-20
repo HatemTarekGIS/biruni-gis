@@ -27,6 +27,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from ..i18n import tr
 from ..local_server import ExclusiveServer
+from .capture import DEV_RE as CAP_DEV_RE, JOB_ID_RE, clean_cap
 
 PHOTO_PORT = 10112
 MAX_PHOTO = 40 * 1024 * 1024
@@ -91,19 +92,23 @@ def clean_meta(m, form=()):
         dev_id = ""
     route = str(m.get("route") or "")
     route = route if route in ("lan", "direct", "relay", "peer", "drive") else ("relay" if m.get("preview") else "")
-    return {"id": m["id"], "lat": lat, "lon": lon, "acc": _num(m.get("acc"), 0),
-            "alt": _num(m.get("alt")), "heading": _num(m.get("heading"), 0, 360),
-            "compass": _num(m.get("compass"), 0, 360), "fix_age": _num(m.get("fix_age")),
-            "taken": when.isoformat(timespec="seconds"), "kind": _text(m.get("kind"), 80),
-            "note": _text(m.get("note"), 500), "device": _text(m.get("device"), 80), "by": by,
-            "surveyor": by or tr("Unknown"), "device_id": dev_id, "route": route,
-            "fields": clean_values(form, m.get("f")),
-            # a position averaged on the phone: readings kept and their spread in metres
-            "avg_n": _num(m.get("avg_n"), 1, 100000), "avg_sd": _num(m.get("avg_sd"), 0, 10000),
-            # inside a building: the level and the room whose code was scanned
-            "level": _int(m.get("level"), -20, 300), "unit": _text(m.get("unit"), 40),
-            # relay fallback sends a small preview first; the original replaces it when a direct link opens
-            "preview": bool(m.get("preview"))}
+    out = {"id": m["id"], "lat": lat, "lon": lon, "acc": _num(m.get("acc"), 0),
+           "alt": _num(m.get("alt")), "heading": _num(m.get("heading"), 0, 360),
+           "compass": _num(m.get("compass"), 0, 360), "fix_age": _num(m.get("fix_age")),
+           "taken": when.isoformat(timespec="seconds"), "kind": _text(m.get("kind"), 80),
+           "note": _text(m.get("note"), 500), "device": _text(m.get("device"), 80), "by": by,
+           "surveyor": by or tr("Unknown"), "device_id": dev_id, "route": route,
+           "fields": clean_values(form, m.get("f")),
+           # a position averaged on the phone: readings kept and their spread in metres
+           "avg_n": _num(m.get("avg_n"), 1, 100000), "avg_sd": _num(m.get("avg_sd"), 0, 10000),
+           # inside a building: the level and the room whose code was scanned
+           "level": _int(m.get("level"), -20, 300), "unit": _text(m.get("unit"), 40),
+           # relay fallback sends a small preview first; the original replaces it when a direct link opens
+           "preview": bool(m.get("preview"))}
+    cap = clean_cap(m.get("cap"))
+    if cap is not None:
+        out["cap"] = cap
+    return out
 
 
 def _int(v, lo, hi):
@@ -357,22 +362,35 @@ class PhotoStore:
     """The photo folder: one sub-folder per day, plus photos.jsonl (one line per photo)
     that lets the map layer be rebuilt if Biruni stops between the two writes."""
 
-    def __init__(self, folder, form=()):
+    def __init__(self, folder, form=(), on_job=None):
         self.folder = folder
         self.form = clean_form(list(form))
+        self.on_job = on_job
         self.lock = threading.Lock()
         os.makedirs(folder, exist_ok=True)
         self.records = {r["id"]: r for r in read_log(folder)}
         self.blocked = read_blocked(folder)
         self.surveyor_keys = read_surveyor_keys(folder)
+        self._jobs = None
+
+    @property
+    def jobs(self):
+        if self._jobs is None:
+            from .capture_jobs import JobStore
+
+            self._jobs = JobStore(self.folder)
+        return self._jobs
 
     def originals(self, ids):
-        """Of these photo ids, those kept here as full originals (not only a preview): the phone may then free its
-        copy in the surveyor's Google Drive (drive_page.py, receipts over the line)."""
+        """Of these photo ids, those kept here as full originals (not only a preview), plus merged state item ids:
+        the phone may then free its copy in the surveyor's Google Drive (drive_page.py, receipts over the line)."""
+        state_ids = self.jobs.state_ids()
         out = []
         for i in ids:
-            r = self.records.get(i) if isinstance(i, str) else None
-            if r and not r.get("preview") and r.get("photo") and os.path.isfile(r["photo"]):
+            if not isinstance(i, str):
+                continue
+            r = self.records.get(i)
+            if (r and not r.get("preview") and r.get("photo") and os.path.isfile(r["photo"])) or i in state_ids:
                 out.append(i)
         return out
 
@@ -590,87 +608,148 @@ class PhotoStore:
                 write_surveyor_keys(self.folder, self.surveyor_keys)
         return changed
 
+    def _check_sender(self, rec, sk=""):
+        """Verify device/sk/blocked rules for a photo or state item; binds verified surveyor into rec or raises BlockedDeviceError."""
+        self.blocked = read_blocked(self.folder)
+        self.surveyor_keys = read_surveyor_keys(self.folder)
+        mode = self.surveyor_keys.get("qr_mode", "shared")
+        survs = self.surveyor_keys.get("surveyors", {})
+        matched_srv = None
+        if sk:
+            for s in survs.values():
+                sec = str(s.get("secret") or "")
+                if sec and secrets.compare_digest(sec, sk):
+                    matched_srv = s
+                    break
+            if matched_srv is None:
+                reason = tr("Invalid or replaced surveyor QR code")
+                dev_id = rec.get("device_id") or "invalid_qr"
+                entry = {
+                    "at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
+                    "id": rec["id"],
+                    "device_id": dev_id,
+                    "surveyor": rec.get("surveyor") or "",
+                    "reason": reason,
+                }
+                with open(os.path.join(self.folder, REJECTED_NAME), "a", encoding="utf-8") as rf:
+                    rf.write(json.dumps(entry, ensure_ascii=False) + "\n")
+                    rf.flush()
+                raise BlockedDeviceError(dev_id, reason)
+            # Bind surveyor name and device_id to the PC's verified surveyor record (cannot be spoofed on the phone)
+            rec["surveyor"] = matched_srv["name"]
+            rec["by"] = matched_srv["name"]
+            rec["device_id"] = matched_srv["id"]
+            if matched_srv.get("revoked"):
+                reason = matched_srv.get("reason") or tr("Surveyor QR code revoked")
+                entry = {
+                    "at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
+                    "id": rec["id"],
+                    "device_id": matched_srv["id"],
+                    "surveyor": matched_srv["name"],
+                    "reason": reason,
+                }
+                with open(os.path.join(self.folder, REJECTED_NAME), "a", encoding="utf-8") as rf:
+                    rf.write(json.dumps(entry, ensure_ascii=False) + "\n")
+                    rf.flush()
+                raise BlockedDeviceError(matched_srv["id"], reason)
+        elif mode == "per_surveyor":
+            reason = tr("Each surveyor must use their own personal QR code")
+            dev_id = rec.get("device_id") or "unregistered_qr"
+            entry = {
+                "at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
+                "id": rec["id"],
+                "device_id": dev_id,
+                "surveyor": rec.get("surveyor") or "",
+                "reason": reason,
+            }
+            with open(os.path.join(self.folder, REJECTED_NAME), "a", encoding="utf-8") as rf:
+                rf.write(json.dumps(entry, ensure_ascii=False) + "\n")
+                rf.flush()
+            raise BlockedDeviceError(dev_id, reason)
+        dev_id = rec.get("device_id") or ""
+        if dev_id and dev_id in self.blocked:
+            info = self.blocked[dev_id]
+            reason = (info.get("reason") if isinstance(info, dict) else str(info)) or tr("Blocked by the computer")
+            entry = {
+                "at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
+                "id": rec["id"],
+                "device_id": dev_id,
+                "surveyor": rec.get("surveyor") or "",
+                "reason": reason,
+            }
+            with open(os.path.join(self.folder, REJECTED_NAME), "a", encoding="utf-8") as rf:
+                rf.write(json.dumps(entry, ensure_ascii=False) + "\n")
+                rf.flush()
+            raise BlockedDeviceError(dev_id, reason)
+
+    def _save_state_item(self, meta, data):
+        if not isinstance(meta, dict) or not ID_RE.match(str(meta.get("id", ""))):
+            raise ValueError("bad id")
+        raw_blob = bytes(data) if isinstance(data, (bytes, bytearray)) else b""
+        raw_state = None
+        if raw_blob[:4] == b"BCS1":
+            try:
+                raw_state = json.loads(raw_blob[4:].decode("utf-8"))
+            except (UnicodeDecodeError, ValueError):
+                raw_state = None
+        by = _text(meta.get("surveyor") or meta.get("by") or (raw_state.get("by") if isinstance(raw_state, dict) else ""), 40)
+        raw_dev_meta = meta.get("device_id")
+        raw_dev_state = raw_state.get("dev") if isinstance(raw_state, dict) else None
+        dev_cand = str(raw_dev_meta if raw_dev_meta not in (None, "") else (raw_dev_state or "")).strip()
+        rec = {
+            "id": meta["id"],
+            "by": by,
+            "surveyor": by or tr("Unknown"),
+            "device_id": dev_cand[:64],
+        }
+        sk = _text(meta.get("sk"), 64)
+        with self.lock:
+            self._check_sender(rec, sk)
+        cs = meta.get("cs")
+        if not isinstance(cs, dict) or raw_blob[:4] != b"BCS1" or not isinstance(raw_state, dict):
+            raise ValueError("bad state item")
+        raw_j = cs.get("j")
+        if not isinstance(raw_j, str) or not JOB_ID_RE.fullmatch(raw_j.strip()):
+            raise ValueError("bad job id")
+        job_id = raw_j.strip()
+        if raw_state.get("job") not in (None, "") and str(raw_state.get("job")).strip() != job_id:
+            raise ValueError("job id mismatch")
+        if "rev" in cs and "rev" in raw_state and cs["rev"] != raw_state["rev"]:
+            raise ValueError("rev mismatch")
+        if sk:
+            dev = rec["device_id"]
+        else:
+            if raw_dev_meta not in (None, "") and not (isinstance(raw_dev_meta, str) and CAP_DEV_RE.fullmatch(raw_dev_meta.strip())):
+                raise ValueError("bad dev id")
+            if raw_dev_state not in (None, "") and not (isinstance(raw_dev_state, str) and CAP_DEV_RE.fullmatch(raw_dev_state.strip())):
+                raise ValueError("bad dev id")
+            if (raw_dev_meta not in (None, "") and raw_dev_state not in (None, "")
+                    and raw_dev_meta.strip() != raw_dev_state.strip()):
+                raise ValueError("dev id mismatch")
+            dev = dev_cand
+        if not isinstance(dev, str) or not CAP_DEV_RE.fullmatch(dev):
+            raise ValueError("bad dev id")
+        state_in = dict(raw_state, job=job_id, dev=dev)
+        if rec.get("by"):
+            state_in["by"] = rec["by"]
+        self.jobs.take_state(job_id, dev, state_in, item_id=rec["id"])
+        if self.on_job is not None:
+            self.on_job(job_id)
+        return {"id": rec["id"]}, False
+
     def save(self, meta, data):
         """(record, new) - the photo is on disk when this returns.
         When a preview arrived earlier over the relays and the full original arrives later with the same id,
         the original replaces the preview file in the same record."""
+        if isinstance(meta, dict) and ("cs" in meta or (isinstance(data, (bytes, bytearray)) and bytes(data)[:4] == b"BCS1")):
+            return self._save_state_item(meta, data)
         ext = sniff(data)
         if ext is None:
             raise ValueError("not a photo")
         rec = clean_meta(meta, self.form)
         sk = _text(meta.get("sk"), 64) if isinstance(meta, dict) else ""
         with self.lock:
-            self.blocked = read_blocked(self.folder)
-            self.surveyor_keys = read_surveyor_keys(self.folder)
-            mode = self.surveyor_keys.get("qr_mode", "shared")
-            survs = self.surveyor_keys.get("surveyors", {})
-            matched_srv = None
-            if sk:
-                for s in survs.values():
-                    sec = str(s.get("secret") or "")
-                    if sec and secrets.compare_digest(sec, sk):
-                        matched_srv = s
-                        break
-                if matched_srv is None:
-                    reason = tr("Invalid or replaced surveyor QR code")
-                    dev_id = rec.get("device_id") or "invalid_qr"
-                    entry = {
-                        "at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
-                        "id": rec["id"],
-                        "device_id": dev_id,
-                        "surveyor": rec.get("surveyor") or "",
-                        "reason": reason,
-                    }
-                    with open(os.path.join(self.folder, REJECTED_NAME), "a", encoding="utf-8") as rf:
-                        rf.write(json.dumps(entry, ensure_ascii=False) + "\n")
-                        rf.flush()
-                    raise BlockedDeviceError(dev_id, reason)
-                # Bind surveyor name and device_id to the PC's verified surveyor record (cannot be spoofed on the phone)
-                rec["surveyor"] = matched_srv["name"]
-                rec["by"] = matched_srv["name"]
-                rec["device_id"] = matched_srv["id"]
-                if matched_srv.get("revoked"):
-                    reason = matched_srv.get("reason") or tr("Surveyor QR code revoked")
-                    entry = {
-                        "at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
-                        "id": rec["id"],
-                        "device_id": matched_srv["id"],
-                        "surveyor": matched_srv["name"],
-                        "reason": reason,
-                    }
-                    with open(os.path.join(self.folder, REJECTED_NAME), "a", encoding="utf-8") as rf:
-                        rf.write(json.dumps(entry, ensure_ascii=False) + "\n")
-                        rf.flush()
-                    raise BlockedDeviceError(matched_srv["id"], reason)
-            elif mode == "per_surveyor":
-                reason = tr("Each surveyor must use their own personal QR code")
-                dev_id = rec.get("device_id") or "unregistered_qr"
-                entry = {
-                    "at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
-                    "id": rec["id"],
-                    "device_id": dev_id,
-                    "surveyor": rec.get("surveyor") or "",
-                    "reason": reason,
-                }
-                with open(os.path.join(self.folder, REJECTED_NAME), "a", encoding="utf-8") as rf:
-                    rf.write(json.dumps(entry, ensure_ascii=False) + "\n")
-                    rf.flush()
-                raise BlockedDeviceError(dev_id, reason)
-            dev_id = rec.get("device_id") or ""
-            if dev_id and dev_id in self.blocked:
-                info = self.blocked[dev_id]
-                reason = (info.get("reason") if isinstance(info, dict) else str(info)) or tr("Blocked by the computer")
-                entry = {
-                    "at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
-                    "id": rec["id"],
-                    "device_id": dev_id,
-                    "surveyor": rec.get("surveyor") or "",
-                    "reason": reason,
-                }
-                with open(os.path.join(self.folder, REJECTED_NAME), "a", encoding="utf-8") as rf:
-                    rf.write(json.dumps(entry, ensure_ascii=False) + "\n")
-                    rf.flush()
-                raise BlockedDeviceError(dev_id, reason)
+            self._check_sender(rec, sk)
             old = self.records.get(rec["id"])
             if old is not None:
                 if not old.get("preview") or rec.get("preview"):
@@ -680,6 +759,8 @@ class PhotoStore:
                     rec["surveyor"] = old.get("surveyor") or old["by"]
                 if not rec.get("device_id") and old.get("device_id"):
                     rec["device_id"] = old["device_id"]
+                if not rec.get("cap") and old.get("cap"):
+                    rec["cap"] = old["cap"]
                 # replacing an earlier preview with the full original in the same record
                 old_path = old.get("photo") or ""
                 base = os.path.splitext(old_path)[0] if old_path else ""
@@ -763,7 +844,7 @@ class PhotoServer:
         self.token = secrets.token_urlsafe(12)
         self.port = port
         self.events = queue.Queue()
-        self.store = PhotoStore(folder, form)
+        self.store = PhotoStore(folder, form, on_job=lambda jid: self.events.put(("job", jid)))
         self.cert, self.key = ensure_certificate(cert_folder, list(addresses))
         from .handover import HandoverKey
 

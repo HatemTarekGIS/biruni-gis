@@ -8123,5 +8123,15 @@
  "needs {have}/{min}": "{have}/{min} gerekli",
  "needs {n} more photo(s)": "{n} fotoğraf daha gerekli",
  "{done} of {total}": "{done} / {total}",
- "{have}/{min} photos": "{have}/{min} fotoğraf"
+ "{have}/{min} photos": "{have}/{min} fotoğraf",
+ "Unknown job": "Bilinmeyen iş",
+ "Progress…": "İlerleme…",
+ "Job progress": "İş ilerlemesi",
+ "Missing only": "Yalnızca eksikler",
+ "Photos (have/min)": "Fotoğraflar (mevcut/en az)",
+ "Answers": "Yanıtlar",
+ "On the phone, not here yet": "Telefonda, henüz buraya ulaşmadı",
+ "Double-click an item to select its photos on the map layer.": "Harita katmanındaki fotoğraflarını seçmek için bir öğeye çift tıklayın.",
+ "Photos without an item during this job ({n})": "Bu iş sırasında öğesi olmayan fotoğraflar ({n})",
+ "Duplicate instances ({n})": "Yinelenen örnekler ({n})"
 }

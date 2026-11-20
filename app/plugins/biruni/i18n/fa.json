@@ -8123,5 +8123,15 @@
  "needs {have}/{min}": "موجود {have} از {min}",
  "needs {n} more photo(s)": "نیاز به {n} عکس دیگر",
  "{done} of {total}": "{done} از {total}",
- "{have}/{min} photos": "{have}/{min} عکس"
+ "{have}/{min} photos": "{have}/{min} عکس",
+ "Unknown job": "پرونده ناشناخته",
+ "Progress…": "پیشرفت…",
+ "Job progress": "پیشرفت پرونده",
+ "Missing only": "فقط موارد ناقص",
+ "Photos (have/min)": "عکس‌ها (موجود/حداقل)",
+ "Answers": "پاسخ‌ها",
+ "On the phone, not here yet": "در تلفن، هنوز نرسیده است",
+ "Double-click an item to select its photos on the map layer.": "برای انتخاب عکس‌های هر بند در لایه نقشه، روی آن دوبار کلیک کنید.",
+ "Photos without an item during this job ({n})": "عکس‌های بدون بند در طول این پرونده ({n})",
+ "Duplicate instances ({n})": "موارد تکراری ({n})"
 }

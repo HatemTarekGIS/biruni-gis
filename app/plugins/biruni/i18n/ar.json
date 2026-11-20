@@ -8255,5 +8255,15 @@
  "needs {n} more photo(s)": "يحتاج إلى {n} صور إضافية",
  "missing required answers": "إجابات مطلوبة ناقصة",
  "needs {have}/{min}": "الموجود {have} من {min}",
- "Optional": "اختياري"
+ "Optional": "اختياري",
+ "Unknown job": "معاملة غير معروفة",
+ "Progress…": "التقدّم…",
+ "Job progress": "تقدّم المعاملة",
+ "Missing only": "الناقص فقط",
+ "Photos (have/min)": "الصور (الموجود/الأدنى)",
+ "Answers": "الإجابات",
+ "On the phone, not here yet": "على الهاتف، لم تصل بعد",
+ "Double-click an item to select its photos on the map layer.": "انقر نقراً مزدوجاً على أي بند لتحديد صوره على طبقة الخريطة.",
+ "Photos without an item during this job ({n})": "صور بلا بند أثناء هذه المعاملة ({n})",
+ "Duplicate instances ({n})": "تكرارات متطابقة ({n})"
 }
