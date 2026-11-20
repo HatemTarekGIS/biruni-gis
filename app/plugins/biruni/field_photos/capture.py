@@ -860,7 +860,9 @@ def progress_counts(schema, state=None, records=()):
 
     miss = missing(t)
     if len(miss) == 0:
-        pct = 100 if (total[0] > 0 or not t["roots"]) else 100
+        # items inside a skipped instance are covered by its reason: nothing is left, so the counts agree with 100 %
+        done[0] = total[0]
+        pct = 100
     elif total[0] > 0:
         pct = min(99, round(100 * done[0] / total[0]))
     else:

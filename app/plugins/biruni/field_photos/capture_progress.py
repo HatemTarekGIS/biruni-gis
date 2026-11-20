@@ -6,11 +6,11 @@ from qgis.core import QgsProject, QgsVectorLayer
 from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtGui import QColor
 from qgis.PyQt.QtWidgets import (QAbstractItemView, QCheckBox, QDialog, QDialogButtonBox, QHBoxLayout,
-                                 QHeaderView, QLabel, QTreeWidget, QTreeWidgetItem, QVBoxLayout)
+                                 QHeaderView, QLabel, QPushButton, QTreeWidget, QTreeWidgetItem, QVBoxLayout)
 
 from ..i18n import tr
 from .capture import clean_cap, duplicate_instances, missing, progress_counts, tree
-from .capture_jobs import resolve_job_schema
+from .capture_jobs import export_job_report_dialog, resolve_job_schema
 
 
 def _iso_to_seconds(val):
@@ -124,12 +124,22 @@ class ProgressDialog(QDialog):
         hint.setWordWrap(True)
         v.addWidget(hint)
 
+        brow = QHBoxLayout()
+        self.report_btn = QPushButton(tr("Report (PDF)…"))
+        self.report_btn.clicked.connect(lambda: self.export_report())
+        brow.addWidget(self.report_btn)
+        brow.addStretch(1)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         buttons.rejected.connect(self.accept)
         buttons.accepted.connect(self.accept)
-        v.addWidget(buttons)
+        brow.addWidget(buttons)
+        v.addLayout(brow)
 
         self.refresh()
+
+    def export_report(self, path=None, open_after=True):
+        return export_job_report_dialog(self.store, self.job_id, self.records, self.iface,
+                                        parent=self, path=path, open_after=open_after)
 
     def set_records(self, records):
         self.records = list(records or ())
@@ -262,7 +272,7 @@ class ProgressDialog(QDialog):
         if is_unknown:
             title_part = f"{title} — {tr('Unknown job')}"
         else:
-            st_lbl = tr("Open") if (job or {}).get("st", "open") == "open" else tr("Closed")
+            st_lbl = tr("In progress") if (job or {}).get("st", "open") == "open" else tr("Closed")
             title_part = f"{title} ({self.job_id}) — {st_lbl}"
         self.setWindowTitle(f"{tr('Job progress')} — {title_part}")
 

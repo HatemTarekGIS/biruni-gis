@@ -6,11 +6,12 @@ import re
 import threading
 
 from qgis.core import QgsCoordinateReferenceSystem, QgsCoordinateTransform, QgsPointXY, QgsProject
-from qgis.PyQt.QtCore import QDate, Qt
-from qgis.PyQt.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QDateEdit, QDialog, QDialogButtonBox,
-                                 QDoubleSpinBox, QFormLayout, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
-                                 QMessageBox, QPushButton, QSpinBox, QTreeWidget, QTreeWidgetItem, QVBoxLayout,
-                                 QWidget)
+from qgis.PyQt.QtCore import QDate, Qt, QUrl
+from qgis.PyQt.QtGui import QDesktopServices
+from qgis.PyQt.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QComboBox, QDateEdit, QDialog,
+                                 QDialogButtonBox, QDoubleSpinBox, QFileDialog, QFormLayout, QHBoxLayout, QHeaderView,
+                                 QLabel, QLineEdit, QMessageBox, QProgressDialog, QPushButton, QSpinBox, QTreeWidget,
+                                 QTreeWidgetItem, QVBoxLayout, QWidget)
 
 from ..i18n import tr
 from .capture import (DEV_RE, JOB_ID_RE, MAX_CAP, NODE_ID_RE, cap_payload, clean_cap, clean_schema, clean_state,
@@ -376,6 +377,67 @@ class JobStore:
         return cap_payload(self.list_jobs(status="open"), limit=limit)
 
 
+def export_job_report_dialog(store, job_id, records=(), iface=None, parent=None, path=None, open_after=True):
+    """Build and write a sealed PDF report for `job_id` with a cancellable QProgressDialog."""
+    import datetime as dt
+    from .capture_report import render_location_map, report_model, write_report
+
+    if not job_id:
+        return None
+    store.reload()
+    job = store.get(job_id)
+    merged = store.merged_state(job_id)
+    schema, _ = resolve_job_schema(store, job_id, merged, records)
+    if job is None:
+        job = {"id": job_id, "title": f"{tr('Unknown job')} ({job_id})", "schema": schema, "s": schema_key(schema),
+               "data": {}, "st": "open"}
+    else:
+        job = dict(job, schema=schema)
+
+    try:
+        _jid, default_dir = store._safe_job_dir(job_id)
+    except ValueError:
+        default_dir = store.folder
+    os.makedirs(default_dir, exist_ok=True)
+    today = dt.date.today().isoformat()
+    default_path = os.path.join(default_dir, f"report-{today}.pdf")
+
+    if path is None:
+        path, _ = QFileDialog.getSaveFileName(parent, tr("Save report"), default_path, "PDF (*.pdf)")
+    if not path:
+        return None
+
+    model = report_model(job, merged, records, folder=store.folder)
+    dlg = QProgressDialog(tr("Writing the PDF…"), tr("Cancel"), 0, 100, parent)
+    dlg.setWindowTitle(tr("Capture Job Report"))
+    dlg.setWindowModality(Qt.WindowModality.WindowModal)
+    dlg.setMinimumDuration(0)
+    dlg.setValue(0)
+    QApplication.processEvents()
+
+    map_img = render_location_map(model, iface=iface)
+
+    def _on_progress(step, total):
+        if dlg.wasCanceled():
+            return False
+        pct = int(round(100.0 * step / max(total, 1)))
+        dlg.setValue(min(99, pct))
+        QApplication.processEvents()
+        return not dlg.wasCanceled()
+
+    try:
+        res = write_report(path, model, map_image=map_img, progress=_on_progress)
+    finally:
+        dlg.setValue(100)
+        dlg.close()
+
+    if res.get("cancelled"):
+        return res
+    if open_after and os.path.isfile(path):
+        QDesktopServices.openUrl(QUrl.fromLocalFile(path))
+    return res
+
+
 def _canvas_center_wgs84(iface):
     if iface is None or not hasattr(iface, "mapCanvas") or iface.mapCanvas() is None:
         return None
@@ -566,11 +628,13 @@ class JobsDialog(QDialog):
         self.tpl_btn.clicked.connect(self._edit_templates)
         self.prog_btn = QPushButton(tr("Progress…"))
         self.prog_btn.clicked.connect(self._open_progress)
+        self.report_btn = QPushButton(tr("Report (PDF)…"))
+        self.report_btn.clicked.connect(self._export_report)
         self.close_btn = QPushButton(tr("Close job"))
         self.close_btn.clicked.connect(self._close_selected)
         self.reopen_btn = QPushButton(tr("Reopen job"))
         self.reopen_btn.clicked.connect(self._reopen_selected)
-        for b in (self.new_btn, self.tpl_btn, self.prog_btn, self.close_btn, self.reopen_btn):
+        for b in (self.new_btn, self.tpl_btn, self.prog_btn, self.report_btn, self.close_btn, self.reopen_btn):
             row.addWidget(b)
         row.addStretch(1)
         v.addLayout(row)
@@ -607,7 +671,7 @@ class JobsDialog(QDialog):
             pct = pc["percent"]
             detail = tr("Complete") if miss_n == 0 else tr("{n} missing").format(n=miss_n)
             prog = f"{pct}% ({detail})"
-            status_txt = tr("Open") if j.get("st", "open") == "open" else tr("Closed")
+            status_txt = tr("In progress") if j.get("st", "open") == "open" else tr("Closed")
             it = QTreeWidgetItem([
                 j["id"],
                 j.get("title") or j["id"],
@@ -660,6 +724,16 @@ class JobsDialog(QDialog):
         dlg.exec()
         self.progress_dlg = None
         return dlg
+
+    def _export_report(self, path=None, open_after=True):
+        jid = self.selected_job_id()
+        if not jid:
+            return None
+        res = export_job_report_dialog(self.store, jid, self.records, self.iface, parent=self,
+                                       path=path, open_after=open_after)
+        if res and not res.get("cancelled"):
+            self.status_lbl.setText(tr("Saved: {p}").format(p=res["pdf"]))
+        return res
 
     def selected_job_id(self):
         it = self.table.currentItem()
