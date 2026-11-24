@@ -13,6 +13,7 @@ passes the bytes through. A random token in the address keeps everyone else out.
 """
 from collections import deque
 import datetime as dt
+import hashlib
 import json
 import os
 import queue
@@ -85,6 +86,11 @@ def clean_meta(m, form=()):
     if lat is None or lon is None:
         raise ValueError("no position")
     t = _num(m.get("t"), 0)
+    if t and m.get("tu") == 1:
+        dt_corr = _num(m.get("dt"))
+        if dt_corr is not None:
+            dt_corr = max(-30.0 * 86400 * 1000, min(30.0 * 86400 * 1000, dt_corr))
+            t = max(0.0, t + dt_corr)
     when = dt.datetime.fromtimestamp(t / 1000, dt.timezone.utc) if t else dt.datetime.now(dt.timezone.utc)
     by = _text(m.get("surveyor") or m.get("by"), 40)
     dev_id = _text(m.get("device_id"), 64)
@@ -127,6 +133,11 @@ def clean_pos(m):
     if lat is None or lon is None:
         return None
     t = _num(m.get("t"), 0)
+    if t and m.get("tu") == 1:
+        dt_corr = _num(m.get("dt"))
+        if dt_corr is not None:
+            dt_corr = max(-30.0 * 86400 * 1000, min(30.0 * 86400 * 1000, dt_corr))
+            t = max(0.0, t + dt_corr)
     when = dt.datetime.fromtimestamp(t / 1000, dt.timezone.utc) if t else dt.datetime.now(dt.timezone.utc)
     net, eff, route = str(m.get("net") or ""), str(m.get("eff") or ""), str(m.get("route") or "")
     return {"id": m["id"], "name": _text(m.get("name"), 40), "lat": lat, "lon": lon, "acc": _num(m.get("acc"), 0),
@@ -362,7 +373,7 @@ class PhotoStore:
     """The photo folder: one sub-folder per day, plus photos.jsonl (one line per photo)
     that lets the map layer be rebuilt if Biruni stops between the two writes."""
 
-    def __init__(self, folder, form=(), on_job=None):
+    def __init__(self, folder, form=(), on_job=None, mirror_folder=""):
         self.folder = folder
         self.form = clean_form(list(form))
         self.on_job = on_job
@@ -372,6 +383,26 @@ class PhotoStore:
         self.blocked = read_blocked(folder)
         self.surveyor_keys = read_surveyor_keys(folder)
         self._jobs = None
+        from .copies import CopyLedger
+
+        self.ledger = CopyLedger(folder, mirror_folder=mirror_folder)
+        for r in self.records.values():
+            cur = self.ledger.get(r["id"])
+            if cur:
+                if not r.get("sha") and cur.get("sha"):
+                    r["sha"] = cur["sha"]
+                if not r.get("ssha") and cur.get("ssha"):
+                    r["ssha"] = cur["ssha"]
+            if not r.get("preview") and r.get("photo") and os.path.isfile(r["photo"]):
+                places = ["office"]
+                if r.get("route") == "drive":
+                    places.append("drive_mb")
+                self.ledger.mark(r["id"], places=places, sha=r.get("sha") or "", ssha=r.get("ssha") or "")
+
+    def set_mirror_folder(self, mirror_folder):
+        self.ledger.set_mirror_folder(mirror_folder)
+        if self.ledger.mirror_folder:
+            self.ledger.sync_all_to_mirror(self.records.values())
 
     @property
     def jobs(self):
@@ -381,17 +412,47 @@ class PhotoStore:
             self._jobs = JobStore(self.folder)
         return self._jobs
 
-    def originals(self, ids):
+    def originals(self, ids, for_drive_clean=False):
         """Of these photo ids, those kept here as full originals (not only a preview), plus merged state item ids:
-        the phone may then free its copy in the surveyor's Google Drive (drive_page.py, receipts over the line)."""
+        the phone may then free its copy in the surveyor's Google Drive when 2 non-mailbox copies exist
+        (drive_page.py, receipts over the line)."""
         state_ids = self.jobs.state_ids()
         out = []
         for i in ids:
             if not isinstance(i, str):
                 continue
             r = self.records.get(i)
-            if (r and not r.get("preview") and r.get("photo") and os.path.isfile(r["photo"])) or i in state_ids:
-                out.append(i)
+            has_orig = (r and not r.get("preview") and r.get("photo") and os.path.isfile(r["photo"])) or i in state_ids
+            if not has_orig:
+                continue
+            if for_drive_clean and self.ledger.non_mailbox_count(i) < 2:
+                continue
+            out.append(i)
+        return out
+
+    def copy_status(self, ids):
+        """Return [[id, count, h8], ...] for the given item ids from the CopyLedger."""
+        state_ids = None
+        out = []
+        for i in ids:
+            if not isinstance(i, str) or not i or len(i) >= 80:
+                continue
+            c, _h, h8 = self.ledger.receipt_info(i)
+            if c == 0:
+                r = self.records.get(i)
+                if r and not r.get("preview") and r.get("photo") and os.path.isfile(r["photo"]):
+                    places = ["office"]
+                    if r.get("route") == "drive":
+                        places.append("drive_mb")
+                    self.ledger.mark(i, places=places, sha=r.get("sha") or "", ssha=r.get("ssha") or "")
+                    c, _h, h8 = self.ledger.receipt_info(i)
+                else:
+                    if state_ids is None:
+                        state_ids = self.jobs.state_ids()
+                    if i in state_ids:
+                        self.ledger.mark(i, "office")
+                        c, _h, h8 = self.ledger.receipt_info(i)
+            out.append([i, c, h8])
         return out
 
     def get_qr_mode(self):
@@ -682,10 +743,12 @@ class PhotoStore:
                 rf.flush()
             raise BlockedDeviceError(dev_id, reason)
 
-    def _save_state_item(self, meta, data):
+    def _save_state_item(self, meta, data, ssha=""):
         if not isinstance(meta, dict) or not ID_RE.match(str(meta.get("id", ""))):
             raise ValueError("bad id")
         raw_blob = bytes(data) if isinstance(data, (bytes, bytearray)) else b""
+        sha = hashlib.sha256(raw_blob).hexdigest()
+        ssha = str(ssha or meta.get("_ssha") or "")
         raw_state = None
         if raw_blob[:4] == b"BCS1":
             try:
@@ -733,19 +796,32 @@ class PhotoStore:
         if rec.get("by"):
             state_in["by"] = rec["by"]
         self.jobs.take_state(job_id, dev, state_in, item_id=rec["id"])
+        places = ["office"]
+        if meta.get("route") == "drive":
+            places.append("drive_mb")
+        self.ledger.mark(rec["id"], places=places, sha=sha, ssha=ssha)
+        if self.ledger.mirror_folder:
+            try:
+                _jid, _did, _jdir, spath = self.jobs._safe_state_path(job_id, dev)
+                if os.path.isfile(spath):
+                    self.ledger.write_mirror_file(rec["id"], spath, ssha=ssha)
+            except (ValueError, OSError):
+                pass
         if self.on_job is not None:
             self.on_job(job_id)
-        return {"id": rec["id"]}, False
+        return {"id": rec["id"], "sha": sha, "ssha": ssha}, False
 
-    def save(self, meta, data):
+    def save(self, meta, data, ssha=""):
         """(record, new) - the photo is on disk when this returns.
         When a preview arrived earlier over the relays and the full original arrives later with the same id,
         the original replaces the preview file in the same record."""
         if isinstance(meta, dict) and ("cs" in meta or (isinstance(data, (bytes, bytearray)) and bytes(data)[:4] == b"BCS1")):
-            return self._save_state_item(meta, data)
+            return self._save_state_item(meta, data, ssha=ssha)
         ext = sniff(data)
         if ext is None:
             raise ValueError("not a photo")
+        sha = hashlib.sha256(bytes(data)).hexdigest()
+        ssha = str(ssha or (meta.get("_ssha") if isinstance(meta, dict) else "") or "")
         rec = clean_meta(meta, self.form)
         sk = _text(meta.get("sk"), 64) if isinstance(meta, dict) else ""
         with self.lock:
@@ -753,6 +829,22 @@ class PhotoStore:
             old = self.records.get(rec["id"])
             if old is not None:
                 if not old.get("preview") or rec.get("preview"):
+                    if not old.get("preview"):
+                        if not old.get("sha"):
+                            old["sha"] = sha
+                        if ssha and not old.get("ssha"):
+                            old["ssha"] = ssha
+                        places = ["office"]
+                        if rec.get("route") == "drive" or old.get("route") == "drive":
+                            places.append("drive_mb")
+                        self.ledger.mark(old["id"], places=places, sha=old.get("sha") or sha, ssha=ssha or old.get("ssha") or "")
+                        if self.ledger.mirror_folder and old.get("photo") and os.path.isfile(old["photo"]):
+                            cur = self.ledger.get(old["id"])
+                            if not (cur and cur["places"].get("mirror")):
+                                self.ledger.write_mirror_file(
+                                    old["id"], old["photo"], expected_sha=old.get("sha") or sha,
+                                    ssha=ssha or old.get("ssha") or "",
+                                )
                     return old, False
                 if not rec.get("by") and old.get("by"):
                     rec["by"] = old["by"]
@@ -786,7 +878,15 @@ class PhotoStore:
                     f.write(json.dumps(rec, ensure_ascii=False) + "\n")
                     f.flush()
                     os.fsync(f.fileno())
+                rec["sha"] = sha
+                rec["ssha"] = ssha
                 self.records[rec["id"]] = rec
+                places = ["office"]
+                if rec.get("route") == "drive":
+                    places.append("drive_mb")
+                self.ledger.mark(rec["id"], places=places, sha=sha, ssha=ssha)
+                if self.ledger.mirror_folder:
+                    self.ledger.write_mirror_file(rec["id"], path, expected_sha=sha, ssha=ssha)
                 return rec, "upgraded"
             local = dt.datetime.fromisoformat(rec["taken"]).astimezone()
             day = os.path.join(self.folder, local.strftime("%Y-%m-%d"))
@@ -808,7 +908,16 @@ class PhotoStore:
                 f.write(json.dumps(rec, ensure_ascii=False) + "\n")
                 f.flush()
                 os.fsync(f.fileno())
+            rec["sha"] = sha
+            rec["ssha"] = ssha
             self.records[rec["id"]] = rec
+            if not rec.get("preview"):
+                places = ["office"]
+                if rec.get("route") == "drive":
+                    places.append("drive_mb")
+                self.ledger.mark(rec["id"], places=places, sha=sha, ssha=ssha)
+                if self.ledger.mirror_folder:
+                    self.ledger.write_mirror_file(rec["id"], path, expected_sha=sha, ssha=ssha)
             return rec, True
 
 
@@ -838,22 +947,25 @@ class PhotoServer:
     ("photo", record) for a new photo, ("phone", user agent) when a phone opens the page."""
 
     def __init__(self, folder, cert_folder, page_texts, lang="en", kinds=(), port=PHOTO_PORT, addresses=(),
-                 bind="0.0.0.0", form=()):
+                 bind="0.0.0.0", form=(), mirror_folder="", eod_hour=18):
         from ..gps.browser import ensure_certificate
 
         self.token = secrets.token_urlsafe(12)
         self.port = port
         self.events = queue.Queue()
-        self.store = PhotoStore(folder, form, on_job=lambda jid: self.events.put(("job", jid)))
+        self.store = PhotoStore(folder, form, on_job=lambda jid: self.events.put(("job", jid)),
+                                mirror_folder=mirror_folder)
         self.cert, self.key = ensure_certificate(cert_folder, list(addresses))
         from .handover import HandoverKey
 
         self.handover = HandoverKey(cert_folder)   # photos handed phone to phone are sealed for this key
+        self.eod_hour = int(eod_hour) if isinstance(eod_hour, int) and 0 <= eod_hour <= 23 else 18
         self.page = render_page(page_texts, lang, kinds, self.store.form, self.handover.public)
         # the bridge (bridge.py) runs a hidden receiver page on this PC that hands the photos in here
         self.bridge_config = json.dumps({"lang": lang,
                                          "kinds": [k for k in (s.strip() for s in kinds) if k][:24],
-                                         "form": self.store.form, "pk": self.handover.public},
+                                         "form": self.store.form, "pk": self.handover.public,
+                                         "eod": self.eod_hour},
                                         ensure_ascii=False).encode("utf-8")
         self._phones = set()
         self.guide_v = 0
@@ -905,6 +1017,17 @@ class PhotoServer:
                 if body:
                     self.wfile.write(body)
 
+            def do_HEAD(self):  # noqa: N802
+                route, _parts = self._route()
+                if route in ("", "ping", "sw.js"):
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/javascript" if route == "sw.js" else "text/html")
+                    self.send_header("Content-Length", "0")
+                    self.send_header("Cache-Control", "no-store")
+                    self.end_headers()
+                else:
+                    self._send(404)
+
             def do_OPTIONS(self):  # noqa: N802
                 bits = urlsplit(self.path).path.strip("/").split("/")
                 if len(bits) == 2 and bits[0] == "x":
@@ -933,7 +1056,10 @@ class PhotoServer:
                         server.events.put(("phone", agent))
                     self._send(200, server.page, "text/html; charset=utf-8")
                 elif route == "ping":
-                    self._send(200, b'{"ok":true}')
+                    self._send(200, json.dumps({"ok": True, "nl": 1, "now": int(time.time() * 1000),
+                                                "eod": server.eod_hour}).encode("utf-8"))
+                elif route == "sw.js":
+                    self._send(200, b"/* sw */", "application/javascript")
                 elif route == "bridge" and self._local():
                     from .bridge import receiver_page
 
@@ -1084,13 +1210,26 @@ class PhotoServer:
                 if route == "drive-got" and self._local():   # the receiver page asks which originals are here
                     try:
                         n = min(int(self.headers.get("Content-Length") or 0), 32768)
-                        ids = json.loads(_read(self.rfile, n) or b"{}").get("ids")
+                        body_in = json.loads(_read(self.rfile, n) or b"{}")
+                        ids = body_in.get("ids")
+                        for_clean = bool(body_in.get("for_clean"))
                     except (ValueError, AttributeError):
                         self._send(400)
                         return
                     ids = [i for i in ids if isinstance(i, str) and len(i) < 80][:200] if isinstance(ids, list) else []
                     self._send(200, json.dumps({"clean": server.drive_clean,
-                                                "ids": server.store.originals(ids)}).encode("utf-8"))
+                                                "ids": server.store.originals(ids, for_drive_clean=for_clean)}).encode("utf-8"))
+                    return
+                if route == "copy-status":   # copy poll: LAN phones or the receiver page ask for [id, c, h8]
+                    try:
+                        n = min(int(self.headers.get("Content-Length") or 0), 32768)
+                        ids = json.loads(_read(self.rfile, n) or b"{}").get("ids")
+                    except (ValueError, AttributeError):
+                        self._send(400)
+                        return
+                    ids = [i for i in ids if isinstance(i, str) and len(i) < 80][:100] if isinstance(ids, list) else []
+                    self._send(200, json.dumps({"rt": int(time.time() * 1000),
+                                                "items": server.store.copy_status(ids)}).encode("utf-8"))
                     return
                 if route == "pos":
                     try:
@@ -1125,10 +1264,14 @@ class PhotoServer:
                     raw_m = json.loads(parse_qs(parts.query).get("m", [""])[0])
                     if isinstance(raw_m, dict) and raw_m.get("sealed"):
                         # sealed for this computer: surveyor and device_id are read from inside the sealed payload only
+                        ssha = hashlib.sha256(data).hexdigest()
                         meta, data = server.handover.open(data)
+                        if isinstance(meta, dict) and meta.get("tu") == 1 and isinstance(raw_m.get("dt"), (int, float)):
+                            meta = dict(meta, dt=raw_m["dt"])
                     else:
+                        ssha = hashlib.sha256(data).hexdigest()
                         meta = raw_m
-                    rec, new = server.store.save(meta, data)
+                    rec, new = server.store.save(meta, data, ssha=ssha)
                 except BlockedDeviceError as b:
                     server.events.put(("rejected", {"device_id": b.device_id, "reason": b.reason}))
                     self._send(403, json.dumps({"ok": False, "error": "blocked", "reason": b.reason}).encode())
@@ -1141,7 +1284,12 @@ class PhotoServer:
                     return
                 if new:
                     server.events.put(("photo", rec))
-                self._send(200, json.dumps({"ok": True, "id": rec["id"]}).encode())
+                c_cnt, h_hex, _h8 = server.store.ledger.receipt_info(rec["id"])
+                if not h_hex:
+                    h_hex = ssha or rec.get("ssha") or rec.get("sha") or ""
+                self._send(200, json.dumps({
+                    "ok": True, "id": rec["id"], "c": c_cnt, "h": h_hex, "rt": int(time.time() * 1000)
+                }).encode())
 
         self.httpd = ExclusiveServer((bind, port), Handler)
         self.httpd.daemon_threads = True
@@ -1168,7 +1316,14 @@ class PhotoServer:
         """Process a sealed ladder envelope; queue positions and ladder info, return sealed ack."""
         if self.ladder is None:
             return None
-        positions, ack = self.ladder.take(s, via, clean_pos, self.store.resolve_pos)
+        mirror_ok = False
+        mf = self.store.ledger.mirror_folder
+        if mf:
+            pos_id = "pos-" + hashlib.sha256(s.encode("utf-8")).hexdigest()[:24]
+            self.store.ledger.mark(pos_id, "office", ssha=hashlib.sha256(s.encode("utf-8")).hexdigest())
+            if self.store.ledger.write_mirror_bytes(pos_id, os.path.join("positions", f"{pos_id}.lpos"), s.encode("utf-8")):
+                mirror_ok = True
+        positions, ack = self.ladder.take(s, via, clean_pos, self.store.resolve_pos, mirror_ok=mirror_ok)
         for pos in positions:
             self.events.put(("pos", pos))
         if self.ladder.last_info is not None:
@@ -1178,6 +1333,7 @@ class PhotoServer:
 
     def _bridge_config_bytes(self):
         d = json.loads(self.bridge_config.decode("utf-8"))
+        d["eod"] = self.eod_hour
         if self.ladder is not None:
             d["lad"] = 1
             d["tun"] = self.tunnel_host or ""
@@ -1352,7 +1508,22 @@ def phone_texts(tr):
             "capClosed": tr("Job finished on this phone"), "capMissingTitle": tr("Missing required items:"),
             "capMissingNeed": tr("Complete every required item or give a reason before finishing."),
             "capNeedPhotos": tr("needs {n} more photo(s)"), "capNeedQ": tr("missing required answers"),
-            "capNeedInst": tr("needs {have}/{min}"), "capDone": tr("Done"), "capOpt": tr("Optional")}
+            "capNeedInst": tr("needs {have}/{min}"), "capDone": tr("Done"), "capOpt": tr("Optional"),
+            # no-loss item states, copy counts & end-of-day reminder (phase P1)
+            "stPhone": tr("Saved on the phone"),
+            "stCloud": tr("☁️ Reached the cloud, waiting for the office"),
+            "stOffice": tr("Reached the office (1 copy)"),
+            "stSafe": tr("✓✓ Protected (2 copies)"),
+            "stRefused": tr("Refused by the office"),
+            "stRefusedWhy": tr("Refused: {r}"),
+            "countCloud": tr("☁️ {n} in the cloud, waiting for the office"),
+            "countOffice": tr("{n} at the office, waiting for 2nd copy"),
+            "countSafe": tr("✓✓ {n} protected (2 copies)"),
+            "countRefused": tr("{n} refused — kept on this phone"),
+            "eodTitle": tr("Items not yet protected by 2 copies"),
+            "eodBody": tr("Keep this page open or connect to Wi-Fi so every item reaches 2 verified copies."),
+            "eodPending": tr("{n} items still waiting for 2 copies"),
+            "eodDismiss": tr("Keep open & send now")}
 
 
 def all_phone_texts():
@@ -1460,7 +1631,7 @@ input.in:focus{border-color:var(--accent)}
 .grid img,.last img{width:100%;height:100%;object-fit:cover;display:block}
 .badge{position:absolute;bottom:6px;inset-inline-end:6px;min-width:24px;height:24px;padding:0 6px;display:grid;
  place-items:center;border-radius:12px;font-size:13px;font-weight:700;background:rgba(0,0,0,.62);color:#fff}
-.badge.ok{background:var(--good)}.badge.bad{background:var(--poor)}
+.badge.ok{background:var(--good)}.badge.bad{background:var(--poor)}.badge.cloud{background:var(--fair)}
 .empty{grid-column:1/-1;aspect-ratio:auto!important;animation:none!important;background:transparent!important;
  color:var(--dim);font-size:14px;text-align:center;padding:14px 0}
 .shutterbar{position:fixed;inset-inline:0;bottom:0;z-index:6;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;
@@ -1615,6 +1786,11 @@ input.in:focus{border-color:var(--accent)}
   <div class="mrow"><input type="text" class="in" id="capReason" maxlength="300" autocomplete="off">
    <button class="ghost" id="capSkipBtn" type="button"></button></div></div>
  <button type="button" id="capDoneBtn"></button></div></div>
+<div class="sheet hide" id="eodSheet"><div class="panel"><div class="grab"></div>
+ <div class="cpath" id="eodTitle"></div>
+ <div class="dstate" id="eodBody"></div>
+ <div class="dstate" id="eodList"></div>
+ <button class="primary cfin" id="eodBtn" type="button"></button></div></div>
 <div class="toast" id="toast"></div>
 <script>
 let ALL=__TEXTS__,KINDS=__KINDS__,FORM=__FORM__,ROOM='',HASHL=null,GPSMODE=false,T={},LANG='en',PCKEY='__PCKEY__';const DEF='__DEFLANG__',$=i=>document.getElementById(i);
@@ -1623,7 +1799,15 @@ function pick(l){if(!l)return null;l=String(l).replace('-','_');if(ALL[l])return
  return Object.keys(ALL).find(k=>k.split('_')[0].toLowerCase()===b)||null}
 function keep(k,v){try{if(v==null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(e){}}
 function kept(k){try{return localStorage.getItem(k)}catch(e){return null}}
+var SKEW=0,SKEW_OK=false;
+function NOW(){return Date.now()+SKEW}
+function noteTime(ms){if(typeof ms==='number'&&isFinite(ms)&&ms>1700000000000){SKEW=Math.round(ms-Date.now());SKEW_OK=true}}
+async function probeSkew(){try{const r=await fetch('sw.js',{method:'HEAD',cache:'no-store'});
+ const d=r&&r.headers&&r.headers.get('Date');if(d){const t=Date.parse(d);if(isFinite(t))noteTime(t)}}catch(e){}}
 /*BOOT*/
+let NL=kept('biruni-nl-'+ROOM)==='1',EOD_HOUR=parseInt(kept('biruni-eod-'+ROOM)||'18',10);if(!(EOD_HOUR>=0&&EOD_HOUR<=23))EOD_HOUR=18;
+function setNl(on){if(on){NL=true;keep('biruni-nl-'+ROOM,'1')}}
+function setEodHour(h){if(typeof h==='number'&&h>=0&&h<=23){EOD_HOUR=Math.trunc(h);keep('biruni-eod-'+ROOM,String(EOD_HOUR))}}
 const _HP=new URLSearchParams(typeof location!=='undefined'?location.hash.slice(1):'');
 const _SK=_HP.get('sk')||'',_SN=_HP.get('sn')||'';
 if(_SK){keep('biruni-sk-'+ROOM,_SK);if(_SN){keep('biruni-sn-'+ROOM,_SN);keep('biruni-me',_SN)}}
@@ -1644,7 +1828,11 @@ function label(){document.title=T.title;$('hero').textContent=T.hero;$('introTex
  $('handCancel').textContent=T.handCancel;$('lSent').textContent=bare(T.sent);$('lWait').textContent=bare(T.queued);$('shotHint').textContent=shotFix()?T.shoot:T.waiting;
  $('shot').setAttribute('aria-label',T.shoot);$('langBtn').setAttribute('aria-label',T.language);
  $('langCode').textContent=LANG.split('_')[0].toUpperCase();const e=$('list').querySelector('.empty');if(e)e.textContent=T.none;
- if(privMode&&$('privWarn'))$('privWarn').textContent=T.incognito||'';if(typeof count==='function')count();
+ if(privMode&&$('privWarn'))$('privWarn').textContent=T.incognito||'';
+ if($('eodTitle'))$('eodTitle').textContent=T.eodTitle||'Items not yet protected by 2 copies';
+ if($('eodBody'))$('eodBody').textContent=T.eodBody||'Keep this page open or connect to Wi-Fi so every item reaches 2 verified copies.';
+ if($('eodBtn'))$('eodBtn').textContent=T.eodDismiss||'Keep open & send now';
+ if(typeof count==='function')count();
  if(typeof driveLabel==='function')driveLabel();if(typeof capLabel==='function')capLabel()}
 function setLang(l){LANG=l;T=Object.assign({},ALL.en||{},ALL[l]||{});const h=document.documentElement;
  h.lang=l.replace('_','-');h.dir=(l==='ar'||l==='fa')?'rtl':'ltr';label();drawKinds();drawForm();if(typeof capDraw==='function')capDraw();
@@ -1905,12 +2093,25 @@ async function makePreview(blob){
  if(n>=raw.length)return blob;const out=raw.slice(0,n);
  if(raw[0]===0xff&&raw[1]===0xd8){out[n-2]=0xff;out[n-1]=0xd9}
  return new Blob([out],{type:blob.type||'image/jpeg'})}
-async function sealRecord(it){if(!PCKEY||!it||!it.meta||it.meta.sealed||!it.blob)return it;
- try{const orig=await sealItem({meta:it.meta,blob:it.blob});let prev=null;
-  if(!it.carried&&!it.prevSent){const pb=it.cap?it.blob:await makePreview(it.blob);
+async function blobSha(b){if(!b||typeof b.arrayBuffer!=='function')return '';
+ const u=new Uint8Array(await crypto.subtle.digest('SHA-256',await b.arrayBuffer()));
+ let s='';for(let i=0;i<u.length;i++)s+=u[i].toString(16).padStart(2,'0');return s}
+function itemSt(x){return (x&&typeof x.st==='number')?x.st:0}
+function badgeFor(x){const st=itemSt(x);return st===3?'✓✓':st===2?'✓':st===1?'☁️':st===9?'✗':(x&&x.prevSent?'◐':'⏳')}
+async function sealRecord(it){if(!it)return it;
+ const st=itemSt(it),c=typeof it.c==='number'?it.c:0,at=it.at||NOW(),tu=it.tu||(it.meta&&it.meta.tu)||(!SKEW_OK?1:0);
+ if(it.meta&&it.meta.sealed){
+  if(!it.h&&it.blob)it.h=await blobSha(it.blob);
+  it.st=st;it.c=c;it.at=at;if(tu){it.tu=1;it.meta.tu=1}return it}
+ if(!PCKEY||!it.meta||!it.blob)return it;
+ try{if(tu)it.meta.tu=1;
+  const orig=await sealItem({meta:it.meta,blob:it.blob}),h=await blobSha(orig);let prev=null;
+  if(!it.carried&&!it.prevSent&&st<1){const pb=it.cap?it.blob:await makePreview(it.blob);
    prev=await sealItem({meta:Object.assign({},it.meta,{preview:true}),blob:pb})}
   const r={id:it.id,blob:orig,prev:prev,prevSent:!!it.prevSent,meta:{id:it.id,sealed:1,t:it.meta.t||Date.now()},
-   room:it.room||ROOM,carried:!!it.carried,pk:PCKEY};
+   room:it.room||ROOM,carried:!!it.carried,pk:PCKEY,st:st,c:c,h:it.h||h,at:at};
+  if(tu){r.tu=1;r.meta.tu=1;r.t0=it.t0||it.meta.t}
+  if(it.why)r.why=it.why;
   if(it.cap){r.cap=1;if(it.csj)r.csj=it.csj}return r}catch(e){return it}}   /* pk: the key it is sealed for (.bfp kid) */
 function openDb(){return new Promise(r=>{try{const q=indexedDB.open('biruni-photos',1);
  q.onupgradeneeded=()=>q.result.createObjectStore('q',{keyPath:'id'});q.onsuccess=()=>r(q.result);
@@ -1922,11 +2123,27 @@ async function put(it){
   if(!it.meta.device_id)it.meta.device_id=DEVID;
   const nm=($('me')&&$('me').value||kept('biruni-me')||'').trim().slice(0,40);
   if(!it.meta.by&&nm)it.meta.by=nm;
-  if(!it.meta.surveyor)it.meta.surveyor=it.meta.by||nm}
+  if(!it.meta.surveyor)it.meta.surveyor=it.meta.by||nm;
+  if(!SKEW_OK){it.tu=1;it.t0=it.meta.t;it.meta.tu=1}}
+ if(it&&typeof it.st!=='number')it.st=0;
+ if(it&&typeof it.c!=='number')it.c=0;
+ if(it&&!it.at)it.at=NOW();
  it=await sealRecord(it);if(db){try{await tx('readwrite',s=>s.put(it));return it}catch(e){}}
  mem=mem.filter(x=>x.id!==it.id);mem.push(it);return it}
 async function all(){let a=[];if(db){try{a=await tx('readonly',s=>s.getAll())||[]}catch(e){}}
  return a.concat(mem).filter(x=>(x.room||'')===ROOM)}
+async function getItem(id){if(db){try{const x=await tx('readonly',s=>s.get(id));if(x)return x}catch(e){}}
+ return mem.find(x=>x.id===id)||null}
+async function setState(id,st,c,why){
+ const x=await getItem(id);if(!x)return null;
+ const nc=Math.max(x.c||0,typeof c==='number'?c:0);
+ if(st===3||nc>=2){await del(id);mark(id,'✓✓');await count();return {id:id,st:3,c:Math.max(2,nc)}}
+ x.st=st;x.c=nc;x.at=NOW();
+ if(why!=null)x.why=String(why);
+ if(st>=1){x.prev=null;x.prevSent=true}
+ if(db){try{await tx('readwrite',s=>s.put(x))}catch(e){}}
+ const m=mem.find(y=>y.id===id);if(m)Object.assign(m,x);
+ mark(id,badgeFor(x),x.why);await count();return x}
 async function sealWaiting(){if(!PCKEY)return;const a=await all();
  for(const x of a)if(x.meta&&!x.meta.sealed)await put(x)}
 async function del(id){mem=mem.filter(x=>x.id!==id);if(db){try{await tx('readwrite',s=>s.delete(id))}catch(e){}}}
@@ -1952,28 +2169,58 @@ function status(on,key){lastSt=[on,key];const b=$('st');chip(on?'on':key==='conn
   b.classList.remove('hide')}}
 let tt=null;function toast(s){const t=$('toast');t.textContent=s;t.classList.add('show');clearTimeout(tt);
  tt=setTimeout(()=>t.classList.remove('show'),2200)}
-function mark(id,s){const e=document.querySelector('[data-id="'+id+'"] .badge');if(!e)return;e.textContent=s;
- e.className='badge'+(s==='✓'?' ok':s==='✗'?' bad':'')}
-async function count(){const a=(await all()).filter(x=>!x.cap),n=a.length,p=a.filter(x=>x.prevSent).length,c=a.filter(x=>x.carried).length;
+function mark(id,s,why){const e=document.querySelector('[data-id="'+id+'"] .badge');if(!e)return;e.textContent=s;
+ e.className='badge'+((s==='✓'||s==='✓✓')?' ok':s==='✗'?' bad':s==='☁️'?' cloud':'');
+ if(why)e.title=String(why);else e.removeAttribute('title')}
+async function count(){const a=(await all()).filter(x=>!x.cap),
+  a0=a.filter(x=>itemSt(x)===0),a1=a.filter(x=>itemSt(x)===1),a2=a.filter(x=>itemSt(x)===2),a9=a.filter(x=>itemSt(x)===9),
+  n0=a0.length,n1=a1.length,n2=a2.length,n9=a9.length,n=n0+n1+n2,p=a0.filter(x=>x.prevSent).length,c=a.filter(x=>x.carried&&itemSt(x)<3).length;
  $('nSent').textContent=sent;$('nWait').textContent=n;
- const wTxt=(T.waitingPhotos||'{n} photos waiting').replace('{n}',n-p),
+ const wTxt=(T.waitingPhotos||'{n} photos waiting').replace('{n}',n0-p),
   pTxt=(T.previewSent||'{n} arrived as preview, original waiting for Wi-Fi').replace('{n}',p),
   dTxt=(T.drivePreview||'').replace('{n}',p),
-  wt=p?(p===n?(typeof DRV==='object'&&DRV.on&&DRV.go()&&dTxt?dTxt:pTxt):wTxt+' · '+pTxt):(T.waitingPhotos||'{n} photos waiting').replace('{n}',n);
- if($('waitPill')){if(n){$('waitPill').textContent=wt;$('waitPill').classList.remove('hide')}
+  wt0=p?(p===n0?(typeof DRV==='object'&&DRV.on&&DRV.go()&&dTxt?dTxt:pTxt):wTxt+' · '+pTxt):(T.waitingPhotos||'{n} photos waiting').replace('{n}',n0);
+ let wt=wt0;
+ if(n1||n2||n9){const parts=[];
+  if(n0)parts.push(wt0);
+  if(n1)parts.push((T.countCloud||'☁️ {n} in the cloud, waiting for the office').replace('{n}',n1));
+  if(n2)parts.push((T.countOffice||'{n} at the office, waiting for 2nd copy').replace('{n}',n2));
+  if(n9)parts.push((T.countRefused||'{n} refused — kept on this phone').replace('{n}',n9));
+  wt=parts.join(' · ')}
+ const hasPending=(n+n9)>0;
+ if($('waitPill')){if(hasPending){$('waitPill').textContent=wt;$('waitPill').classList.remove('hide')}
   else if(typeof LAD==='object'&&LAD._items.length)LAD.drawPill();
   else $('waitPill').classList.add('hide')}
- $('lWait').textContent=n?wt:bare(T.queued);
+ $('lWait').textContent=hasPending?wt:bare(T.queued);
  $('handInfo').textContent=c?T.handCarry.replace('{n}',c):'';
- $('waitBox').classList.toggle('warn',n>0)}
+ $('waitBox').classList.toggle('warn',hasPending)}
 /*SEND{*/
 /* the phone talks to the PC's own server: one request per photo */
 /* every request has a time limit: a photo whose sending stalled (mobile data, the tunnel) waited for ever, the
    phone never tried again and said "Waiting to send" while the computer got nothing */
 function within(ms){const c=new AbortController();setTimeout(()=>c.abort(),ms);return c.signal}
-async function sendItem(it){return (await fetch('photo?m='+encodeURIComponent(JSON.stringify(it.meta)),{method:'POST',
- body:it.blob,headers:{'Content-Type':it.blob.type||'image/jpeg'},signal:within(60000+it.blob.size/20)})).status}
-async function alive(){return (await fetch('ping',{cache:'no-store',signal:within(15000)})).ok}
+async function sendItem(it){const m=Object.assign({},it.meta);
+ if((it.tu||(it.meta&&it.meta.tu))&&SKEW_OK)m.dt=Math.max(-2592000000,Math.min(2592000000,SKEW));
+ const r=await fetch('photo?m='+encodeURIComponent(JSON.stringify(m)),{method:'POST',
+  body:it.blob,headers:{'Content-Type':it.blob.type||'image/jpeg'},signal:within(60000+it.blob.size/20)});
+ let j=null;try{j=await r.json()}catch(e){}
+ if(j&&typeof j.rt==='number')noteTime(j.rt);
+ if(r.status===200&&j&&typeof j.c==='number'){setNl(true);return {status:200,c:j.c,h:j.h||'',rt:j.rt||0,nl:true}}
+ if(r.status!==200&&j&&j.reason)return {status:r.status,reason:j.reason};
+ return r.status}
+async function alive(){try{const r=await fetch('ping',{cache:'no-store',signal:within(15000)});if(!r.ok)return false;
+ try{const j=await r.json();if(j&&j.nl===1)setNl(true);if(j&&typeof j.now==='number')noteTime(j.now);
+  if(j&&typeof j.eod==='number')setEodHour(j.eod)}catch(e){}
+ return true}catch(e){return false}}
+async function copyPoll(){const a=(await all()).filter(x=>{const s=itemSt(x);return s===1||s===2}).slice(0,100);
+ if(!a.length)return;
+ try{const r=await fetch('copy-status',{method:'POST',body:JSON.stringify({ids:a.map(x=>x.id)}),
+  headers:{'Content-Type':'application/json'},signal:within(15000)});
+  if(!r.ok)return;const j=await r.json();if(j&&typeof j.rt==='number')noteTime(j.rt);
+  for(const row of (j&&j.items)||[]){if(!Array.isArray(row)||row.length<2)continue;
+   const [id,c,h8]=row,it=await getItem(id);if(!it)continue;
+   if(it.h&&h8&&!it.h.startsWith(h8))continue;
+   if(c>=2)await setState(id,3,c);else if(c===1&&itemSt(it)<2)await setState(id,2,1)}}catch(e){}}
 function offline(){status(false,'lost')}
 async function sendPos(p){const t0=performance.now();
  await fetch('pos',{method:'POST',body:JSON.stringify(p),headers:{'Content-Type':'application/json'},signal:within(15000)});
@@ -2378,23 +2625,53 @@ $('capJob').onchange=()=>capSelectJob($('capJob').value);$('capFin').onclick=cap
 $('capSkipBtn').onclick=capSkip;$('capDoneBtn').onclick=capCloseSheet;$('capSheet').onclick=e=>{if(e.target===$('capSheet'))capCloseSheet()};
 /*}CAP*/
 async function flush(){if(busy)return;busy=true;
- let arrived=0;try{const allItems=(await all()).sort((a,b)=>a.meta.t-b.meta.t),
+ let arrived=0;try{const allItems=(await all()).filter(x=>itemSt(x)<1).sort((a,b)=>a.meta.t-b.meta.t),
    rOnly=typeof relayOnly==='function'&&relayOnly(),items=rOnly?allItems.filter(x=>!x.prevSent&&!x.carried):allItems;
   let tried=0;for(const it of items){
-   const st=await sendItem(it);
+   const res=await sendItem(it),st=typeof res==='object'&&res?res.status:res;
    if(!st)continue;   /* 0: another way (Google Drive) is sending this one */
    tried++;
-   if(st===200){await del(it.id);if(!it.cap){sent++;arrived++;mark(it.id,'✓')}}
+   if(st===200){
+    const rc=(typeof res==='object'&&res&&typeof res.c==='number')?res.c:(NL?1:2);
+    const rh=(typeof res==='object'&&res&&res.h)||'';
+    if(NL&&rh&&it.h&&rh!==it.h){continue}
+    if(it.cap){if(!NL||rc>=2)await del(it.id);else await setState(it.id,2,rc)}
+    else if(!NL||rc>=2){await del(it.id);sent++;arrived++;mark(it.id,NL?'✓✓':'✓')}
+    else{await setState(it.id,2,rc);sent++;arrived++;if(typeof copyPoll==='function')setTimeout(copyPoll,1500)}}
    else if(st===202){if(it.cap)await del(it.id);else if(await prevDone(it.id))mark(it.id,'◐')}
-   else if(st===403){await del(it.id);if(!it.cap)mark(it.id,'✗');status(false,'blocked')}
-   else if(st===400||st===413){await del(it.id);if(!it.cap)mark(it.id,'✗')}
-    else if(it.cap&&st>=400&&st<500&&st!==429){await del(it.id)}
+   else if(st===403){
+    const why=(typeof res==='object'&&res&&res.reason)||T.blocked||'403';
+    if(it.cap||!NL){await del(it.id);if(!it.cap)mark(it.id,'✗',why)}
+    else await setState(it.id,9,0,why);
+    status(false,'blocked')}
+   else if(st===400||st===413||(st>=400&&st<500&&st!==429)){
+    const why=(typeof res==='object'&&res&&res.reason)||('HTTP '+st);
+    if(it.cap||!NL){await del(it.id);if(!it.cap)mark(it.id,'✗',why)}
+    else await setState(it.id,9,0,why)}
    else throw new Error(st);count()}
   const ok=tried?true:await alive();
   if(ok&&!rOnly)status(true,'connected');else if(!ok)offline()}catch(e){offline()}
  if(arrived){toast(T.arrived.replace('{n}',arrived));if(navigator.vibrate)navigator.vibrate([20,40,20])}
  busy=false;count()}
 setInterval(flush,5000);window.addEventListener('online',flush);
+setInterval(()=>{if(typeof copyPoll==='function')copyPoll()},30000);
+async function checkEod(force){
+ const a=(await all()).filter(x=>itemSt(x)!==3),posN=(typeof LAD==='object'&&LAD._items)?LAD._items.length:0;
+ const pend=a.length+posN;
+ if(!pend){if($('eodSheet'))$('eodSheet').classList.add('hide');return false}
+ if(!force){const d=new Date(NOW());if(d.getHours()<EOD_HOUR)return false;
+  const dk='biruni-eod-shown-'+ROOM+'-'+d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();
+  if(kept(dk)==='1')return false;keep(dk,'1')}
+ const s0=a.filter(x=>itemSt(x)===0).length,s1=a.filter(x=>itemSt(x)===1).length,
+  s2=a.filter(x=>itemSt(x)===2).length,s9=a.filter(x=>itemSt(x)===9).length,parts=[];
+ if(s0)parts.push((T.waitingPhotos||'{n} photos waiting').replace('{n}',s0));
+ if(s1)parts.push((T.countCloud||'☁️ {n} in the cloud, waiting for the office').replace('{n}',s1));
+ if(s2)parts.push((T.countOffice||'{n} at the office, waiting for 2nd copy').replace('{n}',s2));
+ if(s9)parts.push((T.countRefused||'{n} refused — kept on this phone').replace('{n}',s9));
+ if(posN)parts.push((T.ladKeep||'{n} positions kept on the phone').replace('{n}',posN));
+ if($('eodList'))$('eodList').textContent=parts.join(' · ')||(T.eodPending||'{n} items still waiting for 2 copies').replace('{n}',pend);
+ if($('eodSheet'))$('eodSheet').classList.remove('hide');return true}
+setInterval(()=>checkEod(false),60000);
 function thumb(it,s){const e=$('list').querySelector('.empty');if(e)e.remove();
  const d=document.createElement('div'),i=document.createElement('img'),sp=document.createElement('span');
  const u=URL.createObjectURL(it.blob);d.dataset.id=it.id;i.src=u;i.alt='';sp.className='badge';d.append(i,sp);
@@ -2420,7 +2697,9 @@ async function start(){if(!window.isSecureContext||!navigator.geolocation){statu
   {enableHighAccuracy:true,maximumAge:0,timeout:30000});wake();started=true;document.body.classList.add('working');
  $('intro').classList.add('hide');$('work').classList.remove('hide');$('bar').classList.remove('hide');flush();pollGuide();drawGuide()}
 setInterval(()=>tellPos(true),30000);
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){if(started)wake();flush()}});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){if(started)wake();flush()}else checkEod(true)});
+if($('eodBtn'))$('eodBtn').onclick=()=>{if($('eodSheet'))$('eodSheet').classList.add('hide');flush();if(typeof copyPoll==='function')copyPoll();if(typeof drivePump==='function')drivePump()};
+if($('eodSheet'))$('eodSheet').onclick=e=>{if(e.target===$('eodSheet'))$('eodSheet').classList.add('hide')};
 $('go').onclick=start;$('giveBtn').onclick=handGive;$('takeBtn').onclick=handTake;
 $('handCancel').onclick=()=>{if(HAND)HAND.done=true;handClose()};if(!window.RTCPeerConnection)$('handCard').classList.add('hide');$('roomBtn').onclick=openScan;$('roomOff').onclick=()=>setRoom(null);
 $('roomFind').oninput=roomList;$('scanSheet').onclick=e=>{if(e.target===$('scanSheet'))closeScan()};
@@ -2462,5 +2741,5 @@ setLang(pick(kept('biruni-lang'))||pick(HASHL)||pick(DEF)||pick(navigator.langua
 try{const c=JSON.parse(kept('biruni-cap-'+ROOM)||'null');if(c)capSet(c)}catch(e){}
 try{const g=JSON.parse(kept('biruni-guide-'+ROOM)||'null');if(g)setGuide(g)}catch(e){}
 {const e=document.createElement('div');e.className='empty';e.textContent=T.none;$('list').appendChild(e)}
-(async()=>{db=await openDb();await checkPrivate();await sealWaiting();if(typeof driveStart==='function')driveStart();const w=await all();w.filter(it=>!it.carried&&!it.cap).slice(-9).forEach(it=>thumb(it,it.prevSent?'◐':'⏳'));count();flush()})();
+(async()=>{probeSkew();db=await openDb();await checkPrivate();await sealWaiting();if(typeof driveStart==='function')driveStart();const w=await all();w.filter(it=>!it.carried&&!it.cap).slice(-9).forEach(it=>thumb(it,badgeFor(it)));count();flush()})();
 </script></body></html>"""

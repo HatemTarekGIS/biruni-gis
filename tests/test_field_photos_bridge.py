@@ -215,7 +215,7 @@ FORM = [{"label": "رقم العمود", "type": "text", "req": True},
         {"label": "عدد الكشافات", "type": "integer", "min": 1, "max": 8},
         {"label": "آمن؟", "type": "yesno"}, {"label": "المسّاح", "type": "text", "keep": True}]
 srv = PhotoServer(folder, os.path.join(work, "cert"), texts, "en", ["عمود", "لوحة"], 10198, ["127.0.0.1"],
-                  bind="127.0.0.1", form=FORM)
+                  bind="127.0.0.1", form=FORM, mirror_folder=os.path.join(work, "mirror"))
 NAMES = [f["name"] for f in srv.store.form]
 key = bridge.new_key()
 host = bridge.BridgeHost(srv.url("127.0.0.1") + "bridge#" + bridge.host_frag(key))

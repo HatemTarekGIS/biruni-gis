@@ -24,6 +24,7 @@ MAX_INFLATE = 1 << 20
 MAX_GOT = 50_000
 MAX_ENV_AGE_MS = 10 * 24 * 3600 * 1000   # 10 days: a long weekend or holiday with the office shut
 MAX_ENV_AHEAD_MS = 15 * 60 * 1000
+MAX_CLOCK_DRIFT_MS = 30 * 24 * 3600 * 1000
 
 
 def b64u(data):
@@ -57,6 +58,7 @@ class Ladder:
         self._states = {}
         self._newest_t = {}
         self.last_info = None
+        self.mirror_check = None
 
     def open(self, s):
         """Decrypt and optionally inflate a sealed bridge message; None on any failure."""
@@ -109,14 +111,25 @@ class Ladder:
         r, s = decode_dss_signature(der_sig)
         return self._pub, b64u(r.to_bytes(32, "big") + s.to_bytes(32, "big"))
 
-    def take(self, s, via, clean, resolve):
+    def take(self, s, via, clean, resolve, mirror_ok=None):
         """Process a sealed `lpos` envelope; returns (accepted_positions, ack_sealed_or_None)."""
         env = self.open(s)
         max_batch = 300 if via == "drive" else 60
-        if not self._valid_env(env, max_batch):
+        now_ms = int(time.time() * 1000)
+        if not self._valid_env(env, max_batch, now_ms=now_ms):
             self.last_info = None
+            if self._off_time_env(env, max_batch, now_ms=now_ms):
+                ip, is_sig = self.sign(f"BRLT1|{now_ms}")
+                ltime = {
+                    "t": "ltime", "now": now_ms,
+                    "n": b64u(secrets.token_bytes(9)), "ts": now_ms,
+                    "ip": ip, "is": is_sig,
+                }
+                return [], self.seal(ltime)
             return [], None
         d, e, bl = env["d"], env["e"], env.get("bl", 0)
+        env_ts = float(env["ts"])
+        drift_ms = now_ms - env_ts if abs(now_ms - env_ts) <= MAX_CLOCK_DRIFT_MS else 0.0
         bl = max(0, bl) if type(bl) is int else 0
         lo = env.get("lo", 1)
         lo = lo if type(lo) is int and lo >= 1 else 1
@@ -138,7 +151,12 @@ class Ladder:
                     dups += 1
                     continue
                 self._mark_seen(st, seq)
-                cleaned = clean(pos)
+                pos_in = pos
+                raw_pt = pos.get("t")
+                if isinstance(raw_pt, (int, float)) and not isinstance(raw_pt, bool) and math.isfinite(raw_pt):
+                    if abs(drift_ms) > 60_000 and abs(env_ts - raw_pt) <= MAX_ENV_AGE_MS:
+                        pos_in = dict(pos, t=int(round(raw_pt + drift_ms)))
+                cleaned = clean(pos_in)
                 if cleaned is None:
                     continue
                 res = resolve(cleaned)
@@ -163,16 +181,23 @@ class Ladder:
             upto = st["upto"]
             self.last_info = {"d": d, "backlog": bl, "dups": dups}
 
+        if mirror_ok is None and callable(self.mirror_check):
+            try:
+                mirror_ok = bool(self.mirror_check(d, e, upto, accepted))
+            except Exception:  # noqa: BLE001
+                mirror_ok = False
+        u2 = upto if mirror_ok else 0
         ip, is_sig = self.sign(f"BRLA1|{d}|{e}|{upto}")
+        _, is2_sig = self.sign(f"BRLA2|{d}|{e}|{upto}|{u2}")
         ack = {
-            "t": "lack", "d": d, "e": e, "upto": upto,
-            "n": b64u(secrets.token_bytes(9)), "ts": int(time.time() * 1000),
-            "ip": ip, "is": is_sig,
+            "t": "lack", "d": d, "e": e, "upto": upto, "u2": u2,
+            "n": b64u(secrets.token_bytes(9)), "ts": now_ms,
+            "ip": ip, "is": is_sig, "is2": is2_sig,
         }
         return accepted, self.seal(ack)
 
     @staticmethod
-    def _valid_env(env, max_batch=60):
+    def _shape_ok(env, max_batch=60):
         if not env or env.get("t") != "lpos":
             return False
         if type(env.get("v")) is not int or env["v"] != 1:
@@ -189,8 +214,25 @@ class Ladder:
         ts = env.get("ts")
         if not isinstance(ts, (int, float)) or isinstance(ts, bool) or not math.isfinite(ts):
             return False
-        now_ms = time.time() * 1000
+        return True
+
+    @classmethod
+    def _valid_env(cls, env, max_batch=60, now_ms=None):
+        if not cls._shape_ok(env, max_batch):
+            return False
+        ts = env["ts"]
+        if now_ms is None:
+            now_ms = time.time() * 1000
         return (now_ms - MAX_ENV_AGE_MS) <= ts <= (now_ms + MAX_ENV_AHEAD_MS)
+
+    @classmethod
+    def _off_time_env(cls, env, max_batch=60, now_ms=None):
+        if not cls._shape_ok(env, max_batch):
+            return False
+        ts = env["ts"]
+        if now_ms is None:
+            now_ms = time.time() * 1000
+        return not ((now_ms - MAX_ENV_AGE_MS) <= ts <= (now_ms + MAX_ENV_AHEAD_MS))
 
     @staticmethod
     def _advance_upto(st):

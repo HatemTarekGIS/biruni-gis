@@ -395,7 +395,7 @@ class DriveIntake:
             raise BfpError("photo id does not match its header")
         meta = dict(meta, sk=sk, route="drive")   # the cert decides the surveyor, never the sealed data
         meta.pop("preview", None)
-        return self.store.save(meta, data)
+        return self.store.save(meta, data, ssha=h["sha"])
 
     def retry_refused(self):
         """Read the refused files again on the next pass (after a surveyor or phone is let back in)."""

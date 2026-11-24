@@ -470,6 +470,31 @@ js("LAD._lastDriveClean = 0; 1")
 check(wait(lambda: len(FAKE["binned"]) == 1 and len(bgp_files()) == 0, 10),
       f"after ack, .bgp file moves to the bin (binned={FAKE['binned']})")
 
+# Unacked .bgp file is NEVER trashed, even if older than 6 hours (P1 invariant)
+js(r"""(() => {
+ const now = Date.now();
+ (async () => {
+  fix = {lat: 24.755, lon: 46.655, acc: 4, t: now};
+  await tellPos(true);
+ })();
+})();1""")
+check(wait(lambda: len(bgp_files()) == 1, 25),
+      f"second .bgp uploaded with seq 4 ({[f['name'] for f in bgp_files()]})")
+# Backdate the #g record's timestamp by 8 hours (> 6 hours) while LAD.upto is still 3 (< hi=4)
+js(r"""(async () => {
+ const recs = await dgall();
+ for (const r of recs) {
+  r.at = Date.now() - 8 * 3600 * 1000;
+  await dput(r);
+ }
+ LAD._lastDriveClean = 0;
+ await LAD._driveClean();
+ window._unackedCleanDone = true;
+})();1""")
+check(wait(lambda: js("window._unackedCleanDone") is True, 10), "ran _driveClean on 8-hour-old unacked .bgp")
+check(len(FAKE["binned"]) == 1 and len(bgp_files()) == 1,
+      f"a .bgp that was never acked is NOT trashed even after 8 hours (binned={FAKE['binned']}, live={[f['name'] for f in bgp_files()]})")
+
 check(not CSP_REFUSED, f"no CSP violations logged ({CSP_REFUSED})")
 
 srv.stop()

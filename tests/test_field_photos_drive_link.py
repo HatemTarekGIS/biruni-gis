@@ -522,7 +522,7 @@ def ajs(page, expr):
 
 
 def queued(pid):
-    return ajs(ph, "all().then(a=>a.some(x=>x.id==='%s'))" % pid)
+    return ajs(ph, "all().then(a=>a.some(x=>x.id==='%s'&&!(x.st>=1)))" % pid)
 
 
 take("photo-drive-0001")

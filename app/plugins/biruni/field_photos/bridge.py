@@ -227,6 +227,9 @@ const unhex=h=>Uint8Array.from(h.match(/../g),x=>parseInt(x,16));
 const cat=(...a)=>{const o=new Uint8Array(a.reduce((n,x)=>n+x.length,0));let i=0;for(const x of a){o.set(x,i);i+=x.length}return o};
 const sha=async b=>new Uint8Array(await crypto.subtle.digest('SHA-256',b));
 const rid=()=>b64u.enc(crypto.getRandomValues(new Uint8Array(9)));
+var SKEW=typeof SKEW==='number'?SKEW:0,SKEW_OK=typeof SKEW_OK==='boolean'?SKEW_OK:false;
+function NOW(){return Date.now()+SKEW}
+function noteTime(ms){if(typeof ms==='number'&&isFinite(ms)&&ms>1700000000000){SKEW=Math.round(ms-Date.now());SKEW_OK=true}}
 /* the PC's identity (see bridge.py): the receiver signs with &s=, a phone checks against the pin &i= (kept per key,
    so a page that rebuilds its address keeps it). No pin: no check (older QR codes). */
 const ID={sk:null,pub:null,pin:null};
@@ -269,7 +272,7 @@ async function schnorr(sk,msg,aux){const P=pmul(sk),d=(P[1]&1n)?SN-sk:sk;
 let NID=null;
 async function nostrEvent(content,topic){if(!NID){let sk=0n;
   while(!sk||sk>=SN)sk=big(crypto.getRandomValues(new Uint8Array(32)));NID={sk:sk,pk:hex(b32(pmul(sk)[0]))}}
- const ev={pubkey:NID.pk,created_at:Math.floor(Date.now()/1000),kind:BR.kind,tags:[['t',topic]],content:content};
+ const ev={pubkey:NID.pk,created_at:Math.floor(NOW()/1000),kind:BR.kind,tags:[['t',topic]],content:content};
  const id=await sha(enc.encode(JSON.stringify([0,ev.pubkey,ev.created_at,ev.kind,ev.tags,ev.content])));
  ev.id=hex(id);ev.sig=hex(await schnorr(NID.sk,id,crypto.getRandomValues(new Uint8Array(32))));return ev}
 /* the key: AES-GCM for every message, and the meeting name the relays see */
@@ -529,10 +532,16 @@ const SIG={relays:[],seen:new Set(),loose:new Set(),on:null,onchange:null,_lastC
   if(obj.t==='answer'&&ID.sk){const g=await IDSIGN('BRA1|'+obj.sid+'|'+obj.sdp);obj.ip=g.pub;obj.is=g.sig}
   else if(obj.t==='rhello'&&ID.sk){const g=await IDSIGN('BRH0|'+obj.sid+'|'+(obj.pk||''));obj.ip=g.pub;obj.is=g.sig}
   else if(obj.t==='rack'&&ID.sk){
-   const g=await IDSIGN('BRAK1|'+obj.id+'|'+obj.kind+'|'+obj.nonce);obj.ip=g.pub;obj.is=g.sig}
+   const g=await IDSIGN('BRAK1|'+obj.id+'|'+obj.kind+'|'+obj.nonce);obj.ip=g.pub;obj.is=g.sig;
+   if(obj.h!=null||obj.c!=null||obj.rt!=null){
+    const g2=await IDSIGN('BRAK2|'+obj.id+'|'+obj.kind+'|'+obj.nonce+'|'+(obj.h||'')+'|'+(obj.c??0)+'|'+(obj.rt??0));
+    if(g2)obj.is2=g2.sig}}
+  else if(obj.t==='rcgot'&&ID.sk){
+   const s=(obj.items||[]).map(x=>x[0]+':'+x[1]+':'+(x[2]||'')).join(',');
+   const g=await IDSIGN('BRCP1|'+obj.nonce+'|'+(obj.rt||0)+'|'+s);obj.ip=g.pub;obj.is=g.sig}
   else if(obj.t==='tun'&&ID.sk){const g=await IDSIGN('BRTN1|'+obj.h);obj.ip=g.pub;obj.is=g.sig}
   else if(obj.t==='org'&&ID.sk){const g=await IDSIGN('BROR1|'+obj.h);obj.ip=g.pub;obj.is=g.sig}},
- async send(obj,z){obj.n=rid();obj.ts=Date.now();this.seen.add(obj.n);await this._sign(obj);
+ async send(obj,z){obj.n=rid();obj.ts=NOW();this.seen.add(obj.n);await this._sign(obj);
   const s=await seal(obj,z);let ev=null;
   try{ev=await nostrEvent(s,BK.topic)}catch(e){}for(const r of this.relays)r.send(s,ev)},
  async sendRaw(s,kind){if(typeof s!=='string')return false;
@@ -549,7 +558,7 @@ const SIG={relays:[],seen:new Set(),loose:new Set(),on:null,onchange:null,_lastC
  async sendChunk(obj){
   const pace=BR.paceMs!=null?BR.paceMs:180,wait=Math.max(0,this._lastChunk+pace-Date.now());
   if(wait)await sleep(wait);this._lastChunk=Date.now();
-  obj.n=rid();obj.ts=Date.now();this.seen.add(obj.n);const s=await seal(obj,true);
+  obj.n=rid();obj.ts=NOW();this.seen.add(obj.n);const s=await seal(obj,true);
   let ev=null;try{ev=await nostrEvent(s,BK.topic)}catch(e){}
   const tried=new Set();
   while(true){const pair=this.healthyAck().filter(r=>!tried.has(r)&&(ev||(r.kind||'nostr')!=='nostr')).slice(0,2);
@@ -559,7 +568,10 @@ const SIG={relays:[],seen:new Set(),loose:new Set(),on:null,onchange:null,_lastC
   const nr=this.relays.find(r=>r.kind==='ntfy');return nr?await nr.sendChunk(s):false},
  async arrived(s,kind,relay){const o=await unseal(s);if(!o||!o.n||this.seen.has(o.n))return;this.seen.add(o.n);
   if(this.seen.size>4000)this.seen.delete(this.seen.values().next().value);
-  if(Math.abs(Date.now()-(o.ts||0))>15*60000)return;
+  if(o.t==='ltime'){
+   if(ID.pin&&!await IDOK(o.ip,o.is,'BRLT1|'+o.now)){this.refused=(this.refused||0)+1;return}
+   noteTime(o.now);this.notePc();if(this.on)this.on(o,kind,s,relay);return}
+  if(Math.abs(NOW()-(o.ts||0))>15*60000)return;
   /* answers and receipts to this phone must come from the PC (signed) */
   if(o.t==='answer'&&ID.pin&&!this.loose.has(o.sid)&&!await IDOK(o.ip,o.is,'BRA1|'+o.sid+'|'+o.sdp)){
    this.refused=(this.refused||0)+1;return}
@@ -567,13 +579,17 @@ const SIG={relays:[],seen:new Set(),loose:new Set(),on:null,onchange:null,_lastC
    this.refused=(this.refused||0)+1;return}
   if(o.t==='rack'&&ID.pin&&!await IDOK(o.ip,o.is,'BRAK1|'+o.id+'|'+o.kind+'|'+o.nonce)){
    this.refused=(this.refused||0)+1;return}
-  if(o.t==='lack'&&ID.pin&&!await IDOK(o.ip,o.is,'BRLA1|'+o.d+'|'+o.e+'|'+o.upto)){
-   this.refused=(this.refused||0)+1;return}
+  if(o.t==='rcgot'&&ID.pin){
+   const cs=(Array.isArray(o.items)?o.items:[]).map(x=>x[0]+':'+x[1]+':'+(x[2]||'')).join(',');
+   if(!await IDOK(o.ip,o.is,'BRCP1|'+o.nonce+'|'+(o.rt||0)+'|'+cs)){this.refused=(this.refused||0)+1;return}}
+  if(o.t==='lack'&&ID.pin){
+   if(!await IDOK(o.ip,o.is,'BRLA1|'+o.d+'|'+o.e+'|'+o.upto)){this.refused=(this.refused||0)+1;return}
+   if(o.is2!=null&&!await IDOK(o.ip,o.is2,'BRLA2|'+o.d+'|'+o.e+'|'+o.upto+'|'+(o.u2||0))){this.refused=(this.refused||0)+1;return}}
   if(o.t==='tun'&&ID.pin&&!await IDOK(o.ip,o.is,'BRTN1|'+o.h)){
    this.refused=(this.refused||0)+1;return}
   if(o.t==='org'&&ID.pin&&!await IDOK(o.ip,o.is,'BROR1|'+o.h)){
    this.refused=(this.refused||0)+1;return}
-  if(o.t==='answer'||o.t==='rhello'||o.t==='rguide'||o.t==='rack'||o.t==='lack'||o.t==='tun'||o.t==='org'
+  if(o.t==='answer'||o.t==='rhello'||o.t==='rguide'||o.t==='rack'||o.t==='rcgot'||o.t==='lack'||o.t==='tun'||o.t==='org'
    ||(typeof o.t==='string'&&o.t.startsWith('mesh_')))this.notePc();
   if(this.on)this.on(o,kind,s,relay)}};
 /* a private line through a teammate's phone: the phone and the PC agree on a key of their own (ECDH on P-256),
@@ -636,16 +652,48 @@ function pollGuide(){}
 function hello(m){if(Array.isArray(m.kinds))KINDS=m.kinds.map(String).slice(0,24);drawKinds();
  if(typeof m.pk==='string'&&m.pk.length>80&&m.pk.length<100){PCKEY=m.pk;keep('biruni-pckey-'+ROOM,m.pk);sealWaiting()}
  if(Array.isArray(m.form)){FORM=m.form.filter(f=>f&&f.name&&f.label).slice(0,30);drawForm()}
+ if(m&&m.nl===1&&typeof setNl==='function')setNl(true);
+ if(m&&typeof m.now==='number')noteTime(m.now);
+ if(m&&typeof m.eod==='number'&&typeof setEodHour==='function')setEodHour(m.eod);
  if(typeof LAD==='object')LAD.onCap(m);
  if(!kept('biruni-lang')&&!HASHL&&pick(m.lang))setLang(pick(m.lang));keep('biruni-hello-'+ROOM,JSON.stringify({kinds:KINDS,form:FORM}))}
+let COPY_REQ=null;
+async function copyPoll(){
+ const a=(await all()).filter(x=>{const s=typeof itemSt==='function'?itemSt(x):(x.st||0);return s===1||s===2}).slice(0,100);
+ if(!a.length)return;
+ const ids=a.map(x=>x.id),nonce=rid();COPY_REQ={nonce:nonce,ids:new Set(ids)};
+ if(lineOpen()){try{lineText(JSON.stringify({t:'chave',nonce:nonce,ids:ids}))}catch(e){}}
+ else if(SIG.up()){try{await SIG.send({t:'rchave',nonce:nonce,ids:ids},true)}catch(e){}}}
+async function handleCopyGot(m){
+ const q=COPY_REQ;if(!q||!m||m.nonce!==q.nonce||!Array.isArray(m.items))return;
+ const cs=m.items.map(x=>Array.isArray(x)?(x[0]+':'+x[1]+':'+(x[2]||'')):'').join(',');
+ if(ID.pin&&!await IDOK(m.ip,m.is,'BRCP1|'+m.nonce+'|'+(m.rt||0)+'|'+cs)){SIG.refused=(SIG.refused||0)+1;return}
+ COPY_REQ=null;if(typeof m.rt==='number')noteTime(m.rt);
+ for(const row of m.items){if(!Array.isArray(row)||row.length<2)continue;
+  const id=String(row[0]||''),c=+row[1]||0,h8=String(row[2]||'');
+  if(!q.ids.has(id))continue;
+  const it=typeof getItem==='function'?await getItem(id):(await all()).find(x=>x.id===id);
+  if(!it)continue;
+  if(it.h&&h8&&!it.h.startsWith(h8)){SIG.refused=(SIG.refused||0)+1;continue}
+  if(c>=2&&typeof setState==='function')await setState(id,3,c);
+  else if(c===1&&typeof setState==='function'&&(typeof itemSt==='function'?itemSt(it)<2:(it.st||0)<2))await setState(id,2,1)}}
 async function handleAck(m){const f=acks.get(m.id);if(!f)return;
  if(m.status===200){const k=m.kind||'original',n=m.nonce||'';
   if(k!==f.kind||n!==f.nonce||!await IDOK(m.ip,m.is,'BRAK1|'+m.id+'|'+k+'|'+n)){
-   SIG.refused=(SIG.refused||0)+1;return}}
- acks.delete(m.id);f.resolve(m.status===200&&f.kind==='preview'?202:m.status)}
+   SIG.refused=(SIG.refused||0)+1;return}
+  if(k==='original'&&(m.is2!=null||m.h!=null||m.c!=null)){
+   if(m.is2!=null&&!await IDOK(m.ip,m.is2,'BRAK2|'+m.id+'|'+k+'|'+n+'|'+(m.h||'')+'|'+(m.c??0)+'|'+(m.rt??0))){
+    SIG.refused=(SIG.refused||0)+1;return}
+   if(f.h&&m.h&&f.h!==m.h){SIG.refused=(SIG.refused||0)+1;return}
+   if(typeof m.rt==='number')noteTime(m.rt);
+   acks.delete(m.id);f.resolve({status:200,c:typeof m.c==='number'?m.c:1,h:m.h||'',rt:m.rt||0,nl:true});return}}
+ acks.delete(m.id);
+ if(m.status!==200&&m.reason)f.resolve({status:m.status,reason:String(m.reason)});
+ else f.resolve(m.status===200&&f.kind==='preview'?202:m.status)}
 /* what the PC says, however it comes */
 function fromPc(m){SIG.notePc();if(m.t==='hello')hello(m);else if(m.t==='guide')setGuide(m.g);
- else if(m.t==='ack')handleAck(m);else if(m.t==='dgot'&&typeof driveGot==='function')driveGot(m);
+ else if(m.t==='ack')handleAck(m);else if(m.t==='cgot')handleCopyGot(m);
+ else if(m.t==='dgot'&&typeof driveGot==='function')driveGot(m);
  else if(m.t==='la'&&typeof m.s==='string')SIG.arrived(m.s,'direct');
  else if(m.t==='tun'&&typeof LAD==='object'){
   if(!ID.pin)LAD.onTun(m.h);
@@ -728,6 +776,8 @@ async function onSignal(o,kind){
  else if(o.t==='rhello'&&(!o.sid||o.sid===rsid)){hello(o);if(!lineOpen()){RELAY=true;say(false,'relayMode');flush();tellPos(true)}}
  else if(o.t==='rguide')setGuide(o.g);
  else if(o.t==='rack')handleAck(o);
+ else if(o.t==='rcgot')handleCopyGot(o);
+ else if(o.t==='ltime'){if(typeof LAD==='object')LAD.tick()}
  else if(o.t==='lack'&&typeof LAD==='object')LAD.onAck(o,kind);
  else if(o.t==='tun'&&typeof LAD==='object')LAD.onTun(o.h);
  else if(o.t==='org'&&typeof LAD==='object')LAD.onOrg(o.h)}
@@ -748,7 +798,8 @@ async function sendRelayPreview(it){
    sends the original, unless Drive is sending it (0: skipped); one this line is sending is held from Drive. */
 const NOPREV=new Set();
 function lineFresh(){if(typeof DRV==='object')DRV.bad=0;NOPREV.clear();
- if(typeof dreceipts==='function')setTimeout(dreceipts,3000)}
+ if(typeof dreceipts==='function')setTimeout(dreceipts,3000);
+ if(typeof copyPoll==='function')setTimeout(copyPoll,1000)}
 async function sendItem(it){
  if(lineOpen()&&typeof driveFirst==='function'&&driveFirst(it)){
   if(it.prevSent||!it.prev||NOPREV.has(it.id))return 0;
@@ -757,8 +808,12 @@ async function sendItem(it){
  if(DRV.holds(it.id))return 0;const own=lineOpen()&&!DRV.HOLD.has(it.id);
  if(own)DRV.HOLD.set(it.id,'line');try{return await sendItem1(it)}finally{if(own)DRV.HOLD.delete(it.id)}}
 async function sendLine(it,blob,kind){
- const buf=new Uint8Array(await blob.arrayBuffer()),nonce=rid(),meta=kind==='preview'?Object.assign({},it.meta,{preview:true}):it.meta;
- const done=new Promise((resolve,reject)=>{acks.set(it.id,{kind:kind,nonce:nonce,line:true,resolve:resolve,reject:reject});
+ const buf=new Uint8Array(await blob.arrayBuffer()),nonce=rid();
+ const baseMeta=Object.assign({},it.meta);
+ if((it.tu||(it.meta&&it.meta.tu))&&SKEW_OK)baseMeta.dt=Math.max(-2592000000,Math.min(2592000000,SKEW));
+ const meta=kind==='preview'?Object.assign(baseMeta,{preview:true}):baseMeta;
+ const h=kind==='original'?(it.h||(typeof blobSha==='function'?await blobSha(blob):'')):'';
+ const done=new Promise((resolve,reject)=>{acks.set(it.id,{kind:kind,nonce:nonce,h:h,line:true,resolve:resolve,reject:reject});
   setTimeout(()=>{const f=acks.get(it.id);if(f&&f.nonce===nonce){acks.delete(it.id);reject(new Error('timeout'))}},
    kind==='preview'?60000:180000)});
  lineText(JSON.stringify({t:'photo',id:it.id,kind:kind,nonce:nonce,meta:meta,size:buf.length,type:blob.type||'image/jpeg'}));
@@ -808,8 +863,13 @@ async function onRelay(o,kind,s,relay){
  if(o.t==='offer')return onOffer(o);
  if(o.t==='rhi'){tell({type:'phone',ua:String(o.ua||'').slice(0,160),relay:true});
   await SIG.send({t:'rhello',sid:String(o.sid||''),kinds:CFG.kinds,lang:CFG.lang,form:CFG.form||[],pk:CFG.pk||'',
-   lad:CFG.lad?1:0,tun:CFG.tun||'',org:CFG.org||''},true);
+   lad:CFG.lad?1:0,tun:CFG.tun||'',org:CFG.org||'',nl:1,now:Date.now(),eod:CFG.eod??18},true);
   if(GV)try{await SIG.send({t:'rguide',g:JSON.parse(GUIDE_TXT)},true)}catch(e){}return}
+ if(o.t==='rchave'&&Array.isArray(o.ids)&&typeof o.nonce==='string'&&o.nonce.length<80){
+  const ids=o.ids.filter(x=>typeof x==='string'&&x.length<80).slice(0,100);let r={};
+  try{r=await (await fetch('copy-status',{method:'POST',body:JSON.stringify({ids:ids})})).json()}catch(x){}
+  const items=Array.isArray(r.items)?r.items:[],rt=typeof r.rt==='number'?r.rt:Date.now();
+  await SIG.send({t:'rcgot',nonce:o.nonce,rt:rt,items:items},true);return}
  if(o.t==='rpos'){const p=Object.assign({},o.p||{},{route:(kind==='own'||kind==='org')?kind:'relay'});
   fetch('pos',{method:'POST',body:JSON.stringify(p)}).catch(()=>{});return}
  if(o.t==='rchunk'&&o.id&&o.nonce&&+o.k>0&&+o.k<=128&&+o.i>=0&&+o.i<+o.k&&typeof o.d==='string'){
@@ -843,19 +903,29 @@ async function handle(P,data){
   fetch('pos',{method:'POST',body:JSON.stringify(p)}).catch(()=>{})}
  else if(m.t==='photo')P.cur={id:m.id,kind:m.kind==='preview'?'preview':'original',nonce:String(m.nonce||''),
   meta:m.meta,size:+m.size||0,type:String(m.type||'image/jpeg'),parts:[],got:0};
+ else if(m.t==='chave'&&Array.isArray(m.ids)&&typeof m.nonce==='string'&&m.nonce.length<80){
+  const ids=m.ids.filter(x=>typeof x==='string'&&x.length<80).slice(0,100);let r={};
+  try{r=await (await fetch('copy-status',{method:'POST',body:JSON.stringify({ids:ids})})).json()}catch(x){}
+  const items=Array.isArray(r.items)?r.items:[],rt=typeof r.rt==='number'?r.rt:Date.now();
+  const cs=items.map(x=>x[0]+':'+x[1]+':'+(x[2]||'')).join(',');
+  const g=await IDSIGN('BRCP1|'+m.nonce+'|'+rt+'|'+cs)||{};
+  try{P.send(JSON.stringify({t:'cgot',nonce:m.nonce,rt:rt,items:items,ip:g.pub,is:g.sig}))}catch(x){}}
  else if(m.t==='dhave'&&Array.isArray(m.ids)&&typeof m.nonce==='string'&&m.nonce.length<80){
   /* which of these photos does this PC hold as full originals (receipts: the phone may free its Drive copies) */
   const ids=m.ids.filter(x=>typeof x==='string'&&x.length<80).slice(0,200);let r={};
-  try{r=await (await fetch('drive-got',{method:'POST',body:JSON.stringify({ids:ids})})).json()}catch(x){}
+  try{r=await (await fetch('drive-got',{method:'POST',body:JSON.stringify({ids:ids,for_clean:!!m.nl})})).json()}catch(x){}
   const got=(Array.isArray(r.ids)?r.ids:[]).filter(x=>ids.includes(x)),
    cl=['auto','manual','keep'].includes(r.clean)?r.clean:'keep';
   const g=await IDSIGN('BRDG1|'+m.nonce+'|'+cl+'|'+got.join(','))||{};
   try{P.send(JSON.stringify({t:'dgot',nonce:m.nonce,clean:cl,ids:got,ip:g.pub,is:g.sig}))}catch(x){}}
- else if(m.t==='end'&&P.cur&&P.cur.id===m.id){const c=P.cur;P.cur=null;let st=400;
-  if(c.got===c.size){try{st=(await fetch('photo?m='+encodeURIComponent(JSON.stringify(c.meta)),{method:'POST',
-    body:new Blob(c.parts,{type:c.type}),headers:{'Content-Type':c.type}})).status}catch(x){st=503}}
+ else if(m.t==='end'&&P.cur&&P.cur.id===m.id){const c=P.cur;P.cur=null;let st=400,j=null;
+  if(c.got===c.size){try{const res=await fetch('photo?m='+encodeURIComponent(JSON.stringify(c.meta)),{method:'POST',
+    body:new Blob(c.parts,{type:c.type}),headers:{'Content-Type':c.type}});st=res.status;
+    try{j=await res.json()}catch(e){}}catch(x){st=503}}
+  const cnt=(j&&typeof j.c==='number')?j.c:(st===200?1:0),h=(j&&j.h)||'',rt=(j&&j.rt)||Date.now(),reason=(j&&j.reason)||'';
   const g=await IDSIGN('BRAK1|'+c.id+'|'+c.kind+'|'+c.nonce)||{};
-  try{P.send(JSON.stringify({t:'ack',id:c.id,kind:c.kind,nonce:c.nonce,status:st,ip:g.pub,is:g.sig}))}catch(x){}}}
+  const g2=await IDSIGN('BRAK2|'+c.id+'|'+c.kind+'|'+c.nonce+'|'+h+'|'+cnt+'|'+rt)||{};
+  try{P.send(JSON.stringify({t:'ack',id:c.id,kind:c.kind,nonce:c.nonce,status:st,c:cnt,h:h,rt:rt,reason:reason,ip:g.pub,is:g.sig,is2:g2.sig}))}catch(x){}}}
 function serve(ch,end,pc){ch.binaryType='arraybuffer';const P={send:s=>ch.send(s),pc:pc,cur:null},carried=new Map();
  let nextBin=null,q=Promise.resolve();
  /* a phone this phone carries: its messages are sealed for this PC; the first, in clear, brings its public key */
@@ -868,14 +938,14 @@ function serve(ch,end,pc){ch.binaryType='arraybuffer';const P={send:s=>ch.send(s
     if(m.t==='hi'&&m.e&&!v.key){const kp=await E2E.pair();v.key=await E2E.key(kp.kp,m.e);ports.add(v.P);
      const g=await IDSIGN('BRH1|'+m.e+'|'+kp.pub)||{};
      ch.send(JSON.stringify({t:'fwd',to:v.id,m:JSON.stringify({t:'hello',kinds:CFG.kinds,lang:CFG.lang,
-      form:CFG.form||[],pk:CFG.pk||'',lad:CFG.lad?1:0,tun:CFG.tun||'',org:CFG.org||'',e:kp.pub,ip:g.pub,is:g.sig})}));
+      form:CFG.form||[],pk:CFG.pk||'',lad:CFG.lad?1:0,tun:CFG.tun||'',org:CFG.org||'',nl:1,now:Date.now(),eod:CFG.eod??18,e:kp.pub,ip:g.pub,is:g.sig})}));
      tell({type:'phone',ua:String(m.ua||'').slice(0,160),via:true});if(GV)v.P.send('{"t":"guide","g":'+GUIDE_TXT+'}')}
     return}
    if(!v.key)return;const p=await E2E.open(v.key,data);
    if(p[0]===0)await handle(v.P,dec.decode(p.slice(1)));else await handle(v.P,p.slice(1).buffer)}).catch(()=>{})};
  const gone=id=>{const v=carried.get(id);if(v){ports.delete(v.P);carried.delete(id)}};
  ch.onopen=()=>{ports.add(P);ch.send(JSON.stringify({t:'hello',kinds:CFG.kinds,lang:CFG.lang,form:CFG.form||[],
-  pk:CFG.pk||'',lad:CFG.lad?1:0,tun:CFG.tun||'',org:CFG.org||''}));
+  pk:CFG.pk||'',lad:CFG.lad?1:0,tun:CFG.tun||'',org:CFG.org||'',nl:1,now:Date.now(),eod:CFG.eod??18}));
   if(GV)ch.send('{"t":"guide","g":'+GUIDE_TXT+'}')};
  ch.onclose=()=>{ports.delete(P);for(const id of [...carried.keys()])gone(id);end()};
  ch.onmessage=e=>{
@@ -1026,7 +1096,7 @@ def with_csp(page, connect=(), frames=()):
     frame = " ".join(map(_origin, frames)) or "'none'"
     csp = "; ".join([
         "default-src 'none'", f"script-src {sha('script')}", f"style-src {sha('style')}",
-        "img-src 'self' blob:", "media-src blob:", f"connect-src {' '.join(conn)}", "worker-src 'self'",
+        "img-src 'self' blob:", "media-src blob:", f"connect-src 'self' {' '.join(conn)}", "worker-src 'self'",
         "manifest-src 'self'", f"frame-src {frame}",
         "base-uri 'none'", "form-action 'none'"])
     meta = f'<meta http-equiv="Content-Security-Policy" content="{csp}">'

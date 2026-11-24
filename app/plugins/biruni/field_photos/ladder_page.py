@@ -97,7 +97,7 @@ const LAD=(()=>{
    q.onupgradeneeded=()=>{if(!q.result.objectStoreNames.contains('p'))q.result.createObjectStore('p')};
    q.onsuccess=()=>r(q.result);q.onerror=()=>r(null)}catch(e){r(null)}})}
  const lad={
-  epoch:'',seq:0,upto:0,cap:false,db:null,_items:[],_pushes:0,_waitSince:0,_lastProbe:0,_lastRelayProbe:0,
+  epoch:'',seq:0,upto:0,u2:0,cap:false,db:null,_items:[],_pushes:0,_waitSince:0,_lastProbe:0,_lastRelayProbe:0,
   _ticking:false,_timer:null,_ready:null,_resolveReady:null,_startedAt:0,_lastDriveClean:0,_driveBusy:false,
   _cleaning:false,
   init(){
@@ -107,6 +107,7 @@ const LAD=(()=>{
    let e=kept('biruni-lad-e-'+ROOM);if(!e){e=rid();keep('biruni-lad-e-'+ROOM,e)}this.epoch=e;
    this.seq=parseInt(kept('biruni-lad-q-'+ROOM)||'0',10)||0;
    this.upto=parseInt(kept('biruni-lad-u-'+ROOM)||'0',10)||0;
+   this.u2=parseInt(kept('biruni-lad-u2-'+ROOM)||'0',10)||0;
    if(typeof TUNH==='string'&&/^[a-z0-9-]{3,80}$/.test(TUNH)){this.cap=true;SIG.tunnel(TUNH)}
    if(typeof ORGH==='string'&&/^[a-z0-9-]{1,63}\.[a-z0-9-]{1,63}\.workers\.dev$/.test(ORGH)){this.cap=true;SIG.org(ORGH)}
    if(typeof GDRIVE!=='undefined'&&GDRIVE)this.cap=true;
@@ -187,7 +188,7 @@ const LAD=(()=>{
     for(let off=0;off<todo.length&&sentFiles<3;off+=300){
      if(!DRV.go())break;
      const batch=todo.slice(off,off+300);
-     const now=Date.now(),loNow=this._items.length?this._items[0].q:lo,blNow=this._items.length||bl;
+     const now=typeof NOW==='function'?NOW():Date.now(),loNow=this._items.length?this._items[0].q:lo,blNow=this._items.length||bl;
      const env={t:'lpos',v:1,d:DEVID,e:this.epoch,lo:loNow,bl:blNow,b:batch.map(x=>[x.q,x.p]),n:rid(),ts:now};
      const sealed=await seal(env,true);
      const name=pad(batch[0].q)+'-'+pad(batch[batch.length-1].q)+'-'+rid().slice(0,6)+'.bgp';
@@ -223,10 +224,10 @@ const LAD=(()=>{
    if(this._cleaning||typeof GDRIVE==='undefined'||!GDRIVE||typeof DRV!=='object'||!DRV.ok())return;
    this._cleaning=true;
    try{
-    const now=Date.now(),recs=await dgall();
+    const recs=await dgall();
     for(const r of recs){
      if(!DRV.ok())break;
-     if(r.hi<=this.upto||(now-(+r.at||0))>6*3600*1000){
+     if(r.hi<=this.upto){
       let res;
       try{res=await dapi('/drive/v3/files/'+encodeURIComponent(r.fid)+'?supportsAllDrives=true&fields=id',
        {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({trashed:true})})}
@@ -241,7 +242,7 @@ const LAD=(()=>{
   },
   async tick(){
    if(this._ticking||!this.cap||!BK)return;
-   const now=Date.now();
+   const now=typeof NOW==='function'?NOW():Date.now();
    if(typeof GDRIVE!=='undefined'&&GDRIVE&&typeof DRV==='object'&&DRV.ok()&&(now-this._lastDriveClean)>=60000){
     this._lastDriveClean=now;this._driveClean();
    }
@@ -302,7 +303,9 @@ const LAD=(()=>{
   async onAck(o,kind){
    if(!o||o.d!==DEVID||o.e!==this.epoch)return;
    if(ID.pin&&!await IDOK(o.ip,o.is,'BRLA1|'+o.d+'|'+o.e+'|'+o.upto))return;
-   const u=+o.upto||0;
+   if(ID.pin&&o.is2!=null&&!await IDOK(o.ip,o.is2,'BRLA2|'+o.d+'|'+o.e+'|'+o.upto+'|'+(o.u2||0)))return;
+   const u=+o.upto||0,u2=+o.u2||0;
+   if(u2>this.u2){this.u2=u2;keep('biruni-lad-u2-'+ROOM,String(this.u2))}
    if(u>this.upto){
     this.upto=u;keep('biruni-lad-u-'+ROOM,String(this.upto));
     this._items=this._items.filter(x=>x.q>this.upto);

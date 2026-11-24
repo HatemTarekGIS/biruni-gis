@@ -18,7 +18,8 @@ from qgis.PyQt.QtCore import QMetaType, Qt, QTimer, QUrl
 from qgis.PyQt.QtGui import QColor, QDesktopServices, QPixmap
 from qgis.PyQt.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QComboBox, QDialog, QDockWidget,
                                  QFileDialog, QFrame, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget,
-                                 QMenu, QMessageBox, QPushButton, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget)
+                                 QMenu, QMessageBox, QPushButton, QSpinBox, QTreeWidget, QTreeWidgetItem, QVBoxLayout,
+                                 QWidget)
 
 from ..i18n import lang, tr
 from .server import read_surveyor_keys
@@ -916,6 +917,34 @@ class FieldPhotosDock(QDockWidget):
         row.addWidget(show)
         cv.addWidget(QLabel(tr("Photos are saved in")))
         cv.addLayout(row)
+        mrow = QHBoxLayout()
+        self.mirror_folder = QLineEdit()
+        self.mirror_folder.setReadOnly(True)
+        self.mirror_folder.setPlaceholderText(tr("Second copy folder on another disk or drive"))
+        self.mirror_pick_btn = QPushButton(tr("Change…"))
+        self.mirror_pick_btn.clicked.connect(self._pick_mirror_folder)
+        self.mirror_clear_btn = QPushButton(tr("Clear"))
+        self.mirror_clear_btn.clicked.connect(self._clear_mirror_folder)
+        mrow.addWidget(self.mirror_folder, 1)
+        mrow.addWidget(self.mirror_pick_btn)
+        mrow.addWidget(self.mirror_clear_btn)
+        cv.addWidget(QLabel(tr("Second copy folder (another volume)")))
+        cv.addLayout(mrow)
+        self.mirror_warn = QLabel()
+        self.mirror_warn.setObjectName("GpsHint")
+        self.mirror_warn.setWordWrap(True)
+        self.mirror_warn.hide()
+        cv.addWidget(self.mirror_warn)
+        erow = QHBoxLayout()
+        erow.addWidget(QLabel(tr("End-of-day reminder hour:")))
+        self.eod_spin = QSpinBox()
+        self.eod_spin.setRange(0, 23)
+        self.eod_spin.setSuffix(":00")
+        self.eod_spin.setValue(int(s.value(KEY + "eod-hour", 18) or 18))
+        self.eod_spin.valueChanged.connect(self._on_eod_hour_changed)
+        erow.addWidget(self.eod_spin)
+        erow.addStretch(1)
+        cv.addLayout(erow)
         self.drive_box = QCheckBox(tr("Receive photos through Google Drive (this project)"))
         self.drive_box.toggled.connect(self._on_drive_toggled)
         cv.addWidget(self.drive_box)
@@ -1114,6 +1143,8 @@ class FieldPhotosDock(QDockWidget):
         self._show_hint()
         self._show_form()
         self.folder.setText(self._folder())
+        self.mirror_folder.setText(self._mirror_folder())
+        self._update_mirror_warning()
         self._sync_drive()
 
     def refresh_theme(self):
@@ -1124,11 +1155,61 @@ class FieldPhotosDock(QDockWidget):
     def _folder(self):
         return QgsSettings().value(KEY + "folder", "") or default_folder()
 
+    def _mirror_folder(self):
+        return str(QgsSettings().value(KEY + "mirror-folder", "") or "").strip()
+
+    def set_mirror_folder(self, path, allow_same_volume=False):
+        from .copies import different_volume
+
+        p = str(path or "").strip()
+        if p and not allow_same_volume and not different_volume(self._folder(), p):
+            self.mirror_warn.setText(tr("Choose a folder on a different volume or disk from the main photo folder."))
+            self.mirror_warn.show()
+            return False
+        QgsSettings().setValue(KEY + "mirror-folder", p)
+        self.mirror_folder.setText(p)
+        self._update_mirror_warning()
+        if self.server is not None and hasattr(self.server, "store"):
+            self.server.store.set_mirror_folder(p)
+        return True
+
+    def _update_mirror_warning(self):
+        from .copies import different_volume
+
+        mf = self._mirror_folder()
+        if not mf:
+            self.mirror_warn.setText(tr("No second copy folder is set. Set one on another disk so every photo has 2 copies."))
+            self.mirror_warn.show()
+        elif not different_volume(self._folder(), mf):
+            self.mirror_warn.setText(tr("The second copy folder is on the same volume as the main photo folder."))
+            self.mirror_warn.show()
+        else:
+            self.mirror_warn.hide()
+
+    def _pick_mirror_folder(self):
+        d = QFileDialog.getExistingDirectory(self, tr("Second copy folder (another volume)"),
+                                             self._mirror_folder() or self._folder())
+        if d:
+            self.set_mirror_folder(d)
+
+    def _clear_mirror_folder(self):
+        self.set_mirror_folder("")
+
+    def eod_hour(self):
+        return int(self.eod_spin.value())
+
+    def _on_eod_hour_changed(self, val):
+        h = int(val)
+        QgsSettings().setValue(KEY + "eod-hour", h)
+        if self.server is not None:
+            self.server.eod_hour = h
+
     def _pick_folder(self):
         d = QFileDialog.getExistingDirectory(self, tr("Folder for the field photos"), self._folder())
         if d:
             QgsSettings().setValue(KEY + "folder", d)
             self.folder.setText(d)
+            self._update_mirror_warning()
 
     def form(self):
         from .server import clean_form
@@ -1296,7 +1377,8 @@ class FieldPhotosDock(QDockWidget):
         try:
             self.server = PhotoServer(folder, cert_folder, texts, lang(), kinds, PHOTO_PORT,
                                       ["127.0.0.1"] if bridged else local_addresses(),
-                                      bind="127.0.0.1" if bridged else "0.0.0.0", form=form)
+                                      bind="127.0.0.1" if bridged else "0.0.0.0", form=form,
+                                      mirror_folder=self._mirror_folder(), eod_hour=self.eod_hour())
             self.server.drive_clean = self.drive_clean()
             self._publish_capture()
         except OSError as e:

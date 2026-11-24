@@ -307,11 +307,12 @@ async function dlost(){const c=DRV.fold,ck='biruni-drive-f-'+ROOM;if(!c)throw ne
   if(e.status===403||e.status===404||e.perm){keep(ck,null);DRV.fold=null;driveSay(e.ro?'ro':'gone');throw new DriveStop('gone')}
   throw e}}
 const DFALL=120000;   /* Drive failing this long while the line is open: the line takes the originals */
-function dfits(it){return !!(typeof DRIVE_ON!=='undefined'&&DRIVE_ON&&it&&it.meta&&it.meta.sealed&&!it.carried
+function dfits(it){const st=typeof itemSt==='function'?itemSt(it):(it&&typeof it.st==='number'?it.st:0);
+ return !!(typeof DRIVE_ON!=='undefined'&&DRIVE_ON&&it&&st<1&&it.meta&&it.meta.sealed&&!it.carried
  &&!(it.cap&&typeof lineOpen==='function'&&lineOpen())&&it.blob&&it.blob.size<=DMAX&&!DSKIP.has(it.id))}
 function deligible(it){return dfits(it)&&!DRV.HOLD.has(it.id)}
 function driveFirst(it){return DRV.on&&DRV.go()&&!(DRV.bad&&(DRV.bad===1||Date.now()-DRV.bad>DFALL))&&dfits(it)}
-async function dstill(id){return (await all()).some(x=>x.id===id)}
+async function dstill(id){return (await all()).some(x=>x.id===id&&(typeof itemSt==='function'?itemSt(x)<1:!(x.st>=1)))}
 async function dupload(it){const tag=await BFP.tag(KEYB),k=await dkey();let rec=await dget(it.id);
  if(rec&&rec.room===tag&&rec.st==='done')return rec;   /* sent before; only leaving the queue was missed */
  if(!rec||rec.room!==tag||!rec.head){const body=new Uint8Array(await it.blob.arrayBuffer()),n=dnext();
@@ -352,8 +353,10 @@ async function drivePump(){if(!DRV.on)return;
    if(DRV.HOLD.has(it.id)||!await dstill(it.id))continue;   /* the line took it meanwhile */
    DRV.HOLD.set(it.id,'drive');driveSay('up');
    try{const rec=await dupload(it),fresh=rec.st!=='done';rec.st='done';rec.head=null;rec.at=Date.now();await dput(rec);
-    await del(it.id);if(fresh){DRV.n++;keep('biruni-drive-c-'+ROOM,String(DRV.n))}DRV.bad=0;DRV.fails=0;DRV.until=0;mark(it.id,'✓');count();
-    clearTimeout(DRV.rt);DRV.rt=setTimeout(dreceipts,60000);   /* by then the PC has it from Drive for desktop */
+    if(typeof setState==='function')await setState(it.id,1,Math.max(it.c||0,1));
+    else{it.st=1;it.c=Math.max(it.c||0,1);mark(it.id,'☁️')}
+    if(fresh){DRV.n++;keep('biruni-drive-c-'+ROOM,String(DRV.n))}DRV.bad=0;DRV.fails=0;DRV.until=0;count();
+    clearTimeout(DRV.rt);DRV.rt=setTimeout(()=>{dreceipts();if(typeof copyPoll==='function')copyPoll()},60000);   /* by then the PC has it from Drive for desktop */
     driveSay('idle')}
    catch(e){if(e instanceof DriveStop){if(e.state==='full')DRV.bad=1;break}
     if(e.status===400||e.status===413){DSKIP.add(it.id)}   /* Drive will never take it: it stays for the bridge */
@@ -379,7 +382,7 @@ async function dreceipts(){if(!DRV.on||typeof lineOpen!=='function'||!lineOpen()
  const ids=a.filter(r=>r.st==='done'&&r.fid).map(r=>r.id).slice(0,100);
  if(!ids.length){dshowFree();return}
  const nonce=rid();DRV.rq={nonce:nonce,ids:new Set(ids)};
- try{lineText(JSON.stringify({t:'dhave',nonce:nonce,ids:ids}))}catch(e){}}
+ try{lineText(JSON.stringify({t:'dhave',nonce:nonce,ids:ids,nl:typeof NL!=='undefined'&&NL?1:0}))}catch(e){}}
 async function driveGot(m){const q=DRV.rq;if(!q||!ID.pin||!m||m.nonce!==q.nonce||!Array.isArray(m.ids))return;
  const cl=String(m.clean||''),ids=m.ids.map(String);
  if(!['auto','manual','keep'].includes(cl)||!await IDOK(m.ip,m.is,'BRDG1|'+m.nonce+'|'+cl+'|'+ids.join(','))){
