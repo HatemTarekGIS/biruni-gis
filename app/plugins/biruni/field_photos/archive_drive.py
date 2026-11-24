@@ -590,7 +590,9 @@ def archive_job_to_drive(store, job_id, build_result, target=None, fmt=None, lev
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
-    for photo in verified_photos:
+    # only a byte-identical copy protects the original: a recompressed photo is a lighter archive, not a second copy
+    # (the 2-copy delete rule must never count it)
+    for photo in (verified_photos if level == "original" else []):
         if photo.get("id"):
             ledger.mark(photo["id"], PLACE)
     res["ok"] = res["failed"] == 0

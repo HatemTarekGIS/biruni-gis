@@ -146,6 +146,10 @@ try:
         return (store.ledger.get(pid) or {}).get("places", {}).get("gdrive")
 
     # ---- 5. formats ------------------------------------------------------------------------------------------------
+    rc = ad.archive_job_to_drive(jstore, job["id"], res, target=os.path.join(work, "GD2"), fmt="folder",
+                                 level="compact", ledger=store.ledger)
+    check(rc["ok"] and not any(gd(p) for p in pids),
+          "a recompressed archive is never counted as a copy in the ledger (only 'original' is)")
     r = ad.archive_job_to_drive(jstore, job["id"], res, target=drive, fmt="folder", level="original", ledger=store.ledger)
     root = r["target_path"]
     check(r["ok"] and r["failed"] == 0 and os.path.isdir(root), f"folder format written: {r['written']} files")
@@ -244,8 +248,8 @@ try:
                 ssha=hashlib.sha256(raw).hexdigest())
     store3.jobs.close_job(j3["id"], ledger=store3.ledger)
     ad.wait_all()
-    check(ad.job_archived_to_drive(store3.folder, j3["id"]) and (store3.ledger.get("ph-hook-1") or {}).get("places", {}).get("gdrive"),
-          "close_job hook archived to Drive in the background and marked it")
+    check(ad.job_archived_to_drive(store3.folder, j3["id"]) and not (store3.ledger.get("ph-hook-1") or {}).get("places", {}).get("gdrive"),
+          "close_job hook archived to Drive in the background (level high: archived, not counted as a copy)")
     box = ad.DriveArchiveBox(None, work)
     check(box.enable.isChecked() and box.fmt.currentData() == "folder" and box.level.currentData() == "high",
           "dock box reflects the saved options")
