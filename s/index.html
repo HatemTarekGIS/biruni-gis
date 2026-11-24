@@ -1,4 +1,4 @@
-<!doctype html><html lang="en" dir="ltr"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-DLErb0ZYTdVCOlcqHyuD0U9JaU2XBWZ9PZ/ORLXa2rw='; style-src 'sha256-e3k7ydv7d1yxEHQ8p2fgwng2Na+DzyKEGWn890Snntc='; img-src blob:; connect-src wss://nos.lol wss://relay.primal.net wss://nostr.mom wss://relay.snort.social wss://relay.nostr.net wss://offchain.pub wss://nostr.bitcoiner.social wss://yabu.me wss://nostr.red5d.dev wss://nostr.rblb.it https://ntfy.sh wss://ntfy.sh wss://broker.hivemq.com:8884 wss://broker.emqx.io:8084 wss://test.mosquitto.org:8081 wss://broker-cn.emqx.io:8084 wss://relay.biruni-gis.com; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<!doctype html><html lang="en" dir="ltr"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-zBuDmdM4SiDZgvlmss118p7xwB/K7uT6Ajv/22oyNuk='; style-src 'sha256-e3k7ydv7d1yxEHQ8p2fgwng2Na+DzyKEGWn890Snntc='; img-src blob:; connect-src wss://nos.lol wss://relay.primal.net wss://nostr.mom wss://relay.snort.social wss://relay.nostr.net wss://offchain.pub wss://nostr.bitcoiner.social wss://yabu.me wss://nostr.red5d.dev wss://nostr.rblb.it https://ntfy.sh wss://ntfy.sh wss://broker.hivemq.com:8884 wss://broker.emqx.io:8084 wss://test.mosquitto.org:8081 wss://broker-cn.emqx.io:8084 wss://relay.biruni-gis.com; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#F4F6F8" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0E1114" media="(prefers-color-scheme: dark)">
@@ -130,6 +130,9 @@ const unhex=h=>Uint8Array.from(h.match(/../g),x=>parseInt(x,16));
 const cat=(...a)=>{const o=new Uint8Array(a.reduce((n,x)=>n+x.length,0));let i=0;for(const x of a){o.set(x,i);i+=x.length}return o};
 const sha=async b=>new Uint8Array(await crypto.subtle.digest('SHA-256',b));
 const rid=()=>b64u.enc(crypto.getRandomValues(new Uint8Array(9)));
+var SKEW=typeof SKEW==='number'?SKEW:0,SKEW_OK=typeof SKEW_OK==='boolean'?SKEW_OK:false;
+function NOW(){return Date.now()+SKEW}
+function noteTime(ms){if(typeof ms==='number'&&isFinite(ms)&&ms>1700000000000){SKEW=Math.round(ms-Date.now());SKEW_OK=true}}
 /* the PC's identity (see bridge.py): the receiver signs with &s=, a phone checks against the pin &i= (kept per key,
    so a page that rebuilds its address keeps it). No pin: no check (older QR codes). */
 const ID={sk:null,pub:null,pin:null};
@@ -172,7 +175,7 @@ async function schnorr(sk,msg,aux){const P=pmul(sk),d=(P[1]&1n)?SN-sk:sk;
 let NID=null;
 async function nostrEvent(content,topic){if(!NID){let sk=0n;
   while(!sk||sk>=SN)sk=big(crypto.getRandomValues(new Uint8Array(32)));NID={sk:sk,pk:hex(b32(pmul(sk)[0]))}}
- const ev={pubkey:NID.pk,created_at:Math.floor(Date.now()/1000),kind:BR.kind,tags:[['t',topic]],content:content};
+ const ev={pubkey:NID.pk,created_at:Math.floor(NOW()/1000),kind:BR.kind,tags:[['t',topic]],content:content};
  const id=await sha(enc.encode(JSON.stringify([0,ev.pubkey,ev.created_at,ev.kind,ev.tags,ev.content])));
  ev.id=hex(id);ev.sig=hex(await schnorr(NID.sk,id,crypto.getRandomValues(new Uint8Array(32))));return ev}
 /* the key: AES-GCM for every message, and the meeting name the relays see */
@@ -432,10 +435,16 @@ const SIG={relays:[],seen:new Set(),loose:new Set(),on:null,onchange:null,_lastC
   if(obj.t==='answer'&&ID.sk){const g=await IDSIGN('BRA1|'+obj.sid+'|'+obj.sdp);obj.ip=g.pub;obj.is=g.sig}
   else if(obj.t==='rhello'&&ID.sk){const g=await IDSIGN('BRH0|'+obj.sid+'|'+(obj.pk||''));obj.ip=g.pub;obj.is=g.sig}
   else if(obj.t==='rack'&&ID.sk){
-   const g=await IDSIGN('BRAK1|'+obj.id+'|'+obj.kind+'|'+obj.nonce);obj.ip=g.pub;obj.is=g.sig}
+   const g=await IDSIGN('BRAK1|'+obj.id+'|'+obj.kind+'|'+obj.nonce);obj.ip=g.pub;obj.is=g.sig;
+   if(obj.h!=null||obj.c!=null||obj.rt!=null){
+    const g2=await IDSIGN('BRAK2|'+obj.id+'|'+obj.kind+'|'+obj.nonce+'|'+(obj.h||'')+'|'+(obj.c??0)+'|'+(obj.rt??0));
+    if(g2)obj.is2=g2.sig}}
+  else if(obj.t==='rcgot'&&ID.sk){
+   const s=(obj.items||[]).map(x=>x[0]+':'+x[1]+':'+(x[2]||'')).join(',');
+   const g=await IDSIGN('BRCP1|'+obj.nonce+'|'+(obj.rt||0)+'|'+s);obj.ip=g.pub;obj.is=g.sig}
   else if(obj.t==='tun'&&ID.sk){const g=await IDSIGN('BRTN1|'+obj.h);obj.ip=g.pub;obj.is=g.sig}
   else if(obj.t==='org'&&ID.sk){const g=await IDSIGN('BROR1|'+obj.h);obj.ip=g.pub;obj.is=g.sig}},
- async send(obj,z){obj.n=rid();obj.ts=Date.now();this.seen.add(obj.n);await this._sign(obj);
+ async send(obj,z){obj.n=rid();obj.ts=NOW();this.seen.add(obj.n);await this._sign(obj);
   const s=await seal(obj,z);let ev=null;
   try{ev=await nostrEvent(s,BK.topic)}catch(e){}for(const r of this.relays)r.send(s,ev)},
  async sendRaw(s,kind){if(typeof s!=='string')return false;
@@ -452,7 +461,7 @@ const SIG={relays:[],seen:new Set(),loose:new Set(),on:null,onchange:null,_lastC
  async sendChunk(obj){
   const pace=BR.paceMs!=null?BR.paceMs:180,wait=Math.max(0,this._lastChunk+pace-Date.now());
   if(wait)await sleep(wait);this._lastChunk=Date.now();
-  obj.n=rid();obj.ts=Date.now();this.seen.add(obj.n);const s=await seal(obj,true);
+  obj.n=rid();obj.ts=NOW();this.seen.add(obj.n);const s=await seal(obj,true);
   let ev=null;try{ev=await nostrEvent(s,BK.topic)}catch(e){}
   const tried=new Set();
   while(true){const pair=this.healthyAck().filter(r=>!tried.has(r)&&(ev||(r.kind||'nostr')!=='nostr')).slice(0,2);
@@ -462,7 +471,10 @@ const SIG={relays:[],seen:new Set(),loose:new Set(),on:null,onchange:null,_lastC
   const nr=this.relays.find(r=>r.kind==='ntfy');return nr?await nr.sendChunk(s):false},
  async arrived(s,kind,relay){const o=await unseal(s);if(!o||!o.n||this.seen.has(o.n))return;this.seen.add(o.n);
   if(this.seen.size>4000)this.seen.delete(this.seen.values().next().value);
-  if(Math.abs(Date.now()-(o.ts||0))>15*60000)return;
+  if(o.t==='ltime'){
+   if(ID.pin&&!await IDOK(o.ip,o.is,'BRLT1|'+o.now)){this.refused=(this.refused||0)+1;return}
+   noteTime(o.now);this.notePc();if(this.on)this.on(o,kind,s,relay);return}
+  if(Math.abs(NOW()-(o.ts||0))>15*60000)return;
   /* answers and receipts to this phone must come from the PC (signed) */
   if(o.t==='answer'&&ID.pin&&!this.loose.has(o.sid)&&!await IDOK(o.ip,o.is,'BRA1|'+o.sid+'|'+o.sdp)){
    this.refused=(this.refused||0)+1;return}
@@ -470,13 +482,17 @@ const SIG={relays:[],seen:new Set(),loose:new Set(),on:null,onchange:null,_lastC
    this.refused=(this.refused||0)+1;return}
   if(o.t==='rack'&&ID.pin&&!await IDOK(o.ip,o.is,'BRAK1|'+o.id+'|'+o.kind+'|'+o.nonce)){
    this.refused=(this.refused||0)+1;return}
-  if(o.t==='lack'&&ID.pin&&!await IDOK(o.ip,o.is,'BRLA1|'+o.d+'|'+o.e+'|'+o.upto)){
-   this.refused=(this.refused||0)+1;return}
+  if(o.t==='rcgot'&&ID.pin){
+   const cs=(Array.isArray(o.items)?o.items:[]).map(x=>x[0]+':'+x[1]+':'+(x[2]||'')).join(',');
+   if(!await IDOK(o.ip,o.is,'BRCP1|'+o.nonce+'|'+(o.rt||0)+'|'+cs)){this.refused=(this.refused||0)+1;return}}
+  if(o.t==='lack'&&ID.pin){
+   if(!await IDOK(o.ip,o.is,'BRLA1|'+o.d+'|'+o.e+'|'+o.upto)){this.refused=(this.refused||0)+1;return}
+   if(o.is2!=null&&!await IDOK(o.ip,o.is2,'BRLA2|'+o.d+'|'+o.e+'|'+o.upto+'|'+(o.u2||0))){this.refused=(this.refused||0)+1;return}}
   if(o.t==='tun'&&ID.pin&&!await IDOK(o.ip,o.is,'BRTN1|'+o.h)){
    this.refused=(this.refused||0)+1;return}
   if(o.t==='org'&&ID.pin&&!await IDOK(o.ip,o.is,'BROR1|'+o.h)){
    this.refused=(this.refused||0)+1;return}
-  if(o.t==='answer'||o.t==='rhello'||o.t==='rguide'||o.t==='rack'||o.t==='lack'||o.t==='tun'||o.t==='org'
+  if(o.t==='answer'||o.t==='rhello'||o.t==='rguide'||o.t==='rack'||o.t==='rcgot'||o.t==='lack'||o.t==='tun'||o.t==='org'
    ||(typeof o.t==='string'&&o.t.startsWith('mesh_')))this.notePc();
   if(this.on)this.on(o,kind,s,relay)}};
 /* a private line through a teammate's phone: the phone and the PC agree on a key of their own (ECDH on P-256),
