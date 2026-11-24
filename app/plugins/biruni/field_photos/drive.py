@@ -7,7 +7,9 @@ over the bridge. Google sees only sealed bytes.
 A .bfp file:  "BFP1" | header length (2 bytes, big-endian) | header (JSON, UTF-8) | signature (64) | body
 
   body       the sealed photo exactly as the bridge carries it (handover.seal: ECDH P-256 to this computer's
-             handover key, then AES-256-GCM), so it opens with HandoverKey.open.
+             handover key, then AES-256-GCM), so it opens with HandoverKey.open. Since no-loss P3 it may be an
+             envelope v2 (envelope.py) sealed for several computers; the header still names the office (kid, v:1),
+             and a backup PC whose kid is among the envelope's recipients accepts it too (verify).
   header     {"v": 1, "room": tag, "dev": device id, "kid": handover key id, "id": photo id, "n": number on this
              phone, "t": ms, "size": body length, "sha": SHA-256 of the body (hex), "pub": the phone's ECDSA P-256
              public key (base64url, 65 bytes), "cert": base64url HMAC-SHA256(Ka, "BFP-CERT1|" + pub + "|" + dev)}
@@ -153,7 +155,11 @@ def verify(blob, kas, kid, room=None):
     if room is not None and h["room"] != room:
         raise BfpError("another office")
     if not hmac.compare_digest(h["kid"], kid):
-        raise BfpError("sealed for another computer")
+        # the header names the office (its "v" stays 1); a v2 body may also be sealed for this computer (a backup PC)
+        from . import envelope
+
+        if body[:1] != b"\x02" or kid not in envelope.kids(body):
+            raise BfpError("sealed for another computer")
     if h["size"] != len(body) or not hmac.compare_digest(hashlib.sha256(body).hexdigest(), h["sha"]):
         raise BfpError("damaged body")
     try:

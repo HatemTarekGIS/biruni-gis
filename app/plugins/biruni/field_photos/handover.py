@@ -81,6 +81,8 @@ class HandoverKey:
         self._key = key
         raw = key.public_key().public_bytes(serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint)
         self.public = _b64u(raw)
+        # which computer a sealed item is for: the .bfp header's kid and the v2 envelope's recipient id
+        self.kid = hashlib.sha256(("biruni-drive-kid-1:" + self.public).encode("utf-8")).hexdigest()[:16]
 
     def open(self, blob):
         """A sealed photo -> (its data, the picture). ValueError when it is not sealed for this computer."""
@@ -89,6 +91,10 @@ class HandoverKey:
         from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
         blob = bytes(blob)
+        if blob[:1] == b"\x02":   # v2: sealed for several computers (envelope.py)
+            from . import envelope
+
+            return envelope.open(blob, self._key, self.public)
         if len(blob) < 1 + 65 + 12 + 16 or blob[0] != 1:
             raise ValueError("not a sealed photo")
         try:
@@ -143,14 +149,117 @@ def backup_info(path):
             doc = json.load(f)
     except (OSError, ValueError) as e:
         raise ValueError("not a key backup") from e
-    if not isinstance(doc, dict) or doc.get("biruni") != BACKUP_KIND or doc.get("v") != 1             or not isinstance(doc.get("pub"), str) or not isinstance(doc.get("kdf"), dict)             or not isinstance(doc.get("ct"), str):
+    if not isinstance(doc, dict) or doc.get("biruni") != BACKUP_KIND or doc.get("v") not in (1, 2) \
+            or not isinstance(doc.get("pub"), str) or not isinstance(doc.get("kdf"), dict) \
+            or not isinstance(doc.get("ct"), str):
         raise ValueError("not a key backup")
-    return {"pub": doc["pub"], "made": str(doc.get("made") or ""), "_doc": doc}
+    return {"pub": doc["pub"], "made": str(doc.get("made") or ""), "v": doc["v"], "_doc": doc}
 
 
-def restore(folder, path, password):
-    """Make the key in a backup this computer's key. A different key already here is kept beside it
-    (handover-p256.key.<time>.old). ValueError for a wrong password or a changed file; nothing is touched then."""
+# ---- key backup v2 (no-loss P3): everything that makes this computer "the office" ----------------------------------
+# v1 held the handover key only. The bridge keys (the QR codes) and the identity keys (the &i= pins, which now also sign
+# the recipients list) stayed in this Windows account (DPAPI): a new PC restored from v1 opened Drive photos but every
+# phone had to scan a new code. v2 holds them all, so a restored PC keeps the same QR codes and pins.
+BRIDGE_KEYS = ("biruni/field-photos/bridge-key", "biruni/gps/bridge-key")
+
+
+def _aad2(pub):
+    return ("biruni-handover-key-2|" + pub).encode("ascii")
+
+
+def _settings(settings):
+    if settings is not None:
+        return settings
+    from qgis.core import QgsSettings
+
+    return QgsSettings()
+
+
+def backup_v2(folder, path, password, settings=None):
+    """Write the v2 backup: the handover key, the bridge keys, the identity keys and the recipients list, sealed with
+    a key derived from ``password`` (it must pass secure.passwords for an administrator). Returns the public key."""
+    from ..secure import crypto, passwords
+    from . import bridge, recipients
+    from .tunnel import unprotect
+
+    why = passwords.problem(password, passwords.MIN_ADMIN)
+    if why:
+        raise ValueError(why.replace("{n}", str(passwords.MIN_ADMIN)))
+    st = _settings(settings)
+    hk = HandoverKey(folder)
+    with open(os.path.join(folder, FILE), encoding="ascii") as f:
+        pem = unprotect(f.read().strip())
+    if not pem:
+        raise ValueError("this computer's key could not be read")
+    keys = {}
+    for name in BRIDGE_KEYS:
+        k = unprotect(st.value(name, "") or "")
+        if len(k) == 43:
+            keys[name] = k
+    ids = {}
+    try:
+        stored = json.loads(st.value(bridge.ID_STORE, "") or "{}")
+    except (TypeError, ValueError):
+        stored = {}
+    for h, v in (stored if isinstance(stored, dict) else {}).items():
+        sk = unprotect(v or "")
+        if sk:
+            ids[h] = sk
+    for k in keys.values():   # an identity made in this run only (no settings yet) is saved with its key
+        h = bridge.identity_slot(k)
+        if h not in ids:
+            ids[h] = bridge.identity(k, settings=st)[0]
+    body = {"handover": pem, "bridge": keys, "ids": ids, "rl": recipients.load(folder)}
+    kdf = crypto.new_kdf()
+    ct = crypto.seal(crypto.derive(password, kdf), json.dumps(body).encode("utf-8"), _aad2(hk.public))
+    doc = {"biruni": BACKUP_KIND, "v": 2, "pub": hk.public, "made": time.strftime("%Y-%m-%d"),
+           "kdf": kdf, "ct": crypto.b64(ct)}
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(doc, f, indent=1)
+    os.replace(tmp, path)
+    return hk.public
+
+
+def _restore_v2_rest(body, folder, settings):
+    """The bridge keys, identities and recipients list of a v2 backup (the handover key is already in place).
+    A different bridge key already here is kept under <name>-before-restore."""
+    from . import bridge, recipients
+    from .tunnel import protect, unprotect
+
+    st = _settings(settings)
+    for name, k in (body.get("bridge") or {}).items():
+        if name not in BRIDGE_KEYS or not isinstance(k, str) or len(k) != 43:
+            continue
+        cur = unprotect(st.value(name, "") or "")
+        if cur and cur != k:
+            st.setValue(name + "-before-restore", protect(cur))
+        st.setValue(name, protect(k))
+    try:
+        stored = json.loads(st.value(bridge.ID_STORE, "") or "{}")
+    except (TypeError, ValueError):
+        stored = {}
+    if not isinstance(stored, dict):
+        stored = {}
+    if any(stored.get(h) and unprotect(stored[h]) != sk for h, sk in (body.get("ids") or {}).items()):
+        st.setValue(bridge.ID_STORE + "-before-restore", json.dumps(stored))   # what this PC had, kept aside
+    for h, sk in (body.get("ids") or {}).items():
+        if isinstance(h, str) and isinstance(sk, str) and sk:
+            stored.pop(h, None)
+            stored[h] = protect(sk)       # newest last: kept when ID_KEEP trims
+    while len(stored) > bridge.ID_KEEP:
+        stored.pop(next(iter(stored)))
+    st.setValue(bridge.ID_STORE, json.dumps(stored))
+    if isinstance(body.get("rl"), dict):
+        recipients.merge(folder, body["rl"])
+    if settings is None:
+        bridge.forget_cached_identities()
+
+
+def restore(folder, path, password, settings=None):
+    """Make the key in a backup this computer's key (v2: also its QR codes, pins and recipients list). A different key
+    already here is kept beside it (handover-p256.key.<time>.old). ValueError for a wrong password or a changed file;
+    nothing is touched then."""
     from ..vendor import ensure_vendor
 
     ensure_vendor()
@@ -162,8 +271,16 @@ def restore(folder, path, password):
 
     info = backup_info(path)
     doc = info["_doc"]
+    body = None
     try:
-        pem = crypto.unseal(crypto.derive(password, doc["kdf"]), crypto.unb64(doc["ct"]), _aad(doc["pub"]))
+        if doc["v"] == 2:
+            body = json.loads(crypto.unseal(crypto.derive(password, doc["kdf"]), crypto.unb64(doc["ct"]),
+                                            _aad2(doc["pub"])).decode("utf-8"))
+            if not isinstance(body, dict) or not isinstance(body.get("handover"), str):
+                raise ValueError("not a key backup")
+            pem = body["handover"].encode("ascii")
+        else:
+            pem = crypto.unseal(crypto.derive(password, doc["kdf"]), crypto.unb64(doc["ct"]), _aad(doc["pub"]))
         key = serialization.load_pem_private_key(pem, None)
     except (crypto.CryptoError, ValueError, TypeError, KeyError) as e:
         raise ValueError("wrong password or a changed file") from e
@@ -181,6 +298,8 @@ def restore(folder, path, password):
         except Exception:  # noqa: BLE001 - an unreadable key was already moved aside by HandoverKey
             current = None
         if current == doc["pub"]:
+            if body is not None:
+                _restore_v2_rest(body, folder, settings)
             return doc["pub"]
         if os.path.isfile(target):
             os.replace(target, target + "." + time.strftime("%Y%m%d-%H%M%S") + ".old")
@@ -188,4 +307,6 @@ def restore(folder, path, password):
     with open(tmp, "w", encoding="ascii") as f:
         f.write(protect(pem.decode("ascii")))
     os.replace(tmp, target)
+    if body is not None:
+        _restore_v2_rest(body, folder, settings)
     return doc["pub"]

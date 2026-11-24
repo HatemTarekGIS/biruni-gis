@@ -959,6 +959,8 @@ class PhotoServer:
         from .handover import HandoverKey
 
         self.handover = HandoverKey(cert_folder)   # photos handed phone to phone are sealed for this key
+        self.cert_folder = cert_folder
+        self.rl = None   # the signed recipients list (recipients.py): set with the bridge key in set_ladder
         self.eod_hour = int(eod_hour) if isinstance(eod_hour, int) and 0 <= eod_hour <= 23 else 18
         self.page = render_page(page_texts, lang, kinds, self.store.form, self.handover.public)
         # the bridge (bridge.py) runs a hidden receiver page on this PC that hands the photos in here
@@ -1315,6 +1317,8 @@ class PhotoServer:
         from .ladder import Ladder
 
         self.ladder = Ladder(key)
+        self._rl_key = key
+        self.refresh_recipients()
         self.xin = queue.Queue()
         self.xout = deque(maxlen=64)
         self.tunnel_host = ""
@@ -1322,6 +1326,18 @@ class PhotoServer:
         self._xout_seq = 0
         self._x_fails = deque()
         self._x_block_until = 0.0
+
+    def refresh_recipients(self):
+        """Sign the recipients list again (after the office changes it) and send it with the hello and the guide."""
+        from . import recipients
+
+        key = getattr(self, "_rl_key", None)
+        try:
+            self.rl = recipients.signed(self.cert_folder, self.handover.public, key) if key else None
+        except Exception:  # noqa: BLE001 - no list: phones keep sealing v1 (or for the list they already have)
+            self.rl = None
+        self._publish_guide()
+        return self.rl
 
     def take_env(self, s, via):
         """Process a sealed ladder envelope; queue positions and ladder info, return sealed ack."""
@@ -1345,6 +1361,8 @@ class PhotoServer:
     def _bridge_config_bytes(self):
         d = json.loads(self.bridge_config.decode("utf-8"))
         d["eod"] = self.eod_hour
+        if getattr(self, "rl", None):
+            d["rl"] = self.rl
         if self.ladder is not None:
             d["lad"] = 1
             d["tun"] = self.tunnel_host or ""
@@ -1373,12 +1391,15 @@ class PhotoServer:
         self.guide, n = guide_bytes(self.guide_v, getattr(self, "_guide_items", []))
         indoor = getattr(self, "_indoor", None)
         cap = getattr(self, "_capture", None)
-        if indoor or cap:
+        rl = getattr(self, "rl", None)
+        if indoor or cap or rl:
             g = json.loads(self.guide)
             if indoor:
                 g["indoor"] = indoor
             if cap:
                 g["cap"] = cap
+            if rl:
+                g["rl"] = rl   # carries its own signature: the guide is not signed
             self.guide = json.dumps(g, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         return n
 
@@ -2002,6 +2023,7 @@ let GUIDE={v:0,items:[]};
 function setGuide(g){if(!g||!Array.isArray(g.items))return;GUIDE=g;INDOOR=g.indoor&&Array.isArray(g.indoor.units)?g.indoor:null;
  showIndoor();if(room){const u=unitOf(room.id);if(u)room=u;else setRoom(null)}roomFromStore();
  if('cap' in g)capSet(g.cap);
+ if(g.rl&&typeof rlTake==='function')rlTake(g.rl).then(ok=>{if(ok)sealWaiting()});
  try{const j=JSON.stringify(g);if(j.length<250000)keep('biruni-guide-'+ROOM,j)}catch(e){}
  $('guideCard').classList.toggle('hide',!g.items.length);drawGuide();if(room)drawRoom()}
 function segDist(p,a,b){const dx=b[0]-a[0],dy=b[1]-a[1],l=dx*dx+dy*dy;let t=l?((p[0]-a[0])*dx+(p[1]-a[1])*dy)/l:0;
@@ -2337,9 +2359,73 @@ async function sealFor(pub,bytes){const pk=await crypto.subtle.importKey('raw',H
  const key=await crypto.subtle.importKey('raw',await crypto.subtle.digest('SHA-256',bits),'AES-GCM',false,['encrypt']);
  const iv=crypto.getRandomValues(new Uint8Array(12)),raw=new Uint8Array(await crypto.subtle.exportKey('raw',eph.publicKey));
  return hcat(new Uint8Array([1]),raw,iv,new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv:iv},key,bytes)))}
+/* ---- no-loss P3: the signed recipients list and envelope v2 (field_photos/recipients.py, envelope.py) ----
+   The PC signs the list with the identity behind the link's &i= pin (links without a pin: the first signer seen).
+   With a list, each item is sealed once for every computer whose scope allows it (the office, a backup PC, the
+   emergency key); without one (an older PC) v1 for the office alone, as before. Items already sealed stay as they are. */
+const RLS={room:null,v:null},RL_ROLES=['office','backup','emergency','sup'],
+ RL_DEF={office:['photo','state','pos'],backup:['photo','state','pos'],emergency:['photo','state','pos'],sup:['pos']};
+const hhex=b=>[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('');
+const kid8=async p=>new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode('biruni-drive-kid-1:'+p))).slice(0,8);
+function rlGet(){if(RLS.room!==ROOM){RLS.room=ROOM;RLS.v=null;
+  try{const c=JSON.parse(kept('biruni-rl-'+ROOM)||'null');if(c&&c.lst&&Array.isArray(c.lst.r))RLS.v=c}catch(e){}}
+ return RLS.v}
+function rlBad(){if(typeof SIG==='object'&&SIG)SIG.refused=(SIG.refused||0)+1;return false}
+async function rlSigOk(pub,sig,text){try{const raw=H64.dec(pub);if(raw.length!==65)return false;
+  const k=await crypto.subtle.importKey('raw',raw,{name:'ECDSA',namedCurve:'P-256'},false,['verify']);
+  return await crypto.subtle.verify({name:'ECDSA',hash:'SHA-256'},k,H64.dec(sig),new TextEncoder().encode(text))}catch(e){return false}}
+/* pk: the office key the list must name (a hello's new pk); default the key this phone seals for. Links without a
+   pin take no list at all (anyone with the bridge key could add themselves): they keep sealing v1. */
+async function rlTake(rl,pk){try{
+ if(!rl||typeof rl.l!=='string'||typeof rl.ip!=='string'||typeof rl.is!=='string'||rl.l.length>20000)return false;
+ const want=pk||PCKEY;if(!ROOM||!want)return false;
+ const cur=rlGet();if(cur&&cur.l===rl.l&&!pk)return true;
+ const pin=typeof ID==='object'&&ID&&ID.pin?ID.pin:null;if(!pin)return false;
+ const text='BRRL1|'+hhex(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(rl.l)));
+ if(typeof IDOK!=='function'||!await IDOK(rl.ip,rl.is,text))return rlBad();
+ const lst=JSON.parse(rl.l);
+ if(!lst||lst.v!==1||typeof lst.seq!=='number'||!Array.isArray(lst.r)||lst.room!==ROOM)return rlBad();
+ if(lst.r.length<1||lst.r.length>12)return rlBad();
+ const offs=lst.r.filter(e=>e&&e.role==='office');
+ if(offs.length!==1||offs[0].p!==want)return rlBad();                /* the office must be the key this phone seals for */
+ const curOff=cur?(cur.lst.r.find(e=>e.role==='office')||{}).p:null;
+ if(cur&&curOff===want&&lst.seq<cur.lst.seq)return rlBad();           /* a rollback: an older list for the same office */
+ const seen=new Set();
+ for(const e of lst.r){if(!e||RL_ROLES.indexOf(e.role)<0||typeof e.p!=='string'||!/^[\w-]{87}$/.test(e.p))return rlBad();
+  const raw=H64.dec(e.p);if(raw.length!==65||raw[0]!==4)return rlBad();
+  const k=hhex(await kid8(e.p));if(seen.has(k))return rlBad();seen.add(k)}
+ const v={l:rl.l,lst:lst};keep('biruni-rl-'+ROOM,JSON.stringify(v));RLS.room=ROOM;RLS.v=v;return true}catch(e){return rlBad()}}
+/* a hello or guide brings a pk: with a list kept, only a signed list naming that key may change it */
+async function rlPk(pk,rl){const cur=rlGet();
+ const curOff=cur?(cur.lst.r.find(e=>e.role==='office')||{}).p:null;
+ if(!curOff||curOff===pk){if(rl)await rlTake(rl,pk);return true}
+ return !!(rl&&await rlTake(rl,pk))}
+/* the keys one kind of item ('photo', 'state', 'pos') is sealed for, office first; null: v1 */
+function rlFor(kind){const v=rlGet();if(!v||!PCKEY)return null;
+ const off=v.lst.r.find(e=>e.role==='office');if(!off||off.p!==PCKEY)return null;   /* a list for another key: v1 */
+ const ps=[PCKEY];
+ for(const e of v.lst.r){if(e.role==='office')continue;
+  const sc=Array.isArray(e.scope)?e.scope:(RL_DEF[e.role]||[]);if(sc.indexOf(kind)>=0&&ps.indexOf(e.p)<0)ps.push(e.p)}
+ return ps.length>1?ps:null}
+/* envelope v2: 0x02 | n | eph(65) | n x [kid(8) | wrap(48)] | iv(12) | ct  (envelope.py; fx: the tests' fixed inputs) */
+async function sealFor2(pubs,bytes,fx){
+ const eph=fx&&fx.eph||await crypto.subtle.generateKey({name:'ECDH',namedCurve:'P-256'},true,['deriveBits']);
+ const er=new Uint8Array(await crypto.subtle.exportKey('raw',eph.publicKey));
+ const ck=fx&&fx.ck||crypto.getRandomValues(new Uint8Array(32)),iv=fx&&fx.iv||crypto.getRandomValues(new Uint8Array(12));
+ const parts=[new Uint8Array([2,pubs.length]),er],info=new TextEncoder().encode('biruni-seal-2');
+ for(const p of pubs){const rr=H64.dec(p);
+  const pk=await crypto.subtle.importKey('raw',rr,{name:'ECDH',namedCurve:'P-256'},false,[]);
+  const bits=await crypto.subtle.deriveBits({name:'ECDH',public:pk},eph.privateKey,256);
+  const hk=await crypto.subtle.importKey('raw',bits,'HKDF',false,['deriveKey']);
+  const kek=await crypto.subtle.deriveKey({name:'HKDF',hash:'SHA-256',salt:hcat(er,rr),info:info},hk,
+   {name:'AES-GCM',length:256},false,['encrypt']);
+  parts.push(await kid8(p),new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv:new Uint8Array(12)},kek,ck)))}
+ const head=hcat(...parts),k=await crypto.subtle.importKey('raw',ck,'AES-GCM',false,['encrypt']);
+ return hcat(head,iv,new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv:iv,additionalData:head},k,bytes)))}
 async function sealItem(it){if(it.meta&&it.meta.sealed)return it.blob;   /* already sealed for the PC: kept as it is */
  const m=new TextEncoder().encode(JSON.stringify(it.meta)),img=new Uint8Array(await it.blob.arrayBuffer()),n=new Uint8Array(4);
- new DataView(n.buffer).setUint32(0,m.length);return new Blob([await sealFor(PCKEY,hcat(n,m,img))],{type:'application/octet-stream'})}
+ new DataView(n.buffer).setUint32(0,m.length);const ps=rlFor(it.cap?'state':'photo');
+ return new Blob([ps?await sealFor2(ps,hcat(n,m,img)):await sealFor(PCKEY,hcat(n,m,img))],{type:'application/octet-stream'})}
 /* the link's offer and answer, short enough for a QR code: only what a direct link on one network needs */
 function sdpCode(sdp,kind){const g=r=>(sdp.match(r)||[])[1]||'',fp=g(/a=fingerprint:sha-256 ([0-9A-Fa-f:]+)/);
  const c=[...sdp.matchAll(/a=candidate:\S+ 1 udp \d+ (\S+) (\d+) typ host/gi)].map(x=>x[1]+'_'+x[2]).filter(x=>!x.includes(':')).slice(0,4);

@@ -961,6 +961,33 @@ class FieldPhotosDock(QDockWidget):
         erow.addWidget(self.eod_spin)
         erow.addStretch(1)
         cv.addLayout(erow)
+        # no-loss P3: the keys that keep the field work openable if this computer is lost
+        cv.addWidget(QLabel(tr("Keys and recipients")))
+        kr1 = QHBoxLayout()
+        self.keys_backup_btn = QPushButton(tr("Back up keys…"))
+        self.keys_backup_btn.setToolTip(tr("One file, locked with a strong password, that brings this office back on "
+                                           "a new computer with the same QR codes."))
+        self.keys_backup_btn.clicked.connect(self._backup_key)
+        self.backup_pc_btn = QPushButton(tr("Backup PC…"))
+        self.backup_pc_btn.setToolTip(tr("Another computer that can open the photos too."))
+        self.backup_pc_btn.clicked.connect(self._backup_pc_dialog)
+        kr1.addWidget(self.keys_backup_btn)
+        kr1.addWidget(self.backup_pc_btn)
+        cv.addLayout(kr1)
+        kr2 = QHBoxLayout()
+        self.emergency_btn = QPushButton(tr("Emergency key…"))
+        self.emergency_btn.setToolTip(tr("A key split among 5 people: any 3 of them can open the photos."))
+        self.emergency_btn.clicked.connect(self._emergency_dialog)
+        self.recipients_btn = QPushButton(tr("Recipients"))
+        self.recipients_btn.setToolTip(tr("Who can open what the phones send."))
+        self.recipients_btn.clicked.connect(self._recipients_dialog)
+        kr2.addWidget(self.emergency_btn)
+        kr2.addWidget(self.recipients_btn)
+        cv.addLayout(kr2)
+        self.keys_hint = QLabel()
+        self.keys_hint.setObjectName("GpsHint")
+        self.keys_hint.setWordWrap(True)
+        cv.addWidget(self.keys_hint)
         self.drive_box = QCheckBox(tr("Receive photos through Google Drive (this project)"))
         self.drive_box.toggled.connect(self._on_drive_toggled)
         cv.addWidget(self.drive_box)
@@ -1163,6 +1190,7 @@ class FieldPhotosDock(QDockWidget):
         self._update_mirror_warning()
         self.archive_root.setText(self._archive_root())
         self._sync_drive()
+        self._show_keys_state()
 
     def refresh_theme(self):
         from ..tracking import panel_qss
@@ -1506,6 +1534,7 @@ class FieldPhotosDock(QDockWidget):
                 self.state.setText(tr("Scan the code with the phone's camera."))
         self.set_qr_mode(self.qr_mode.currentData() or "shared")
         self.plugin.activity.log("field_photos", "started", mode, mode, 1)
+        self._nag_keys_once()
 
     def _start_bridge(self):
         from . import bridge, ladder
@@ -3001,8 +3030,73 @@ class FieldPhotosDock(QDockWidget):
             return {}
         return d if isinstance(d, dict) else {}
 
-    def _record_key_backup(self, kid, at=None):
-        QgsSettings().setValue(KEY_BACKUP, json.dumps({"kid": kid, "at": at or time.strftime("%Y-%m-%d")}))
+    def _record_key_backup(self, kid, at=None, v=2):
+        QgsSettings().setValue(KEY_BACKUP, json.dumps({"kid": kid, "at": at or time.strftime("%Y-%m-%d"), "v": v}))
+
+    def _is_keys_backed_up_v2(self):
+        info = self._key_backup_info()
+        return self._is_key_backed_up() and info.get("v") == 2
+
+    def _show_keys_state(self):
+        from . import recipients
+
+        if not hasattr(self, "keys_hint"):
+            return
+        try:
+            d = recipients.load(self._cert_folder())
+        except Exception:  # noqa: BLE001
+            d = {"r": []}
+        roles = [e["role"] for e in d["r"]]
+        parts = []
+        if self._is_keys_backed_up_v2():
+            parts.append(tr("Keys backed up on {date}.").format(date=self._key_backup_info().get("at") or ""))
+        else:
+            parts.append(tr("The keys are not backed up: if this computer is lost, photos on their way cannot be "
+                            "opened and every phone must scan a new code."))
+        parts.append(tr("Backup computers: {n}.").format(n=roles.count("backup")))
+        parts.append(tr("Emergency key: made.") if "emergency" in roles else tr("Emergency key: not made."))
+        self.keys_hint.setText(" ".join(parts))
+
+    def _nag_keys_once(self):
+        """From the first day: until a v2 key backup exists, remind once per session when Field Photos starts."""
+        if getattr(self, "_keys_nagged", False) or self._is_keys_backed_up_v2():
+            return
+        self._keys_nagged = True
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Information)
+        box.setWindowTitle(tr("Back up keys…"))
+        box.setText(tr(
+            "This computer's keys are not backed up. If Windows is reinstalled or the disk fails, photos still on "
+            "their way can never be opened and every surveyor must scan a new code. The backup is one small file "
+            "locked with a strong password; keep it away from this computer."))
+        now_btn = box.addButton(tr("Back up now…"), QMessageBox.ButtonRole.AcceptRole)
+        box.addButton(tr("Later"), QMessageBox.ButtonRole.RejectRole)
+        box.setDefaultButton(now_btn)
+        box.setWindowModality(Qt.WindowModality.NonModal)   # a reminder: it never blocks starting Field Photos
+        box.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+
+        def done(btn):
+            if btn is now_btn:
+                self._backup_key()
+
+        box.buttonClicked.connect(done)
+        self._keys_nag_box = box
+        box.show()
+
+    def _backup_pc_dialog(self):
+        from .keys_dialogs import backup_pc_dialog
+
+        backup_pc_dialog(self)
+
+    def _emergency_dialog(self):
+        from .keys_dialogs import emergency_dialog
+
+        emergency_dialog(self)
+
+    def _recipients_dialog(self):
+        from .keys_dialogs import recipients_dialog
+
+        recipients_dialog(self)
 
     def _is_key_backed_up(self):
         info = self._key_backup_info()
@@ -3044,7 +3138,7 @@ class FieldPhotosDock(QDockWidget):
         v.addWidget(widgets.label(tr("Password"), "SecSub"))
         pw1 = widgets.PasswordField(tr("Password"), p)
         v.addWidget(pw1)
-        meter = widgets.StrengthMeter(passwords.MIN_USER)
+        meter = widgets.StrengthMeter(passwords.MIN_ADMIN)
         v.addWidget(meter)
         v.addWidget(widgets.label(tr("Repeat the password"), "SecSub"))
         pw2 = widgets.PasswordField(tr("Repeat the password"), p)
@@ -3089,19 +3183,20 @@ class FieldPhotosDock(QDockWidget):
         docs = os.path.join(os.path.expanduser("~"), "Documents")
         base_dir = docs if os.path.isdir(docs) else os.path.expanduser("~")
         kid = self._pc_kid()
-        default_path = os.path.join(base_dir, f"biruni-photos-key-{kid}.biruni-key")
+        default_path = os.path.join(base_dir, f"biruni-office-keys-{kid}.biruni-key")
         path, _ = QFileDialog.getSaveFileName(
             self, tr("Back up this computer's key"), default_path, tr("Biruni key backup (*.biruni-key)")
         )
         if not path:
             return
         try:
-            pub = handover.backup(self._cert_folder(), path, pw)
+            pub = handover.backup_v2(self._cert_folder(), path, pw)
         except (OSError, ValueError) as e:
             QMessageBox.warning(self, tr("Back up this computer's key"), tr("It could not be done: {e}").format(e=e))
             return
         self._record_key_backup(drive.key_id(pub))
         self._show_key_state()
+        self._show_keys_state()
         self.drive_state.setText(tr("Key backed up."))
 
     def _restore_key(self):
@@ -3141,8 +3236,9 @@ class FieldPhotosDock(QDockWidget):
             QMessageBox.warning(self, tr("Restore key…"), tr("Wrong password, or not a Biruni key backup."))
             return
         drive.forget_refused(self._active_folder())
-        self._record_key_backup(drive.key_id(pub))
+        self._record_key_backup(drive.key_id(pub), v=info.get("v") or 1)
         self._show_key_state()
+        self._show_keys_state()
         self.drive_state.setText(tr("Key restored."))
 
 

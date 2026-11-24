@@ -128,6 +128,88 @@ drive.forget_refused(store.folder)
 seen = json.load(open(os.path.join(store.folder, drive.SEEN_NAME), encoding="utf-8"))
 check(seen["files"] == {} and seen["room"] == drive.room_tag(k), "forget_refused clears the refused files, keeps the rest")
 
+# ---- key backup v2 (no-loss P3): the whole office on a new PC ------------------------------------------------------
+from biruni.field_photos import recipients  # noqa: E402
+from biruni.field_photos.ladder import Ladder  # noqa: E402
+from biruni.field_photos.tunnel import unprotect  # noqa: E402
+
+
+class FakeSettings:
+    """A settings store of one Windows account (QgsSettings' value / setValue)."""
+
+    def __init__(self):
+        self.d = {}
+
+    def value(self, k, default=None):
+        return self.d.get(k, default)
+
+    def setValue(self, k, v):
+        self.d[k] = v
+
+
+old_st = FakeSettings()
+k_fp = bridge.load_key(old_st)
+k_gps = bridge.load_key(old_st, name="biruni/gps/bridge-key")
+old_pin_fp = bridge.identity(k_fp, settings=old_st)[1]
+old_pin_gps = bridge.identity(k_gps, settings=old_st)[1]
+v2_dir = os.path.join(work, "v2-office")
+v2_office = HandoverKey(v2_dir)
+backup_pc = HandoverKey(os.path.join(work, "v2-backup"))
+recipients.add(v2_dir, backup_pc.public, "backup", "branch", office_pub=v2_office.public)
+url_before = f"#k={k_fp}&i={old_pin_fp}&pk={v2_office.public}"
+bak2 = os.path.join(work, "office.biruni-key")
+check(refuses(handover.backup_v2, v2_dir, bak2, "short1", old_st) and not os.path.exists(bak2),
+      "v2: a weak password is refused (administrator rule) and nothing is written")
+check(refuses(handover.backup_v2, v2_dir, bak2, "password1234", old_st), "v2: a common password is refused")
+STRONG = "Field-Office 2026 keys!"
+check(handover.backup_v2(v2_dir, bak2, STRONG, old_st) == v2_office.public, "v2 backup written")
+raw2 = open(bak2, encoding="utf-8").read()
+check(json.loads(raw2)["v"] == 2 and k_fp not in raw2 and "PRIVATE" not in raw2 and handover.backup_info(bak2)["v"] == 2,
+      "v2 holds the bridge keys and identities only sealed")
+
+# positions and a photo sealed before the disaster
+lad_old = Ladder(k_fp)
+env = lad_old.seal({"t": "lpos", "v": 1, "d": "dev_test_1234", "e": "ep1", "lo": 1, "bl": 1,
+                    "b": [[1, {"id": "dev_test_1234", "lat": 30.0, "lon": 31.0, "t": 1763370000000}]],
+                    "n": "nonce-v2", "ts": 1763370000000})
+photo2 = seal(v2_office.public, {"id": "photo-v2"}, b"\xff\xd8" + b"y" * 50)
+
+new_st = FakeSettings()           # a new PC: a fresh settings store and a fresh folder
+new_dir = os.path.join(work, "v2-new-pc")
+check(refuses(handover.restore, new_dir, bak2, "wrong password", new_st) and not new_st.d,
+      "v2: a wrong password changes nothing")
+check(handover.restore(new_dir, bak2, STRONG, new_st) == v2_office.public, "v2 restored on a new PC")
+nk_fp = unprotect(new_st.value("biruni/field-photos/bridge-key", ""))
+nk_gps = unprotect(new_st.value("biruni/gps/bridge-key", ""))
+check(nk_fp == k_fp and nk_gps == k_gps, "the same bridge keys (the same QR codes)")
+check(bridge.identity(nk_fp, settings=new_st)[1] == old_pin_fp and bridge.identity(nk_gps, settings=new_st)[1]
+      == old_pin_gps, "the same pins (&i=): phones trust the restored PC without a new scan")
+url_after = f"#k={nk_fp}&i={bridge.identity(nk_fp, settings=new_st)[1]}&pk={HandoverKey(new_dir).public}"
+check(url_after == url_before, "the phone link is exactly the same")
+pos = Ladder(nk_fp).open(env)
+check(isinstance(pos, dict) and pos.get("b", [[0, {}]])[0][1].get("lat") == 30.0, "it opens the positions")
+check(HandoverKey(new_dir).open(photo2)[0]["id"] == "photo-v2", "it opens the photos")
+check([e["p"] for e in recipients.load(new_dir)["r"]] == [backup_pc.public] and
+      recipients.load(new_dir)["seq"] > recipients.load(v2_dir)["seq"],
+      "the recipients list comes back, with a higher seq (phones never see a rollback)")
+# a PC that already had a newer list keeps it (no rollback through a restore)
+recipients.remove(new_dir, backup_pc.public)
+recipients.add(new_dir, backup_pc.public, "backup", "again", office_pub=v2_office.public)
+seq_now = recipients.load(new_dir)["seq"]
+handover.restore(new_dir, bak2, STRONG, new_st)
+check(recipients.load(new_dir)["seq"] > seq_now and len(recipients.load(new_dir)["r"]) == 1
+      and recipients.load(new_dir)["r"][0]["n"] == "again", "restoring an older backup keeps the newer list, seq rises")
+# a PC that had its own other bridge key keeps it aside
+other_st = FakeSettings()
+mine = bridge.load_key(other_st)
+handover.restore(os.path.join(work, "v2-other"), bak2, STRONG, other_st)
+check(unprotect(other_st.value("biruni/field-photos/bridge-key-before-restore", "")) == mine,
+      "a PC's own different bridge key is kept aside (…-before-restore)")
+# v1 files still restore, and on a v2-aware PC they touch only the handover key
+v1_st = FakeSettings()
+check(handover.restore(os.path.join(work, "v1-again"), bak, PW, v1_st) == pub and not v1_st.d,
+      "a v1 backup still restores (the handover key only)")
+
 shutil.rmtree(work, ignore_errors=True)
 print(f"\n{'FAILED ' + str(len(failures)) if failures else 'ALL PASSED'}")
 sys.exit(1 if failures else 0)

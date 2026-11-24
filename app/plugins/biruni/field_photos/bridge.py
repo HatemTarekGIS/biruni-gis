@@ -114,23 +114,32 @@ def id_pin(pkcs8_b64u):
     return b64u(hashlib.sha256(raw).digest())[:22]
 
 
-def identity(key):
+def identity_slot(key):
+    """Where a key's identity is kept in ID_STORE."""
+    import hashlib
+
+    return hashlib.sha256(("biruni-bridge-id:" + key).encode("ascii")).hexdigest()[:24]
+
+
+def identity(key, settings=None):
     """This PC's identity for one bridge key: (private key as PKCS#8 b64u, pin). Kept (DPAPI) as long as the key, so
     a QR code that stays the same (Field Photos, Phone GPS, printed live papers) keeps its pin; a new key gets a new
-    identity. The newest ID_KEEP are kept."""
-    import hashlib
+    identity. The newest ID_KEEP are kept. settings: another settings store (a key backup's tests); not cached."""
     import json as _json
 
-    h = hashlib.sha256(("biruni-bridge-id:" + key).encode("ascii")).hexdigest()[:24]
-    if h in _IDS:
+    h = identity_slot(key)
+    if settings is None and h in _IDS:
         return _IDS[h]
     sk = None
     try:
-        from qgis.core import QgsSettings
-
         from .tunnel import protect, unprotect
 
-        st = QgsSettings()
+        if settings is None:
+            from qgis.core import QgsSettings
+
+            st = QgsSettings()
+        else:
+            st = settings
         try:
             d = _json.loads(st.value(ID_STORE, "") or "{}")
         except ValueError:
@@ -146,8 +155,15 @@ def identity(key):
             st.setValue(ID_STORE, _json.dumps(d))
     except Exception:  # noqa: BLE001 - no settings (a test, a script): an identity for this run only
         sk = sk or _id_new()
+    if settings is not None:
+        return (sk, id_pin(sk))
     _IDS[h] = (sk, id_pin(sk))
     return _IDS[h]
+
+
+def forget_cached_identities():
+    """After a key backup is restored: read the identities from the settings again."""
+    _IDS.clear()
 
 
 def forget_identity(key):
@@ -655,7 +671,12 @@ async function sendPos(p,force){
   else if(RELAY&&SIG.up())SIG.send({t:'rpos',p:pt},true)}}
 function pollGuide(){}
 function hello(m){if(Array.isArray(m.kinds))KINDS=m.kinds.map(String).slice(0,24);drawKinds();
- if(typeof m.pk==='string'&&m.pk.length>80&&m.pk.length<100){PCKEY=m.pk;keep('biruni-pckey-'+ROOM,m.pk);sealWaiting()}
+ if(typeof m.pk==='string'&&m.pk.length>80&&m.pk.length<100){const npk=m.pk;
+  /* with a signed list kept, an unsigned hello cannot move the office key: only a list naming the new key can */
+  (typeof rlPk==='function'?rlPk(npk,m.rl||null):Promise.resolve(true)).then(ok=>{
+   if(!ok){if(typeof SIG==='object'&&SIG)SIG.refused=(SIG.refused||0)+1;return}
+   PCKEY=npk;keep('biruni-pckey-'+ROOM,npk);sealWaiting()})}
+ else if(m.rl&&typeof rlTake==='function')rlTake(m.rl).then(ok=>{if(ok)sealWaiting()});
  if(Array.isArray(m.form)){FORM=m.form.filter(f=>f&&f.name&&f.label).slice(0,30);drawForm()}
  if(m&&m.nl===1&&typeof setNl==='function')setNl(true);
  if(m&&typeof m.now==='number')noteTime(m.now);
@@ -873,7 +894,7 @@ async function onRelay(o,kind,s,relay){
     if(ack&&!(await SIG.sendOn(relay,ack)))await SIG.sendRaw(ack,kind)}}catch(x){}return}
  if(o.t==='offer')return onOffer(o);
  if(o.t==='rhi'){tell({type:'phone',ua:String(o.ua||'').slice(0,160),relay:true});
-  await SIG.send({t:'rhello',sid:String(o.sid||''),kinds:CFG.kinds,lang:CFG.lang,form:CFG.form||[],pk:CFG.pk||'',
+  await SIG.send({t:'rhello',sid:String(o.sid||''),kinds:CFG.kinds,lang:CFG.lang,form:CFG.form||[],pk:CFG.pk||'',rl:CFG.rl||null,
    lad:CFG.lad?1:0,tun:CFG.tun||'',org:CFG.org||'',nl:1,now:Date.now(),eod:CFG.eod??18},true);
   if(GV)try{await SIG.send({t:'rguide',g:JSON.parse(GUIDE_TXT)},true)}catch(e){}return}
  if(o.t==='rchave'&&Array.isArray(o.ids)&&typeof o.nonce==='string'&&o.nonce.length<80){
@@ -949,14 +970,14 @@ function serve(ch,end,pc){ch.binaryType='arraybuffer';const P={send:s=>ch.send(s
     if(m.t==='hi'&&m.e&&!v.key){const kp=await E2E.pair();v.key=await E2E.key(kp.kp,m.e);ports.add(v.P);
      const g=await IDSIGN('BRH1|'+m.e+'|'+kp.pub)||{};
      ch.send(JSON.stringify({t:'fwd',to:v.id,m:JSON.stringify({t:'hello',kinds:CFG.kinds,lang:CFG.lang,
-      form:CFG.form||[],pk:CFG.pk||'',lad:CFG.lad?1:0,tun:CFG.tun||'',org:CFG.org||'',nl:1,now:Date.now(),eod:CFG.eod??18,e:kp.pub,ip:g.pub,is:g.sig})}));
+      form:CFG.form||[],pk:CFG.pk||'',rl:CFG.rl||null,lad:CFG.lad?1:0,tun:CFG.tun||'',org:CFG.org||'',nl:1,now:Date.now(),eod:CFG.eod??18,e:kp.pub,ip:g.pub,is:g.sig})}));
      tell({type:'phone',ua:String(m.ua||'').slice(0,160),via:true});if(GV)v.P.send('{"t":"guide","g":'+GUIDE_TXT+'}')}
     return}
    if(!v.key)return;const p=await E2E.open(v.key,data);
    if(p[0]===0)await handle(v.P,dec.decode(p.slice(1)));else await handle(v.P,p.slice(1).buffer)}).catch(()=>{})};
  const gone=id=>{const v=carried.get(id);if(v){ports.delete(v.P);carried.delete(id)}};
  ch.onopen=()=>{ports.add(P);ch.send(JSON.stringify({t:'hello',kinds:CFG.kinds,lang:CFG.lang,form:CFG.form||[],
-  pk:CFG.pk||'',lad:CFG.lad?1:0,tun:CFG.tun||'',org:CFG.org||'',nl:1,now:Date.now(),eod:CFG.eod??18}));
+  pk:CFG.pk||'',rl:CFG.rl||null,lad:CFG.lad?1:0,tun:CFG.tun||'',org:CFG.org||'',nl:1,now:Date.now(),eod:CFG.eod??18}));
   if(GV)ch.send('{"t":"guide","g":'+GUIDE_TXT+'}')};
  ch.onclose=()=>{ports.delete(P);for(const id of [...carried.keys()])gone(id);end()};
  ch.onmessage=e=>{
