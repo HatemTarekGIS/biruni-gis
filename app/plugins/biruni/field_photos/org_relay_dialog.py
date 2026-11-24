@@ -1,10 +1,13 @@
 """Dialog to deploy or clear an organization's own Cloudflare Worker relay in one click."""
+import os
 import queue
 import threading
 
+from qgis.core import QgsApplication
 from qgis.PyQt.QtCore import Qt, QTimer
 from qgis.PyQt.QtWidgets import (QDialog, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QPushButton, QVBoxLayout)
 
+from ..health import owners
 from ..i18n import tr
 from . import bridge, org_relay
 
@@ -12,11 +15,12 @@ from . import bridge, org_relay
 class OrgRelayDialog(QDialog):
     """Guides the user through creating a scoped Cloudflare token and deploys biruni-relay."""
 
-    def __init__(self, parent=None, on_changed=None):
+    def __init__(self, parent=None, on_changed=None, cert_folder=None):
         super().__init__(parent)
         self.setWindowTitle(tr("My organization's relay"))
-        self.resize(520, 380)
+        self.resize(520, 440)
         self._on_changed = on_changed
+        self._cert_folder = cert_folder or os.path.join(QgsApplication.qgisSettingsDirPath(), "biruni")
         self._q = queue.Queue()
         self._busy = False
         self._timer = QTimer(self)
@@ -24,6 +28,9 @@ class OrgRelayDialog(QDialog):
         self._timer.timeout.connect(self._poll)
 
         v = QVBoxLayout(self)
+        warn = QLabel("<b>" + tr("Use the organisation's email for this account, not a personal one.") + "</b>")
+        warn.setWordWrap(True)
+        v.addWidget(warn)
         steps = [
             tr("Sign in at <a href='https://dash.cloudflare.com'>dash.cloudflare.com</a> (a free account is enough)."),
             tr("My Profile → API Tokens → Create Token → Create Custom Token."),
@@ -43,6 +50,16 @@ class OrgRelayDialog(QDialog):
         self.addr_lbl.setWordWrap(True)
         self.addr_lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         v.addWidget(self.addr_lbl)
+
+        cur_cf = (owners.load(self._cert_folder).get("services") or {}).get("cloudflare") or {}
+        orow = QHBoxLayout()
+        self.owner_name_edit = QLineEdit(cur_cf.get("owner") or "")
+        self.owner_name_edit.setPlaceholderText(tr("Account owner's name"))
+        self.owner_email_edit = QLineEdit(cur_cf.get("email") or "")
+        self.owner_email_edit.setPlaceholderText(tr("Organisation email (e.g. it@company.com)"))
+        orow.addWidget(self.owner_name_edit, 1)
+        orow.addWidget(self.owner_email_edit, 1)
+        v.addLayout(orow)
 
         self.token_edit = QLineEdit()
         self.token_edit.setEchoMode(QLineEdit.EchoMode.Password)
@@ -94,7 +111,14 @@ class OrgRelayDialog(QDialog):
         if not tok:
             self.status_lbl.setText(tr("Paste your Cloudflare API token first."))
             return
+        self._save_owner()
         self._run_worker(tok, account_id=None)
+
+    def _save_owner(self):
+        name = self.owner_name_edit.text().strip()
+        email = self.owner_email_edit.text().strip()
+        if name or email:
+            owners.set_owner(self._cert_folder, "cloudflare", name, email)
 
     def _run_worker(self, token, account_id=None):
         self._set_busy(True)
@@ -127,6 +151,7 @@ class OrgRelayDialog(QDialog):
                 self._timer.stop()
                 self._set_busy(False)
                 bridge.set_org_host(res["host"])
+                self._save_owner()
                 self._refresh_addr()
                 self.status_lbl.setText(tr("Relay deployed and active: {host}").format(host=res["host"]))
                 if self._on_changed is not None:

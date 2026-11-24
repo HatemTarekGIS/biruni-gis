@@ -451,6 +451,8 @@ CATALOG = {c.id: c for c in [
     _c("who_locks", "Who Is Using\nThis File?", "lock-search", run=lambda p: _mod("file_locks").open_dialog(p)),
     _c("project_doctor", "Project\nDoctor", "heart-rate-monitor",
        run=lambda p: _mod("project_doctor_dialog").open_dialog(p)),
+    _c("system_health", "System\nHealth", "shield-check",
+       run=lambda p: _mod("health").open_dialog(p)),
     _c("where_used", "Where Is This Data Used?", "file-search",
        run=lambda p: _mod("project_doctor_dialog").open_dialog(p, "used")),
     _c("rename_project", "Rename Project", "cursor-text",

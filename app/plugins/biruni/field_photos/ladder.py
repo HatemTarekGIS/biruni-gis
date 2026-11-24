@@ -179,7 +179,17 @@ class Ladder:
                 if pt > 0 and newest is not None and pt < newest:
                     res["late"] = True
             upto = st["upto"]
-            self.last_info = {"d": d, "backlog": bl, "dups": dups}
+            info = {"d": d, "backlog": bl, "dups": dups}
+            raw_hs = env.get("hs")
+            if isinstance(raw_hs, dict):
+                from .server import clean_hs
+
+                hs_in = dict(raw_hs)
+                hs_in.setdefault("d", d)
+                hs_c = clean_hs(hs_in)
+                if hs_c is not None:
+                    info["hs"] = hs_c
+            self.last_info = info
 
         if mirror_ok is None and callable(self.mirror_check):
             try:

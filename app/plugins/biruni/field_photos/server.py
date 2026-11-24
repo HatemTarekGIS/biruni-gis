@@ -140,11 +140,13 @@ def clean_pos(m):
             t = max(0.0, t + dt_corr)
     when = dt.datetime.fromtimestamp(t / 1000, dt.timezone.utc) if t else dt.datetime.now(dt.timezone.utc)
     net, eff, route = str(m.get("net") or ""), str(m.get("eff") or ""), str(m.get("route") or "")
+    tm = str(m.get("tm") or "")
     return {"id": m["id"], "name": _text(m.get("name"), 40), "lat": lat, "lon": lon, "acc": _num(m.get("acc"), 0),
             "heading": _num(m.get("heading"), 0, 360), "cog": _num(m.get("cog"), 0, 360),
             "seen": when.isoformat(timespec="seconds"),
             "alt": _num(m.get("alt")), "speed": _num(m.get("speed"), 0, 200), "t": t,
             "sk": _text(m.get("sk"), 64),
+            "tm": tm if tm in ("off", "photo", "1", "5", "15", "live") else "",
             # the phone's link, for the team list: Wi-Fi or mobile data, the time to the computer and back
             # (ms; measured by the phone, or by this computer over the bridge), the route, the battery
             "net": net if net in NETS else "", "eff": eff if eff in ("slow-2g", "2g", "3g", "4g") else "",
@@ -152,6 +154,52 @@ def clean_pos(m):
             "crtt": _num(m.get("crtt"), 0, 60000),
             "route": route if route in ("lan", "direct", "relay", "peer", "mqtt", "org", "own", "tunnel", "drive") else "",
             "bat": _num(m.get("bat"), 0, 1), "chg": m.get("chg") is True}
+
+
+HS_MODES = ("off", "photo", "1", "5", "15", "live")
+
+
+def clean_hs(m):
+    """A coordinate-free status heartbeat from the phone (`hs`); None when invalid."""
+    if not isinstance(m, dict):
+        return None
+    d = str(m.get("d") or m.get("id") or "")
+    if not DEV_RE.match(d):
+        return None
+    raw_q = m.get("q")
+    if isinstance(raw_q, (list, tuple)) and len(raw_q) == 4:
+        q = []
+        for x in raw_q:
+            v = _int(x, 0, 1_000_000)
+            q.append(v if v is not None else 0)
+    else:
+        q = [0, 0, 0, 0]
+    old = _num(m.get("old"), 0)
+    old = int(old) if old else None
+    lp = _int(m.get("lp"), 0, 1_000_000)
+    tm = str(m.get("tm") or "")
+    tm = tm if tm in HS_MODES else ""
+    cs = _int(m.get("cs"), 0, 1_000_000_000)
+    ps = m.get("ps") if isinstance(m.get("ps"), bool) else None
+    t = _num(m.get("t"), 0)
+    t = int(t) if t else int(time.time() * 1000)
+    route = str(m.get("route") or "")
+    route = route if route in ("lan", "direct", "relay", "peer", "mqtt", "org", "own", "tunnel", "drive") else ""
+    return {
+        "id": d,
+        "d": d,
+        "name": _text(m.get("n") or m.get("name"), 40),
+        "n": _text(m.get("n") or m.get("name"), 40),
+        "sk": _text(m.get("sk"), 64),
+        "q": q,
+        "old": old,
+        "lp": lp if lp is not None else 0,
+        "tm": tm,
+        "cs": cs if cs is not None else 0,
+        "ps": ps,
+        "t": t,
+        "route": route,
+    }
 
 
 NETS = ("wifi", "cellular", "ethernet", "bluetooth", "wimax", "none", "other", "unknown")
@@ -1058,7 +1106,7 @@ class PhotoServer:
                         server.events.put(("phone", agent))
                     self._send(200, server.page, "text/html; charset=utf-8")
                 elif route == "ping":
-                    self._send(200, json.dumps({"ok": True, "nl": 1, "now": int(time.time() * 1000),
+                    self._send(200, json.dumps({"ok": True, "nl": 1, "hs": 1, "now": int(time.time() * 1000),
                                                 "eod": server.eod_hour}).encode("utf-8"))
                 elif route == "manifest.webmanifest":
                     self._send(200, b'{"name":"Biruni GIS","short_name":"Biruni GIS","display":"standalone"}',
@@ -1258,6 +1306,33 @@ class PhotoServer:
                     server.events.put(("pos", pos))
                     self._send(200, b'{"ok":true}')
                     return
+                if route == "hs":
+                    try:
+                        n = int(self.headers.get("Content-Length") or 0)
+                    except ValueError:
+                        n = -1
+                    if n <= 0 or n > 512:
+                        self.close_connection = True
+                        self._send(413 if n > 512 else 400)
+                        return
+                    raw_hs = _read(self.rfile, n)
+                    if raw_hs is None:
+                        self.close_connection = True
+                        return
+                    try:
+                        hs = clean_hs(json.loads(raw_hs))
+                    except ValueError:
+                        hs = None
+                    if hs is not None:
+                        hs = server.store.resolve_pos(hs)
+                    if hs is None:
+                        self._send(400)
+                        return
+                    hs["d"] = hs["id"]
+                    hs["n"] = hs["name"]
+                    server.events.put(("hs", hs))
+                    self._send(200, b'{"ok":true}')
+                    return
                 if route != "photo":
                     self._send(404)
                     return
@@ -1355,6 +1430,19 @@ class PhotoServer:
             self.events.put(("pos", pos))
         if self.ladder.last_info is not None:
             info = dict(self.ladder.last_info, via=via, at=time.time())
+            hs = info.get("hs")
+            if isinstance(hs, dict):
+                hs_in = dict(hs)
+                if not hs_in.get("route") and via in ("lan", "direct", "relay", "peer", "mqtt", "org", "own", "tunnel", "drive"):
+                    hs_in["route"] = via
+                hs_res = self.store.resolve_pos(hs_in)
+                if hs_res is not None:
+                    hs_res["d"] = hs_res["id"]
+                    hs_res["n"] = hs_res["name"]
+                    info["hs"] = hs_res
+                    self.events.put(("hs", hs_res))
+                else:
+                    info.pop("hs", None)
             self.events.put(("ladder", info))
         return ack
 

@@ -815,6 +815,7 @@ class FieldPhotosDock(QDockWidget):
         self._downloading = None
         self._own = None  # (token, host) of the user's own tunnel while it is used
         self.team = {}  # device -> its last position message and when it came (the team list)
+        self._presence = None
         self._photo_records = {}  # photo_id -> record (for surveyor stats in the table)
         self._base_qr_url = ""
         self._base_qr_tip = ""
@@ -985,8 +986,12 @@ class FieldPhotosDock(QDockWidget):
         self.recipients_btn = QPushButton(tr("Recipients"))
         self.recipients_btn.setToolTip(tr("Who can open what the phones send."))
         self.recipients_btn.clicked.connect(self._recipients_dialog)
+        self.health_btn = QPushButton(tr("System health…"))
+        self.health_btn.setToolTip(tr("Check keys, second copy, surveyor queues, account owners and print the emergency sheet."))
+        self.health_btn.clicked.connect(self._open_system_health)
         kr2.addWidget(self.emergency_btn)
         kr2.addWidget(self.recipients_btn)
+        kr2.addWidget(self.health_btn)
         cv.addLayout(kr2)
         self.keys_hint = QLabel()
         self.keys_hint.setObjectName("GpsHint")
@@ -1597,6 +1602,11 @@ class FieldPhotosDock(QDockWidget):
         self.state.setText(tr("Opening the secure address…"))
 
     def stop(self):
+        if self._presence is not None:
+            try:
+                self._presence.save(force=True)
+            except Exception:  # noqa: BLE001
+                pass
         self._stop_drive()
         self._poll.stop()
         if self._downloading is not None:
@@ -1721,7 +1731,10 @@ class FieldPhotosDock(QDockWidget):
             elif kind == "bridge":
                 self._on_bridge(value)
             elif kind == "pos":
+                self._get_presence().note_pos(value)
                 self._on_pos(value)
+            elif kind == "hs":
+                self._on_hs(value)
             elif kind == "drive":
                 self._on_drive(value)
             elif kind == "rejected":
@@ -1807,6 +1820,25 @@ class FieldPhotosDock(QDockWidget):
 
     # a phone sends its position at least every 30 s while its page is open (and sharing its place is on)
     LOST_AFTER = 75
+
+    def _get_presence(self):
+        from .presence import Presence
+
+        folder = self._active_folder()
+        if self._presence is None or self._presence.folder != folder:
+            self._presence = Presence(folder)
+        return self._presence
+
+    def _on_hs(self, hs):
+        self._get_presence().note_hs(hs)
+        dev = hs.get("d") or hs.get("id") or ""
+        if dev and dev in self.team:
+            self.team[dev]["at"] = time.time()
+            if hs.get("name") or hs.get("n"):
+                self.team[dev]["pos"]["name"] = hs.get("name") or hs.get("n")
+        self._show_team()
+        if not self._team_tick.isActive():
+            self._team_tick.start()
 
     def _active_folder(self):
         if self.server is not None and hasattr(self.server, "store"):
@@ -2882,22 +2914,54 @@ class FieldPhotosDock(QDockWidget):
         box = QMessageBox(self)
         box.setIcon(QMessageBox.Icon.Question)
         box.setWindowTitle(tr("Google Drive for this project"))
-        box.setText(tr(
-            "With this on, phones may send this project's photos through Google Drive.\n\n"
-            "Each photo, with its location and notes, is encrypted on the phone for this computer. Google and "
-            "anyone who can see the Drive folder cannot open it. The file's time, size and the phone's ID are not "
-            "hidden.\n\n"
-            "The encrypted files are kept in the Google account the phone signs in to, on Google's servers, which "
-            "may be outside Saudi Arabia. Photos are stored in the office's folder, but each file is owned by, and "
-            "counts against the storage of, the surveyor's Google account. If this project's data must stay in the "
-            "Kingdom (GEOSA rules), get approval from whoever is responsible first.\n\n"
-            "This is for this project only; it stays off for every other project."
-        ))
+        box.setText(
+            tr("Use the organisation's email for this account, not a personal one.")
+            + "\n\n"
+            + tr(
+                "With this on, phones may send this project's photos through Google Drive.\n\n"
+                "Each photo, with its location and notes, is encrypted on the phone for this computer. Google and "
+                "anyone who can see the Drive folder cannot open it. The file's time, size and the phone's ID are not "
+                "hidden.\n\n"
+                "The encrypted files are kept in the Google account the phone signs in to, on Google's servers, which "
+                "may be outside Saudi Arabia. Photos are stored in the office's folder, but each file is owned by, and "
+                "counts against the storage of, the surveyor's Google account. If this project's data must stay in the "
+                "Kingdom (GEOSA rules), get approval from whoever is responsible first.\n\n"
+                "This is for this project only; it stays off for every other project."
+            )
+        )
         on_btn = box.addButton(tr("Turn on"), QMessageBox.ButtonRole.AcceptRole)
         cancel_btn = box.addButton(tr("Cancel"), QMessageBox.ButtonRole.RejectRole)
         box.setDefaultButton(cancel_btn)
         box.exec()
-        return box.clickedButton() is on_btn
+        if box.clickedButton() is not on_btn:
+            return False
+        self._ask_drive_owner()
+        return True
+
+    def _ask_drive_owner(self):
+        from ..health import owners
+
+        cur = (owners.load(self._cert_folder()).get("services") or {}).get("drive") or {}
+        name, ok = QInputDialog.getText(
+            self,
+            tr("Google Drive account owner"),
+            tr("Use the organisation's email for this account, not a personal one.")
+            + "\n\n" + tr("Owner's full name:"),
+            text=cur.get("owner") or "",
+        )
+        if not ok:
+            return
+        email, ok2 = QInputDialog.getText(
+            self,
+            tr("Google Drive account owner"),
+            tr("Use the organisation's email for this account, not a personal one.")
+            + "\n\n" + tr("Organisation email for this Google Drive account:"),
+            text=cur.get("email") or "",
+        )
+        if not ok2:
+            return
+        if name.strip() or email.strip():
+            owners.set_owner(self._cert_folder(), "drive", name.strip(), email.strip())
 
     def _nudge_backup(self):
         box = QMessageBox(self)
@@ -3101,6 +3165,11 @@ class FieldPhotosDock(QDockWidget):
         from .keys_dialogs import recipients_dialog
 
         recipients_dialog(self)
+
+    def _open_system_health(self):
+        from ..health.dialog import open_health_dialog
+
+        open_health_dialog(self.plugin)
 
     def _is_key_backed_up(self):
         info = self._key_backup_info()

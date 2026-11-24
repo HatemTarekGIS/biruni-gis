@@ -895,7 +895,7 @@ async function onRelay(o,kind,s,relay){
  if(o.t==='offer')return onOffer(o);
  if(o.t==='rhi'){tell({type:'phone',ua:String(o.ua||'').slice(0,160),relay:true});
   await SIG.send({t:'rhello',sid:String(o.sid||''),kinds:CFG.kinds,lang:CFG.lang,form:CFG.form||[],pk:CFG.pk||'',rl:CFG.rl||null,
-   lad:CFG.lad?1:0,tun:CFG.tun||'',org:CFG.org||'',nl:1,now:Date.now(),eod:CFG.eod??18},true);
+   lad:CFG.lad?1:0,tun:CFG.tun||'',org:CFG.org||'',nl:1,hs:1,now:Date.now(),eod:CFG.eod??18},true);
   if(GV)try{await SIG.send({t:'rguide',g:JSON.parse(GUIDE_TXT)},true)}catch(e){}return}
  if(o.t==='rchave'&&Array.isArray(o.ids)&&typeof o.nonce==='string'&&o.nonce.length<80){
   const ids=o.ids.filter(x=>typeof x==='string'&&x.length<80).slice(0,100);let r={};
@@ -904,6 +904,8 @@ async function onRelay(o,kind,s,relay){
   await SIG.send({t:'rcgot',nonce:o.nonce,rt:rt,items:items},true);return}
  if(o.t==='rpos'){const p=Object.assign({},o.p||{},{route:(kind==='own'||kind==='org')?kind:'relay'});
   fetch('pos',{method:'POST',body:JSON.stringify(p)}).catch(()=>{});return}
+ if(o.t==='rhs'&&o.h&&typeof o.h==='object'){const h=Object.assign({},o.h,{route:(kind==='own'||kind==='org')?kind:'relay'});
+  fetch('hs',{method:'POST',body:JSON.stringify(h)}).catch(()=>{});return}
  if(o.t==='rchunk'&&o.id&&o.nonce&&+o.k>0&&+o.k<=128&&+o.i>=0&&+o.i<+o.k&&typeof o.d==='string'){
   const key=o.id+':'+o.nonce;let e=rphotos.get(key);
   if(!e){e={id:o.id,nonce:o.nonce,meta:o.meta||{id:o.id,sealed:1,preview:true},k:+o.k,parts:new Array(+o.k),got:0,st:null,ts:Date.now()};
@@ -933,6 +935,8 @@ async function handle(P,data){
    if(r.status===200){const ack=await r.text();if(ack)P.send(JSON.stringify({t:'la',s:ack}))}}catch(x){}}
  else if(m.t==='pos'){const p=Object.assign({},m.p||{},await link(P.pc));
   fetch('pos',{method:'POST',body:JSON.stringify(p)}).catch(()=>{})}
+ else if(m.t==='hs'&&m.h&&typeof m.h==='object'){const h=Object.assign({},m.h,await link(P.pc));
+  fetch('hs',{method:'POST',body:JSON.stringify(h)}).catch(()=>{})}
  else if(m.t==='photo')P.cur={id:m.id,kind:m.kind==='preview'?'preview':'original',nonce:String(m.nonce||''),
   meta:m.meta,size:+m.size||0,type:String(m.type||'image/jpeg'),parts:[],got:0};
  else if(m.t==='chave'&&Array.isArray(m.ids)&&typeof m.nonce==='string'&&m.nonce.length<80){
@@ -970,14 +974,14 @@ function serve(ch,end,pc){ch.binaryType='arraybuffer';const P={send:s=>ch.send(s
     if(m.t==='hi'&&m.e&&!v.key){const kp=await E2E.pair();v.key=await E2E.key(kp.kp,m.e);ports.add(v.P);
      const g=await IDSIGN('BRH1|'+m.e+'|'+kp.pub)||{};
      ch.send(JSON.stringify({t:'fwd',to:v.id,m:JSON.stringify({t:'hello',kinds:CFG.kinds,lang:CFG.lang,
-      form:CFG.form||[],pk:CFG.pk||'',rl:CFG.rl||null,lad:CFG.lad?1:0,tun:CFG.tun||'',org:CFG.org||'',nl:1,now:Date.now(),eod:CFG.eod??18,e:kp.pub,ip:g.pub,is:g.sig})}));
+      form:CFG.form||[],pk:CFG.pk||'',rl:CFG.rl||null,lad:CFG.lad?1:0,tun:CFG.tun||'',org:CFG.org||'',nl:1,hs:1,now:Date.now(),eod:CFG.eod??18,e:kp.pub,ip:g.pub,is:g.sig})}));
      tell({type:'phone',ua:String(m.ua||'').slice(0,160),via:true});if(GV)v.P.send('{"t":"guide","g":'+GUIDE_TXT+'}')}
     return}
    if(!v.key)return;const p=await E2E.open(v.key,data);
    if(p[0]===0)await handle(v.P,dec.decode(p.slice(1)));else await handle(v.P,p.slice(1).buffer)}).catch(()=>{})};
  const gone=id=>{const v=carried.get(id);if(v){ports.delete(v.P);carried.delete(id)}};
  ch.onopen=()=>{ports.add(P);ch.send(JSON.stringify({t:'hello',kinds:CFG.kinds,lang:CFG.lang,form:CFG.form||[],
-  pk:CFG.pk||'',rl:CFG.rl||null,lad:CFG.lad?1:0,tun:CFG.tun||'',org:CFG.org||'',nl:1,now:Date.now(),eod:CFG.eod??18}));
+  pk:CFG.pk||'',rl:CFG.rl||null,lad:CFG.lad?1:0,tun:CFG.tun||'',org:CFG.org||'',nl:1,hs:1,now:Date.now(),eod:CFG.eod??18}));
   if(GV)ch.send('{"t":"guide","g":'+GUIDE_TXT+'}')};
  ch.onclose=()=>{ports.delete(P);for(const id of [...carried.keys()])gone(id);end()};
  ch.onmessage=e=>{

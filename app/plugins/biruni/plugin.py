@@ -134,6 +134,8 @@ class BiruniPlugin(QObject):
         # the Vault replaces the classic Browser; built a moment after start so start-up stays quick
         QTimer.singleShot(1500, lambda: self._optional(
             "vault", lambda: __import__("biruni.commands", fromlist=["x"]).vault_for_browser(self)))
+        QTimer.singleShot(4000, lambda: self._optional(
+            "system health", lambda: __import__("biruni.health.dialog", fromlist=["x"]).check_on_startup(self)))
         self._optional("light mode", lambda: __import__("biruni.performance", fromlist=["x"])
                        .suggest_on_first_run(self))
         self._optional("light mode", self._light_mode_at_start)
@@ -544,7 +546,7 @@ class BiruniPlugin(QObject):
         g.large("new_project")
         g.smalls("open", "save", "project_folder")
         g.smalls("history_versions", "activity_report")
-        g.smalls("project_doctor", "who_locks", "rename_project")
+        g.smalls("project_doctor", "system_health", "who_locks", "rename_project")
         g = r.group(home, "Navigate")
         for cid in ("pan", "zoom_in", "zoom_out", "full_extent", "zoom_layer"):
             g.large(cid)
@@ -919,7 +921,7 @@ class BiruniPlugin(QObject):
         self._cmd_action(m, "save_as")
         self._cmd_action(m, "close")
         m.addSeparator()
-        for cid in ("project_folder", "history_versions", "store_temporary", "consolidate", "package",
+        for cid in ("project_folder", "history_versions", "system_health", "store_temporary", "consolidate", "package",
                     "activity_report", "timesheet"):
             self._cmd_action(m, cid)
         rec = m.addAction(tr("Record project activity"))
