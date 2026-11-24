@@ -5,6 +5,12 @@ from .owners import (departures, is_personal, load as load_owners, mark_left,
 from .runbook import runbook_model, write_runbook
 
 
+try:   # P9: the backup's rows (they register themselves)
+    from ..backup import health_rows as _backup_rows  # noqa: F401
+except Exception:  # noqa: BLE001 - a broken backup module must not take the health screen down
+    pass
+
+
 def open_dialog(plugin):
     from .dialog import open_health_dialog
 

@@ -6,7 +6,7 @@ import time
 
 from qgis.core import QgsSettings
 from qgis.PyQt.QtCore import Qt
-from qgis.PyQt.QtWidgets import (QAbstractItemView, QApplication, QDialog, QFileDialog, QGridLayout, QHBoxLayout,
+from qgis.PyQt.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QDialog, QFileDialog, QGridLayout, QHBoxLayout,
                                  QHeaderView, QLabel, QLineEdit, QMessageBox, QPushButton, QTableWidget,
                                  QTableWidgetItem, QVBoxLayout)
 
@@ -114,6 +114,11 @@ def recipients_dialog(dock):
     dlg.exec()
 
 
+def _auto_intake_on():
+    v = QgsSettings().value("biruni/backup/auto-intake", False)
+    return v if isinstance(v, bool) else str(v).strip().lower() in ("1", "true", "yes", "on")
+
+
 # ---- a backup PC ----------------------------------------------------------------------------------------------------
 def backup_pc_dialog(dock):
     from . import recipients
@@ -154,11 +159,27 @@ def backup_pc_dialog(dock):
     for b in (copyb, saveb, packb, filesb):
         r2.addWidget(b)
     v.addLayout(r2)
+    auto = QCheckBox(tr("Read the office's Google Drive folder automatically on this computer"))
+    auto.setToolTip(tr("Needs the office pack. Nothing in the Drive folder is deleted or changed."))
+    auto.setChecked(_auto_intake_on())
+    v.addWidget(auto)
     state = _hint("")
     v.addWidget(state)
     close = QPushButton(tr("Close"))
     close.clicked.connect(dlg.accept)
     v.addWidget(close, 0, Qt.AlignmentFlag.AlignRight)
+
+    def set_auto(on):
+        QgsSettings().setValue("biruni/backup/auto-intake", bool(on))
+        from . import backup_intake
+
+        plugin = getattr(dock, "plugin", None)
+        if on and plugin is not None:
+            started = backup_intake.autostart(plugin)
+            state.setText(tr("The automatic intake is running.") if started else tr(
+                "The automatic intake needs the office pack and a Google Drive folder."))
+        elif plugin is not None:
+            backup_intake.stop(plugin)
 
     def open_key():
         path, _ = QFileDialog.getOpenFileName(dlg, tr("Public key"), _docs(),
@@ -270,6 +291,7 @@ def backup_pc_dialog(dock):
     copyb.clicked.connect(copy)
     saveb.clicked.connect(save_pub)
     packb.clicked.connect(open_pack)
+    auto.toggled.connect(set_auto)
     filesb.clicked.connect(open_files)
     dlg.resize(600, 0)
     dlg.exec()

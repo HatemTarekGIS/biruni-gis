@@ -136,6 +136,8 @@ class BiruniPlugin(QObject):
             "vault", lambda: __import__("biruni.commands", fromlist=["x"]).vault_for_browser(self)))
         QTimer.singleShot(4000, lambda: self._optional(
             "system health", lambda: __import__("biruni.health.dialog", fromlist=["x"]).check_on_startup(self)))
+        QTimer.singleShot(6000, lambda: self._optional(    # backups and a backup PC's intake: only while Biruni is open
+            "backup", lambda: __import__("biruni.backup.schedule", fromlist=["x"]).start(self)))
         self._optional("light mode", lambda: __import__("biruni.performance", fromlist=["x"])
                        .suggest_on_first_run(self))
         self._optional("light mode", self._light_mode_at_start)
@@ -464,6 +466,7 @@ class BiruniPlugin(QObject):
         from .thesis.methodology import uninstall_recorder
 
         crashlog.stop()
+        self._optional("backup", lambda: __import__("biruni.backup.schedule", fromlist=["x"]).stop(self))
 
         uninstall_recorder()
         try:
@@ -921,7 +924,7 @@ class BiruniPlugin(QObject):
         self._cmd_action(m, "save_as")
         self._cmd_action(m, "close")
         m.addSeparator()
-        for cid in ("project_folder", "history_versions", "system_health", "store_temporary", "consolidate", "package",
+        for cid in ("project_folder", "history_versions", "system_health", "backup_sync", "store_temporary", "consolidate", "package",
                     "activity_report", "timesheet"):
             self._cmd_action(m, cid)
         rec = m.addAction(tr("Record project activity"))

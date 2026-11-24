@@ -10,3 +10,7 @@ whitebox | WhiteboxTools_win_amd64.zip | 2b39f0fc90f73b295467850bd470bfacd3dab34
 #   signed by Reini Urban (38A4 167B 0DB6 9E49 C5F7 216C B8C2 8866 AB27 A7A2); source: libredwg-0.14.tar.xz
 #   (sha256 62ebb73b984f865960f20ed26619ea5f8789d5e3fd088fa40a2598384da81275) from the same release.
 libredwg | libredwg-0.14-win64.zip | 1ad7e15344d20b3426c3435b078d82fb84b35062815946b2cca9c5fc9810fea8 | dwg2dxf.exe;dxf2dwg.exe;dwgread.exe;libredwg-0.dll;libiconv-2.dll;README.txt
+# restic 0.20.0, BSD-2-Clause - https://github.com/restic/restic/releases/tag/v0.20.0 (backup program, backup\ package, no-loss P9)
+#   zip sha256 is the line for restic_0.20.0_windows_amd64.zip in the release's SHA256SUMS; the program inside is
+#   2683eb2b061f11568b9132ac0242f183ba4b3a0ed7630f1186a57e889c82a0e2 (pinned again in app/plugins/biruni/backup/tools.py).
+restic | restic_0.20.0_windows_amd64.zip | bba9061c3dce081701ab353ec8cb73a78be73b71a538aad560f2d1067602b7fe | restic_0.20.0_windows_amd64.exe

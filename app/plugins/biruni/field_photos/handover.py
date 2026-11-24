@@ -139,6 +139,7 @@ def backup(folder, path, password):
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(doc, f, indent=1)
     os.replace(tmp, path)
+    _keep_copy(folder, path)
     return hk.public
 
 
@@ -217,6 +218,11 @@ def backup_v2(folder, path, password, settings=None):
             body["darchive_pw"] = dpw
     except OSError:
         pass
+    from ..backup import secret as backup_secret   # P9: the office's one restic password
+
+    bpw = backup_secret.load_password(folder)
+    if bpw:
+        body["backup_pw"] = bpw
     kdf = crypto.new_kdf()
     ct = crypto.seal(crypto.derive(password, kdf), json.dumps(body).encode("utf-8"), _aad2(hk.public))
     doc = {"biruni": BACKUP_KIND, "v": 2, "pub": hk.public, "made": time.strftime("%Y-%m-%d"),
@@ -225,7 +231,29 @@ def backup_v2(folder, path, password, settings=None):
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(doc, f, indent=1)
     os.replace(tmp, path)
+    _keep_copy(folder, path)
     return hk.public
+
+
+def _keep_copy(folder, path):
+    """Every key backup is also kept in <cert>\\keybackup\\ (the backup program carries that folder to its disk).
+    A copy never overwrites an older one; failures are ignored (the backup itself is already written)."""
+    try:
+        dest = os.path.join(folder, "keybackup")
+        if os.path.normcase(os.path.abspath(os.path.dirname(path))) == os.path.normcase(os.path.abspath(dest)):
+            return
+        os.makedirs(dest, exist_ok=True)
+        stem, ext = os.path.splitext(os.path.basename(path))
+        name = f"{stem}-{time.strftime('%Y%m%d-%H%M%S')}{ext or '.biruni-key'}"
+        n = 1
+        while os.path.exists(os.path.join(dest, name)):
+            n += 1
+            name = f"{stem}-{time.strftime('%Y%m%d-%H%M%S')}-{n}{ext or '.biruni-key'}"
+        with open(path, "rb") as a, open(os.path.join(dest, name) + ".tmp", "wb") as b:
+            b.write(a.read())
+        os.replace(os.path.join(dest, name) + ".tmp", os.path.join(dest, name))
+    except OSError:
+        pass
 
 
 def _restore_v2_rest(body, folder, settings):
@@ -276,6 +304,11 @@ def _restore_v2_rest(body, folder, settings):
             with open(path + ".tmp", "w", encoding="ascii") as f:
                 f.write(protect(dpw))
             os.replace(path + ".tmp", path)
+    bpw = body.get("backup_pw")
+    if isinstance(bpw, str) and bpw:
+        from ..backup import secret as backup_secret
+
+        backup_secret.install_password(folder, bpw)   # a different one already here is kept as .old
     if settings is None:
         bridge.forget_cached_identities()
 
