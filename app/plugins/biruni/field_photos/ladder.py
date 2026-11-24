@@ -22,7 +22,7 @@ B64U_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 ROUTES = frozenset(("lan", "direct", "relay", "peer", "mqtt", "org", "own", "tunnel", "drive"))
 MAX_INFLATE = 1 << 20
 MAX_GOT = 50_000
-MAX_ENV_AGE_MS = 48 * 3600 * 1000
+MAX_ENV_AGE_MS = 10 * 24 * 3600 * 1000   # 10 days: a long weekend or holiday with the office shut
 MAX_ENV_AHEAD_MS = 15 * 60 * 1000
 
 

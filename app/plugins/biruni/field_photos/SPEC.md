@@ -37,7 +37,7 @@ The phone opens a static web page (served locally over Wi-Fi/hotspot or from `ht
 - **Cloudflare, and Hatem's account (Biruni relay):** topic hashes, IPs, counts and sizes; sealed bytes only.
 - **Google (Drive GPS mailbox):** the account, the file names (seq ranges, device folder), sizes and times; sealed bytes only.
 - **Phone storage for positions:**
-  - The phone's storage holds its own positions in plaintext until they are acked, or for 48 h.
+  - The phone's storage holds its own positions in plaintext until they are acked, or for 10 days (a long weekend or holiday with the office shut).
 - **What Google sees (Drive route):** file names (`NNNNNN-<sha12>.bfp`), folder names, sizes, upload times, the surveyor's and the office's Google accounts, and the `appProperties` photo id. It cannot read the photo, place, notes or answers. The link page asks for `drive.file` only, so Biruni can touch only the files and folders it made or the surveyor picked.
 
 ## Limits

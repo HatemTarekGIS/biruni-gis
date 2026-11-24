@@ -151,7 +151,7 @@ const LAD=(()=>{
     (T.ladKeep||'{n} positions kept on the phone - they are sent when the computer is in reach.');
    wp.textContent=tpl.replace('{n}',n);wp.classList.remove('hide')},
   async _prune(){
-   const cut=Date.now()-48*3600*1000;
+   const cut=Date.now()-10*24*3600*1000;
    const drop=this._items.filter(x=>(x.t||0)<cut);
    this._items=this._items.filter(x=>(x.t||0)>=cut);
    if(this._items.length>50000){const extra=this._items.splice(0,this._items.length-50000);drop.push(...extra)}

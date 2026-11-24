@@ -427,7 +427,7 @@ class DriveIntake:
 BGP_MAGIC = b"BGP1\n"
 BGP_RE = re.compile(r"^\d{9}-\d{9}-[\w-]{6}\.bgp$")
 BGP_MAX_BYTES = 120 * 1024
-BGP_MAX_AGE = 48 * 3600
+BGP_MAX_AGE = 10 * 24 * 3600   # same as ladder.MAX_ENV_AGE_MS
 
 
 class PosIntake:
