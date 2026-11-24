@@ -1,4 +1,4 @@
-<!doctype html><html lang="en" dir="ltr"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-9R8Fg7Q6IqbHsHBFXOfjJ52h/X4P8RUB+Xy222N7HCs='; style-src 'sha256-cXxuL3Sdh6ZNHR2D9p1Pn4TCIJ8VNCQNrJLFXTrgFHQ='; img-src 'self' blob:; media-src blob:; connect-src wss://nos.lol wss://relay.primal.net wss://nostr.mom wss://relay.snort.social wss://relay.nostr.net wss://offchain.pub wss://nostr.bitcoiner.social wss://yabu.me wss://nostr.red5d.dev wss://nostr.rblb.it https://ntfy.sh wss://ntfy.sh wss://broker.hivemq.com:8884 wss://broker.emqx.io:8084 wss://test.mosquitto.org:8081 wss://broker-cn.emqx.io:8084 wss://relay.biruni-gis.com https://*.trycloudflare.com wss://*.workers.dev https://www.googleapis.com; worker-src 'self'; manifest-src 'self'; frame-src https://drive.biruni-gis.com; base-uri 'none'; form-action 'none'">
+<!doctype html><html lang="en" dir="ltr"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-4vrJT6Y9OhxGKCx4mwqrdJvvW+pnEVrjLBAf5VwUIi8='; style-src 'sha256-cXxuL3Sdh6ZNHR2D9p1Pn4TCIJ8VNCQNrJLFXTrgFHQ='; img-src 'self' blob:; media-src blob:; connect-src wss://nos.lol wss://relay.primal.net wss://nostr.mom wss://relay.snort.social wss://relay.nostr.net wss://offchain.pub wss://nostr.bitcoiner.social wss://yabu.me wss://nostr.red5d.dev wss://nostr.rblb.it https://ntfy.sh wss://ntfy.sh wss://broker.hivemq.com:8884 wss://broker.emqx.io:8084 wss://test.mosquitto.org:8081 wss://broker-cn.emqx.io:8084 wss://relay.biruni-gis.com https://*.trycloudflare.com wss://*.workers.dev https://www.googleapis.com; worker-src 'self'; manifest-src 'self'; frame-src https://drive.biruni-gis.com; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#F4F6F8" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0E1114" media="(prefers-color-scheme: dark)">
@@ -1414,7 +1414,7 @@ const LAD=(()=>{
     (T.ladKeep||'{n} positions kept on the phone - they are sent when the computer is in reach.');
    wp.textContent=tpl.replace('{n}',n);wp.classList.remove('hide')},
   async _prune(){
-   const cut=Date.now()-48*3600*1000;
+   const cut=Date.now()-10*24*3600*1000;
    const drop=this._items.filter(x=>(x.t||0)<cut);
    this._items=this._items.filter(x=>(x.t||0)>=cut);
    if(this._items.length>50000){const extra=this._items.splice(0,this._items.length-50000);drop.push(...extra)}
