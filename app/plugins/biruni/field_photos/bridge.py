@@ -669,6 +669,10 @@ async function sendPos(p,force){
  for(const pt of pts){if(typeof LAD==='object'&&LAD.cap)await LAD.push(pt);
   else if(lineOpen())lineText(JSON.stringify({t:'pos',p:pt}));
   else if(RELAY&&SIG.up())SIG.send({t:'rpos',p:pt},true)}}
+async function sendHs(h){
+ if(!h)return;
+ if(lineOpen()){try{lineText(JSON.stringify({t:'hs',h:h}));return}catch(e){}}
+ if(SIG.up()){try{await SIG.send({t:'rhs',h:h},true)}catch(e){}}}
 function pollGuide(){}
 function hello(m){if(Array.isArray(m.kinds))KINDS=m.kinds.map(String).slice(0,24);drawKinds();
  if(typeof m.pk==='string'&&m.pk.length>80&&m.pk.length<100){const npk=m.pk;
@@ -677,8 +681,10 @@ function hello(m){if(Array.isArray(m.kinds))KINDS=m.kinds.map(String).slice(0,24
    if(!ok){if(typeof SIG==='object'&&SIG)SIG.refused=(SIG.refused||0)+1;return}
    PCKEY=npk;keep('biruni-pckey-'+ROOM,npk);sealWaiting()})}
  else if(m.rl&&typeof rlTake==='function')rlTake(m.rl).then(ok=>{if(ok)sealWaiting()});
+ if(m&&m.pl&&typeof plTake==='function')plTake(m.pl);
  if(Array.isArray(m.form)){FORM=m.form.filter(f=>f&&f.name&&f.label).slice(0,30);drawForm()}
  if(m&&m.nl===1&&typeof setNl==='function')setNl(true);
+ if(m&&m.hs===1&&typeof setHsCap==='function')setHsCap(true);
  if(m&&typeof m.now==='number')noteTime(m.now);
  if(m&&typeof m.eod==='number'&&typeof setEodHour==='function')setEodHour(m.eod);
  if(typeof LAD==='object')LAD.onCap(m);
@@ -895,7 +901,7 @@ async function onRelay(o,kind,s,relay){
  if(o.t==='offer')return onOffer(o);
  if(o.t==='rhi'){tell({type:'phone',ua:String(o.ua||'').slice(0,160),relay:true});
   await SIG.send({t:'rhello',sid:String(o.sid||''),kinds:CFG.kinds,lang:CFG.lang,form:CFG.form||[],pk:CFG.pk||'',rl:CFG.rl||null,
-   lad:CFG.lad?1:0,tun:CFG.tun||'',org:CFG.org||'',nl:1,hs:1,now:Date.now(),eod:CFG.eod??18},true);
+   pl:CFG.pl||null,lad:CFG.lad?1:0,tun:CFG.tun||'',org:CFG.org||'',nl:1,hs:1,now:Date.now(),eod:CFG.eod??18},true);
   if(GV)try{await SIG.send({t:'rguide',g:JSON.parse(GUIDE_TXT)},true)}catch(e){}return}
  if(o.t==='rchave'&&Array.isArray(o.ids)&&typeof o.nonce==='string'&&o.nonce.length<80){
   const ids=o.ids.filter(x=>typeof x==='string'&&x.length<80).slice(0,100);let r={};
@@ -974,14 +980,14 @@ function serve(ch,end,pc){ch.binaryType='arraybuffer';const P={send:s=>ch.send(s
     if(m.t==='hi'&&m.e&&!v.key){const kp=await E2E.pair();v.key=await E2E.key(kp.kp,m.e);ports.add(v.P);
      const g=await IDSIGN('BRH1|'+m.e+'|'+kp.pub)||{};
      ch.send(JSON.stringify({t:'fwd',to:v.id,m:JSON.stringify({t:'hello',kinds:CFG.kinds,lang:CFG.lang,
-      form:CFG.form||[],pk:CFG.pk||'',rl:CFG.rl||null,lad:CFG.lad?1:0,tun:CFG.tun||'',org:CFG.org||'',nl:1,hs:1,now:Date.now(),eod:CFG.eod??18,e:kp.pub,ip:g.pub,is:g.sig})}));
+      form:CFG.form||[],pk:CFG.pk||'',rl:CFG.rl||null,pl:CFG.pl||null,lad:CFG.lad?1:0,tun:CFG.tun||'',org:CFG.org||'',nl:1,hs:1,now:Date.now(),eod:CFG.eod??18,e:kp.pub,ip:g.pub,is:g.sig})}));
      tell({type:'phone',ua:String(m.ua||'').slice(0,160),via:true});if(GV)v.P.send('{"t":"guide","g":'+GUIDE_TXT+'}')}
     return}
    if(!v.key)return;const p=await E2E.open(v.key,data);
    if(p[0]===0)await handle(v.P,dec.decode(p.slice(1)));else await handle(v.P,p.slice(1).buffer)}).catch(()=>{})};
  const gone=id=>{const v=carried.get(id);if(v){ports.delete(v.P);carried.delete(id)}};
  ch.onopen=()=>{ports.add(P);ch.send(JSON.stringify({t:'hello',kinds:CFG.kinds,lang:CFG.lang,form:CFG.form||[],
-  pk:CFG.pk||'',rl:CFG.rl||null,lad:CFG.lad?1:0,tun:CFG.tun||'',org:CFG.org||'',nl:1,hs:1,now:Date.now(),eod:CFG.eod??18}));
+  pk:CFG.pk||'',rl:CFG.rl||null,pl:CFG.pl||null,lad:CFG.lad?1:0,tun:CFG.tun||'',org:CFG.org||'',nl:1,hs:1,now:Date.now(),eod:CFG.eod??18}));
   if(GV)ch.send('{"t":"guide","g":'+GUIDE_TXT+'}')};
  ch.onclose=()=>{ports.delete(P);for(const id of [...carried.keys()])gone(id);end()};
  ch.onmessage=e=>{

@@ -179,18 +179,18 @@ def canonical(lst):
     return json.dumps(lst, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
-def sign_text(l_text):
-    return SIGN_PREFIX + hashlib.sha256(l_text.encode("utf-8")).hexdigest()
+def sign_text(l_text, prefix=SIGN_PREFIX):
+    return str(prefix) + hashlib.sha256(l_text.encode("utf-8")).hexdigest()
 
 
-def sign_with(sk_pkcs8_b64u, l_text):
+def sign_with(sk_pkcs8_b64u, l_text, prefix=SIGN_PREFIX):
     """(public key b64u, raw r|s signature b64u) - the same shape WebCrypto makes."""
     from cryptography.hazmat.primitives import hashes, serialization
     from cryptography.hazmat.primitives.asymmetric import ec
     from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
 
     sk = serialization.load_der_private_key(_unb64u(sk_pkcs8_b64u), None)
-    r, s = decode_dss_signature(sk.sign(sign_text(l_text).encode("utf-8"), ec.ECDSA(hashes.SHA256())))
+    r, s = decode_dss_signature(sk.sign(sign_text(l_text, prefix=prefix).encode("utf-8"), ec.ECDSA(hashes.SHA256())))
     pub = sk.public_key().public_bytes(serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint)
     return _b64u(pub), _b64u(r.to_bytes(32, "big") + s.to_bytes(32, "big"))
 

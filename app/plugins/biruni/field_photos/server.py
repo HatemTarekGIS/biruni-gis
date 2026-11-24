@@ -33,10 +33,11 @@ from .capture import DEV_RE as CAP_DEV_RE, JOB_ID_RE, clean_cap
 PHOTO_PORT = 10112
 MAX_PHOTO = 40 * 1024 * 1024
 LOG_NAME = "photos.jsonl"
+CONSENTS_NAME = "consents.jsonl"
 BLOCKED_NAME = "blocked_devices.json"
 REJECTED_NAME = "rejected.jsonl"
 SURVEYOR_KEYS_NAME = "surveyor_keys.json"
-ID_RE = re.compile(r"^[A-Za-z0-9-]{8,64}$")
+ID_RE = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
 TYPES = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/heic": "heic", "image/heif": "heif"}
 
 
@@ -428,6 +429,7 @@ class PhotoStore:
         self.lock = threading.Lock()
         os.makedirs(folder, exist_ok=True)
         self.records = {r["id"]: r for r in read_log(folder)}
+        self.consents = {r["id"]: r for r in read_consents(folder)}
         self.blocked = read_blocked(folder)
         self.surveyor_keys = read_surveyor_keys(folder)
         self._jobs = None
@@ -446,6 +448,8 @@ class PhotoStore:
                 if r.get("route") == "drive":
                     places.append("drive_mb")
                 self.ledger.mark(r["id"], places=places, sha=r.get("sha") or "", ssha=r.get("ssha") or "")
+        for c_id, c_rec in self.consents.items():
+            self.ledger.mark(c_id, "office", sha=c_rec.get("sha") or "", ssha=c_rec.get("ssha") or "")
 
     def set_mirror_folder(self, mirror_folder):
         self.ledger.set_mirror_folder(mirror_folder)
@@ -464,7 +468,7 @@ class PhotoStore:
         """Of these photo ids, those kept here as full originals (not only a preview), plus merged state item ids:
         the phone may then free its copy in the surveyor's Google Drive when 2 non-mailbox copies exist
         (drive_page.py, receipts over the line)."""
-        state_ids = self.jobs.state_ids()
+        state_ids = self.jobs.state_ids() | set(self.consents)
         out = []
         for i in ids:
             if not isinstance(i, str):
@@ -496,7 +500,7 @@ class PhotoStore:
                     c, _h, h8 = self.ledger.receipt_info(i)
                 else:
                     if state_ids is None:
-                        state_ids = self.jobs.state_ids()
+                        state_ids = self.jobs.state_ids() | set(self.consents)
                     if i in state_ids:
                         self.ledger.mark(i, "office")
                         c, _h, h8 = self.ledger.receipt_info(i)
@@ -859,10 +863,105 @@ class PhotoStore:
             self.on_job(job_id)
         return {"id": rec["id"], "sha": sha, "ssha": ssha}, False
 
+    def _save_consent(self, meta, data, ssha=""):
+        from . import policy
+
+        if not isinstance(meta, dict) or not ID_RE.match(str(meta.get("id", ""))):
+            raise ValueError("bad id")
+        raw_blob = bytes(data) if isinstance(data, (bytes, bytearray)) else b""
+        if raw_blob[:4] != b"BCN1" or len(raw_blob) > 16384:
+            raise ValueError("bad consent record")
+        try:
+            body = json.loads(raw_blob[4:].decode("utf-8"))
+        except (UnicodeDecodeError, ValueError) as e:
+            raise ValueError("bad consent record") from e
+        if not isinstance(body, dict) or body.get("v") != 1:
+            raise ValueError("bad consent record")
+        seq = body.get("seq")
+        if not isinstance(seq, int) or isinstance(seq, bool) or seq < 1:
+            raise ValueError("bad consent seq")
+        mode = body.get("mode")
+        if mode not in policy.MODES:
+            raise ValueError("bad consent mode")
+        hrs = body.get("hours")
+        if not isinstance(hrs, list) or len(hrs) > policy.MAX_HOURS:
+            raise ValueError("bad consent hours")
+        policy._clean_hours(hrs, strict=True)
+        a_val = body.get("a")
+        if not isinstance(a_val, bool) and a_val not in (0, 1):
+            raise ValueError("bad consent action")
+        t_val = _num(body.get("t"), 0)
+        if t_val is None:
+            raise ValueError("bad consent time")
+        raw_dev_meta = meta.get("device_id")
+        raw_dev_body = body.get("dev")
+        dev_cand = str(raw_dev_meta if raw_dev_meta not in (None, "") else (raw_dev_body or "")).strip()
+        by = _text(meta.get("surveyor") or meta.get("by") or body.get("by"), 40)
+        rec = {
+            "id": meta["id"],
+            "by": by,
+            "surveyor": by or tr("Unknown"),
+            "device_id": dev_cand[:64],
+        }
+        sk = _text(meta.get("sk"), 64)
+        with self.lock:
+            self._check_sender(rec, sk)
+            if sk:
+                dev = rec["device_id"]
+            else:
+                if raw_dev_meta not in (None, "") and not (isinstance(raw_dev_meta, str) and DEV_RE.fullmatch(raw_dev_meta.strip())):
+                    raise ValueError("bad dev id")
+                if raw_dev_body not in (None, "") and not (isinstance(raw_dev_body, str) and DEV_RE.fullmatch(raw_dev_body.strip())):
+                    raise ValueError("bad dev id")
+                if (raw_dev_meta not in (None, "") and raw_dev_body not in (None, "")
+                        and raw_dev_meta.strip() != raw_dev_body.strip()):
+                    raise ValueError("dev id mismatch")
+                dev = dev_cand
+            if not isinstance(dev, str) or not DEV_RE.fullmatch(dev):
+                raise ValueError("bad dev id")
+            sha = hashlib.sha256(raw_blob).hexdigest()
+            ssha = str(ssha or meta.get("_ssha") or "")
+            places = ["office"]
+            if meta.get("route") == "drive":
+                places.append("drive_mb")
+            existing = self.consents.get(rec["id"])
+            if existing is not None:
+                self.ledger.mark(rec["id"], places=places, sha=existing.get("sha") or sha, ssha=ssha or existing.get("ssha") or "")
+                if self.ledger.mirror_folder:
+                    cpath = os.path.join(self.folder, CONSENTS_NAME)
+                    if os.path.isfile(cpath):
+                        self.ledger.write_mirror_file(rec["id"], cpath, ssha=ssha or existing.get("ssha") or "")
+                return dict(existing), False
+            entry = {
+                "id": rec["id"],
+                "v": 1,
+                "dev": dev,
+                "by": rec.get("by") or "",
+                "seq": seq,
+                "mode": mode,
+                "hours": hrs,
+                "a": bool(a_val),
+                "t": int(t_val),
+                "sha": sha,
+                "ssha": ssha,
+            }
+            cpath = os.path.join(self.folder, CONSENTS_NAME)
+            with open(cpath, "a", encoding="utf-8") as f:
+                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+                f.flush()
+                os.fsync(f.fileno())
+            self.consents[rec["id"]] = entry
+            self.ledger.mark(rec["id"], places=places, sha=sha, ssha=ssha)
+            if self.ledger.mirror_folder and os.path.isfile(cpath):
+                self.ledger.write_mirror_file(rec["id"], cpath, ssha=ssha)
+            return dict(entry), False
+
     def save(self, meta, data, ssha=""):
         """(record, new) - the photo is on disk when this returns.
         When a preview arrived earlier over the relays and the full original arrives later with the same id,
         the original replaces the preview file in the same record."""
+        if isinstance(meta, dict) and (meta.get("cn") == 1 or (isinstance(data, (bytes, bytearray)) and bytes(data)[:4] == b"BCN1")):
+            return self._save_consent(meta, data, ssha=ssha)
         if isinstance(meta, dict) and ("cs" in meta or (isinstance(data, (bytes, bytearray)) and bytes(data)[:4] == b"BCS1")):
             return self._save_state_item(meta, data, ssha=ssha)
         ext = sniff(data)
@@ -990,6 +1089,23 @@ def read_log(folder):
     return list(by_id.values())
 
 
+def read_consents(folder):
+    """Every consent record in `consents.jsonl`."""
+    by_id = {}
+    try:
+        with open(os.path.join(folder, CONSENTS_NAME), encoding="utf-8") as f:
+            for line in f:
+                try:
+                    r = json.loads(line)
+                except ValueError:
+                    continue
+                if isinstance(r, dict) and isinstance(r.get("id"), str) and r["id"]:
+                    by_id[r["id"]] = r
+    except OSError:
+        pass
+    return list(by_id.values())
+
+
 class PhotoServer:
     """HTTPS server in a background thread. Events for the GUI go to self.events:
     ("photo", record) for a new photo, ("phone", user agent) when a phone opens the page."""
@@ -1009,6 +1125,7 @@ class PhotoServer:
         self.handover = HandoverKey(cert_folder)   # photos handed phone to phone are sealed for this key
         self.cert_folder = cert_folder
         self.rl = None   # the signed recipients list (recipients.py): set with the bridge key in set_ladder
+        self.pl = None   # the signed tracking policy (policy.py): set with the bridge key in set_ladder
         self.eod_hour = int(eod_hour) if isinstance(eod_hour, int) and 0 <= eod_hour <= 23 else 18
         self.page = render_page(page_texts, lang, kinds, self.store.form, self.handover.public)
         # the bridge (bridge.py) runs a hidden receiver page on this PC that hands the photos in here
@@ -1394,6 +1511,7 @@ class PhotoServer:
         self.ladder = Ladder(key)
         self._rl_key = key
         self.refresh_recipients()
+        self.refresh_policy()
         self.xin = queue.Queue()
         self.xout = deque(maxlen=64)
         self.tunnel_host = ""
@@ -1413,6 +1531,19 @@ class PhotoServer:
             self.rl = None
         self._publish_guide()
         return self.rl
+
+    def refresh_policy(self):
+        """Sign the tracking policy again (after the office changes it) and send it with the hello and the guide."""
+        from . import policy
+
+        key = getattr(self, "_rl_key", None)
+        try:
+            skeys = read_surveyor_keys(self.store.folder)
+            self.pl = policy.signed(self.cert_folder, key, surveyor_keys=skeys) if key else None
+        except Exception:  # noqa: BLE001
+            self.pl = None
+        self._publish_guide()
+        return self.pl
 
     def take_env(self, s, via):
         """Process a sealed ladder envelope; queue positions and ladder info, return sealed ack."""
@@ -1451,6 +1582,8 @@ class PhotoServer:
         d["eod"] = self.eod_hour
         if getattr(self, "rl", None):
             d["rl"] = self.rl
+        if getattr(self, "pl", None):
+            d["pl"] = self.pl
         if self.ladder is not None:
             d["lad"] = 1
             d["tun"] = self.tunnel_host or ""
@@ -1480,7 +1613,8 @@ class PhotoServer:
         indoor = getattr(self, "_indoor", None)
         cap = getattr(self, "_capture", None)
         rl = getattr(self, "rl", None)
-        if indoor or cap or rl:
+        pl = getattr(self, "pl", None)
+        if indoor or cap or rl or pl:
             g = json.loads(self.guide)
             if indoor:
                 g["indoor"] = indoor
@@ -1488,6 +1622,8 @@ class PhotoServer:
                 g["cap"] = cap
             if rl:
                 g["rl"] = rl   # carries its own signature: the guide is not signed
+            if pl:
+                g["pl"] = pl
             self.guide = json.dumps(g, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         return n
 
@@ -1666,7 +1802,101 @@ def phone_texts(tr):
             "exportBtn": tr("Export sealed backup (.bfx)"),
             "exporting": tr("Packing sealed backup…"),
             "exportDone": tr("Exported {n} sealed items ({f} file(s)). Nothing was deleted from this phone."),
-            "exportEmpty": tr("No sealed items are waiting on this phone.")}
+            "exportEmpty": tr("No sealed items are waiting on this phone."),
+            # tracking modes & consent (phase P5)
+            "consTitle": tr("Location sharing with the office"),
+            "consBody": tr("The office requested location sharing in mode: {mode}. If you decline, you can still take photos and each photo keeps its own coordinates."),
+            "consLimit": tr("A web page cannot send positions while the screen is locked or this page is closed. The office sees the time you were last seen."),
+            "consYes": tr("Allow location sharing"),
+            "consNo": tr("No, photos only"),
+            "consWithdraw": tr("Withdraw consent"),
+            "trkOff": tr("Tracking: off"),
+            "trkPhoto": tr("📍 With photos only"),
+            "trkEvery": tr("📍 Every {m} min"),
+            "trkLive": tr("📍 Live"),
+            "trkHours": tr("Work hours: {h}")}
+
+
+_PHONE_I18N_P5 = {
+    "ar": {
+        "consTitle": "مشاركة الموقع مع المكتب",
+        "consBody": "طلب المكتب مشاركة موقعك بالوضع: {mode}. إذا رفضت، يمكنك الاستمرار في التقاط الصور وتحتفظ كل صورة بإحداثياتها الخاصة.",
+        "consLimit": "لا تستطيع صفحة الويب إرسال المواقع عندما تكون الشاشة مقفلة أو الصفحة مغلقة. يرى المكتب وقت آخر ظهور لك.",
+        "consYes": "السماح بمشاركة الموقع",
+        "consNo": "لا، الصور فقط",
+        "consWithdraw": "سحب الموافقة",
+        "trkOff": "التتبع: متوقف",
+        "trkPhoto": "📍 مع الصور فقط",
+        "trkEvery": "📍 كل {m} د",
+        "trkLive": "📍 مباشر",
+        "trkHours": "ساعات العمل: {h}",
+    },
+    "es": {
+        "consTitle": "Compartir ubicación con la oficina",
+        "consBody": "La oficina solicitó compartir la ubicación en el modo: {mode}. Si rechaza, aún puede tomar fotos y cada foto conserva sus propias coordenadas.",
+        "consLimit": "Una página web no puede enviar posiciones mientras la pantalla está bloqueada o la página está cerrada. La oficina ve la hora en que se le vio por última vez.",
+        "consYes": "Permitir compartir ubicación",
+        "consNo": "No, solo fotos",
+        "consWithdraw": "Retirar consentimiento",
+        "trkOff": "Seguimiento: desactivado",
+        "trkPhoto": "📍 Solo con fotos",
+        "trkEvery": "📍 Cada {m} min",
+        "trkLive": "📍 En vivo",
+        "trkHours": "Horario laboral: {h}",
+    },
+    "fa": {
+        "consTitle": "اشتراک‌گذاری موقعیت با دفتر",
+        "consBody": "دفتر در Biruni درخواست اشتراک‌گذاری موقعیت در حالت «{mode}» را دارد. اگر نپذیرید، همچنان می‌توانید عکس بگیرید و هر عکس مختصات خود را نگه می‌دارد.",
+        "consLimit": "یک صفحهٔ وب نمی‌تواند هنگام قفل بودن صفحهٔ نمایش یا بسته بودن این صفحه موقعیت بفرستد. دفتر زمان آخرین مشاهدهٔ شما را می‌بیند.",
+        "consYes": "اجازهٔ اشتراک‌گذاری موقعیت",
+        "consNo": "نه، فقط عکس‌ها",
+        "consWithdraw": "لغو رضایت",
+        "trkOff": "ردیابی: خاموش",
+        "trkPhoto": "📍 فقط همراه عکس‌ها",
+        "trkEvery": "📍 هر {m} دقیقه",
+        "trkLive": "📍 زنده",
+        "trkHours": "ساعات کاری: {h}",
+    },
+    "fr": {
+        "consTitle": "Partage de position avec le bureau",
+        "consBody": "Le bureau a demandé le partage de position en mode : {mode}. Si vous refusez, vous pouvez toujours prendre des photos et chaque photo conserve ses propres coordonnées.",
+        "consLimit": "Une page web ne peut pas envoyer de positions lorsque l’écran est verrouillé ou que cette page est fermée. Le bureau voit l’heure de votre dernière présence.",
+        "consYes": "Autoriser le partage de position",
+        "consNo": "Non, photos uniquement",
+        "consWithdraw": "Retirer le consentement",
+        "trkOff": "Suivi : désactivé",
+        "trkPhoto": "📍 Avec les photos uniquement",
+        "trkEvery": "📍 Toutes les {m} min",
+        "trkLive": "📍 En direct",
+        "trkHours": "Heures de travail : {h}",
+    },
+    "pt_BR": {
+        "consTitle": "Compartilhamento de localização com o escritório",
+        "consBody": "O escritório solicitou o compartilhamento de localização no modo: {mode}. Se você recusar, ainda poderá tirar fotos e cada foto manterá suas próprias coordenadas.",
+        "consLimit": "Uma página da web não pode enviar posições enquanto a tela estiver bloqueada ou esta página estiver fechada. O escritório vê o horário em que você foi visto pela última vez.",
+        "consYes": "Permitir compartilhamento de localização",
+        "consNo": "Não, apenas fotos",
+        "consWithdraw": "Retirar consentimento",
+        "trkOff": "Rastreamento: desligado",
+        "trkPhoto": "📍 Apenas com fotos",
+        "trkEvery": "📍 A cada {m} min",
+        "trkLive": "📍 Ao vivo",
+        "trkHours": "Horário de trabalho: {h}",
+    },
+    "tr": {
+        "consTitle": "Ofisle konum paylaşımı",
+        "consBody": "Ofis şu modda konum paylaşımı istedi: {mode}. Reddederseniz yine fotoğraf çekebilirsiniz ve her fotoğraf kendi koordinatlarını korur.",
+        "consLimit": "Bir web sayfası, ekran kilitliyken veya bu sayfa kapalıyken konum gönderemez. Ofis yalnızca son görülme zamanınızı görür.",
+        "consYes": "Konum paylaşımına izin ver",
+        "consNo": "Hayır, yalnızca fotoğraflar",
+        "consWithdraw": "Onayı geri çek",
+        "trkOff": "İzleme: kapalı",
+        "trkPhoto": "📍 Yalnızca fotoğraflarla",
+        "trkEvery": "📍 Her {m} dk",
+        "trkLive": "📍 Canlı",
+        "trkHours": "Çalışma saatleri: {h}",
+    },
+}
 
 
 def all_phone_texts():
@@ -1675,12 +1905,18 @@ def all_phone_texts():
     out = {"en": phone_texts(lambda s: s)}
     for name in sorted(os.listdir(folder)) if os.path.isdir(folder) else ():
         if name.endswith(".json"):
+            code = name[:-5]
             try:
                 with open(os.path.join(folder, name), encoding="utf-8") as f:
                     table = json.load(f)
             except (OSError, ValueError):
                 continue
-            out[name[:-5]] = phone_texts(lambda s, t=table: t.get(s) or s)
+            d = phone_texts(lambda s, t=table: t.get(s) or s)
+            if code in _PHONE_I18N_P5:
+                for k, v in _PHONE_I18N_P5[code].items():
+                    if d.get(k) == out["en"].get(k):
+                        d[k] = v
+            out[code] = d
     return out
 
 
@@ -1874,7 +2110,7 @@ input.in:focus{border-color:var(--accent)}
 </style></head><body>
 <header class="top">
  <div class="brand"><span class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="11" r="3"/><path d="M17.66 16.66L13.41 20.9a2 2 0 0 1-2.83 0l-4.24-4.24a8 8 0 1 1 11.32 0z"/></svg></span><span id="title">Biruni GIS</span></div>
- <div class="tools"><span class="pill warn hide" id="waitPill"></span><span class="pill" id="chip"><i class="dot wait" id="dot"></i><span id="chipText"></span></span>
+ <div class="tools"><button class="pill hide" id="trkPill" type="button"></button><span class="pill warn hide" id="waitPill"></span><span class="pill" id="chip"><i class="dot wait" id="dot"></i><span id="chipText"></span></span>
  <button class="pill" id="langBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3.6 9h16.8M3.6 15h16.8M11.5 3a17 17 0 0 0 0 18M12.5 3a17 17 0 0 1 0 18"/></svg><span id="langCode"></span></button></div>
 </header>
 <div class="banner hide" id="st"></div>
@@ -1933,7 +2169,7 @@ input.in:focus{border-color:var(--accent)}
  </div>
  <div class="card" id="meCard"><label class="lbl" for="me" id="lMe"></label>
   <div class="mrow"><input type="text" class="in" id="me" maxlength="40" autocomplete="name">
-   <label class="sw"><input type="checkbox" id="share" checked><span></span></label></div></div>
+   <label class="sw" id="shareRow"><input type="checkbox" id="share" checked><span></span></label></div></div>
  <div class="stats"><div class="stat"><b id="nSent">0</b><span id="lSent"></span></div>
   <div class="stat" id="waitBox"><b id="nWait">0</b><span id="lWait"></span></div></div>
  <div class="card" id="handCard"><span class="lbl" id="lHand"></span>
@@ -1973,6 +2209,13 @@ input.in:focus{border-color:var(--accent)}
  <div class="dstate" id="eodBody"></div>
  <div class="dstate" id="eodList"></div>
  <button class="primary cfin" id="eodBtn" type="button"></button></div></div>
+<div class="sheet hide" id="consSheet"><div class="panel"><div class="grab"></div>
+ <div class="cpath" id="consTitle"></div>
+ <div class="dstate" id="consBody"></div>
+ <div class="dstate hide" id="consHours"></div>
+ <div class="dstate" id="consLimit"></div>
+ <button class="primary cfin" id="consYes" type="button"></button>
+ <button type="button" id="consNo"></button></div></div>
 <div class="toast" id="toast"></div>
 <script>
 let ALL=__TEXTS__,KINDS=__KINDS__,FORM=__FORM__,ROOM='',HASHL=null,GPSMODE=false,T={},LANG='en',PCKEY='__PCKEY__';const DEF='__DEFLANG__',$=i=>document.getElementById(i);
@@ -1987,8 +2230,9 @@ function noteTime(ms){if(typeof ms==='number'&&isFinite(ms)&&ms>1700000000000){S
 async function probeSkew(){try{const r=await fetch('sw.js',{method:'HEAD',cache:'no-store'});
  const d=r&&r.headers&&r.headers.get('Date');if(d){const t=Date.parse(d);if(isFinite(t))noteTime(t)}}catch(e){}}
 /*BOOT*/
-let NL=kept('biruni-nl-'+ROOM)==='1',EOD_HOUR=parseInt(kept('biruni-eod-'+ROOM)||'18',10);if(!(EOD_HOUR>=0&&EOD_HOUR<=23))EOD_HOUR=18;
+let NL=kept('biruni-nl-'+ROOM)==='1',HS_CAP=kept('biruni-hs-'+ROOM)==='1',EOD_HOUR=parseInt(kept('biruni-eod-'+ROOM)||'18',10);if(!(EOD_HOUR>=0&&EOD_HOUR<=23))EOD_HOUR=18;
 function setNl(on){if(on){NL=true;keep('biruni-nl-'+ROOM,'1')}}
+function setHsCap(on){if(on){const was=HS_CAP;HS_CAP=true;keep('biruni-hs-'+ROOM,'1');if(!was&&typeof reportHs==='function')setTimeout(reportHs,200)}}
 function setEodHour(h){if(typeof h==='number'&&h>=0&&h<=23){EOD_HOUR=Math.trunc(h);keep('biruni-eod-'+ROOM,String(EOD_HOUR))}}
 const _HP=new URLSearchParams(typeof location!=='undefined'?location.hash.slice(1):'');
 const _SK=_HP.get('sk')||'',_SN=_HP.get('sn')||'';
@@ -2031,6 +2275,7 @@ function label(){document.title=T.title;$('hero').textContent=T.hero;$('introTex
  if(typeof updateQuotaBanner==='function')updateQuotaBanner();
  if(typeof updateSpaceInfo==='function')updateSpaceInfo();
  if(typeof count==='function')count();
+ if(typeof plUpdateUi==='function')plUpdateUi(false);
  if(typeof driveLabel==='function')driveLabel();if(typeof capLabel==='function')capLabel()}
 function setLang(l){LANG=l;T=Object.assign({},ALL.en||{},ALL[l]||{});const h=document.documentElement;
  h.lang=l.replace('_','-');h.dir=(l==='ar'||l==='fa')?'rtl':'ltr';label();drawKinds();drawForm();if(typeof capDraw==='function')capDraw();
@@ -2090,14 +2335,20 @@ function fmtD(m){return '\u2066'+(m<1000?(m<10?m.toFixed(1):Math.round(m))+' m':
 const DEVID=kept('biruni-dev')||(()=>{const d=uid().replace(/-/g,'').slice(0,16);keep('biruni-dev',d);return d})();
 let lastPos=null;
 /* GPSMODE (opened from the PC's GPS panel): every new position goes at once, at most once a second */
-async function tellPos(force){const f=room&&indoorFix?indoorFix:fix;if(!f||(!GPSMODE&&!$('share').checked))return;
- const now=Date.now();
- if(!force&&lastPos&&(GPSMODE?now-lastPos.at<1000:now-lastPos.at<15000&&meters(lastPos,f)<10))return;
+async function tellPos(force,why){const f=room&&indoorFix?indoorFix:fix;if(!f)return;
+ const tm=typeof plMode==='function'?plMode():(GPSMODE?'live':($('share').checked?'live':'off'));
+ if(tm==='off')return;
+ if(tm==='photo'&&why!=='shot')return;
+ const now=NOW();
+ if(tm==='1'||tm==='5'||tm==='15'){
+  const iv=(+tm)*60000;
+  if(lastPos&&(now-lastPos.at)<iv)return;
+ }else if(!force&&lastPos&&(GPSMODE?now-lastPos.at<1000:now-lastPos.at<15000&&meters(lastPos,f)<10))return;
  lastPos={lat:f.lat,lon:f.lon,at:now};
  try{await sendPos(Object.assign({id:DEVID,name:(SURVNAME||$('me').value).trim().slice(0,40),
   sk:SURVKEY||undefined,lat:f.lat,lon:f.lon,acc:f.acc,alt:f.alt,speed:f.speed,
-  heading:compass!=null?compass:f.heading,cog:f.heading,t:f.t,level:f.level,unit:f.unit},
-  netInfo()),force)}catch(e){}}
+  heading:compass!=null?compass:f.heading,cog:f.heading,t:f.t,level:f.level,unit:f.unit,tm:tm},
+  netInfo()),force||tm!=='live')}catch(e){}}
 /* for the computer's list of the team: Wi-Fi or mobile data (Android tells it, iPhone does not), the battery, and
    how long the last message took to reach the computer and come back (the browser gives no signal bars) */
 let PING=null,BAT=null;
@@ -2112,6 +2363,7 @@ function setGuide(g){if(!g||!Array.isArray(g.items))return;GUIDE=g;INDOOR=g.indo
  showIndoor();if(room){const u=unitOf(room.id);if(u)room=u;else setRoom(null)}roomFromStore();
  if('cap' in g)capSet(g.cap);
  if(g.rl&&typeof rlTake==='function')rlTake(g.rl).then(ok=>{if(ok)sealWaiting()});
+ if(g.pl&&typeof plTake==='function')plTake(g.pl);
  try{const j=JSON.stringify(g);if(j.length<250000)keep('biruni-guide-'+ROOM,j)}catch(e){}
  $('guideCard').classList.toggle('hide',!g.items.length);drawGuide();if(room)drawRoom()}
 function segDist(p,a,b){const dx=b[0]-a[0],dy=b[1]-a[1],l=dx*dx+dy*dy;let t=l?((p[0]-a[0])*dx+(p[1]-a[1])*dy)/l:0;
@@ -2311,6 +2563,7 @@ async function sealRecord(it){if(!it)return it;
    room:it.room||ROOM,carried:!!it.carried,pk:PCKEY,st:st,c:c,h:it.h||h,at:at};
   if(tu){r.tu=1;r.meta.tu=1;r.t0=it.t0||it.meta.t}
   if(it.why)r.why=it.why;
+  if(it.cn){r.cn=1;r.meta.cn=1}
   if(it.cap){r.cap=1;if(it.csj)r.csj=it.csj}return r}catch(e){return it}}   /* pk: the key it is sealed for (.bfp kid) */
 function openDb(){return new Promise(r=>{try{const q=indexedDB.open('biruni-photos',1);
  q.onupgradeneeded=()=>q.result.createObjectStore('q',{keyPath:'id'});q.onsuccess=()=>r(q.result);
@@ -2411,9 +2664,11 @@ async function sendItem(it){const m=Object.assign({},it.meta);
  if(r.status!==200&&j&&j.reason)return {status:r.status,reason:j.reason};
  return r.status}
 async function alive(){try{const r=await fetch('ping',{cache:'no-store',signal:within(15000)});if(!r.ok)return false;
- try{const j=await r.json();if(j&&j.nl===1)setNl(true);if(j&&typeof j.now==='number')noteTime(j.now);
+ try{const j=await r.json();if(j&&j.nl===1)setNl(true);if(j&&j.hs===1)setHsCap(true);if(j&&typeof j.now==='number')noteTime(j.now);
   if(j&&typeof j.eod==='number')setEodHour(j.eod)}catch(e){}
  return true}catch(e){return false}}
+async function sendHs(h){if(!h)return;try{await fetch('hs',{method:'POST',body:JSON.stringify(h),
+ headers:{'Content-Type':'application/json'},signal:within(15000)})}catch(e){}}
 async function copyPoll(){const a=(await all()).filter(x=>{const s=itemSt(x);return s===1||s===2}).slice(0,100);
  if(!a.length)return;
  try{const r=await fetch('copy-status',{method:'POST',body:JSON.stringify({ids:a.map(x=>x.id)}),
@@ -2495,6 +2750,144 @@ function rlFor(kind){const v=rlGet();if(!v||!PCKEY)return null;
  for(const e of v.lst.r){if(e.role==='office')continue;
   const sc=Array.isArray(e.scope)?e.scope:(RL_DEF[e.role]||[]);if(sc.indexOf(kind)>=0&&ps.indexOf(e.p)<0)ps.push(e.p)}
  return ps.length>1?ps:null}
+/* ---- no-loss P5: signed tracking policy (BRPL1), consent sheet/pill/record (BCN1), and hs status beat ---- */
+const PLS={room:null,v:null},PL_MODES=['off','photo','15','5','1','live'],
+ PL_RANK={off:0,photo:1,'15':2,'5':3,'1':4,live:5};
+var SK_TAG='';
+(async()=>{if(typeof SURVKEY!=='undefined'&&SURVKEY){try{SK_TAG=hhex(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode('biruni-pl-sk-1:'+SURVKEY)))).slice(0,16);if(typeof plUpdateUi==='function')plUpdateUi(false)}catch(e){}}})();
+async function ensureSkTag(){if(typeof SURVKEY==='undefined'||!SURVKEY)return '';if(SK_TAG)return SK_TAG;
+ try{SK_TAG=hhex(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode('biruni-pl-sk-1:'+SURVKEY)))).slice(0,16)}catch(e){}
+ return SK_TAG}
+function plGet(){if(PLS.room!==ROOM){PLS.room=ROOM;PLS.v=null;
+  const pin=typeof ID==='object'&&ID&&ID.pin?ID.pin:null;
+  if(!pin)return null;
+  try{const c=JSON.parse(kept('biruni-pl-'+ROOM)||'null');if(c&&c.lst&&c.lst.v===1&&c.lst.room===ROOM)PLS.v=c}catch(e){}}
+ return PLS.v}
+function plHoursKey(hrs){if(!Array.isArray(hrs)||!hrs.length)return '';
+ return hrs.map(r=>Array.isArray(r)&&r.length===3?(r[0]+':'+r[1]+'-'+r[2]):'').join(',')}
+function plInHours(hrs,tz,nowMs){if(!Array.isArray(hrs)||!hrs.length)return true;
+ const t=(typeof nowMs==='number'?nowMs:NOW())+(typeof tz==='number'?tz:0)*60000;
+ const d=new Date(t),day=d.getUTCDay(),min=d.getUTCHours()*60+d.getUTCMinutes();
+ for(const r of hrs)if(Array.isArray(r)&&r.length===3&&r[0]===day&&min>=r[1]&&min<r[2])return true;
+ return false}
+function plRawMode(lst){if(!lst)return 'off';
+ const per=(lst.per&&typeof lst.per==='object')?lst.per:{},jobs=(lst.jobs&&typeof lst.jobs==='object')?lst.jobs:{};
+ if(SK_TAG&&per[SK_TAG]&&PL_MODES.indexOf(per[SK_TAG])>=0)return per[SK_TAG];
+ if(typeof CAPJOB==='string'&&CAPJOB&&jobs[CAPJOB]&&PL_MODES.indexOf(jobs[CAPJOB])>=0)return jobs[CAPJOB];
+ return PL_MODES.indexOf(lst.mode)>=0?lst.mode:'off'}
+function consGet(){if(!ROOM)return null;
+ try{const c=JSON.parse(kept('biruni-cons-'+ROOM)||'null');
+  if(c&&typeof c.seq==='number'&&typeof c.mode==='string'&&typeof c.a==='boolean')return c}catch(e){}
+ return null}
+function plNeedsConsent(lst,rawM){if(!lst||rawM==='off')return false;
+ const c=consGet();if(!c)return true;
+ const hh=plHoursKey(lst.hours);
+ if((PL_RANK[rawM]||0)>(PL_RANK[c.mode]||0))return true;
+ if((c.hh||'')!==hh)return true;
+ return false}
+function plHasConsent(lst,rawM){if(!lst||rawM==='off')return false;
+ const c=consGet();if(!c||!c.a)return false;
+ if(plNeedsConsent(lst,rawM))return false;
+ return true}
+function plMode(){if(GPSMODE)return 'live';
+ const pin=typeof ID==='object'&&ID&&ID.pin?ID.pin:null;
+ const v=pin?plGet():null;
+ if(!v||!v.lst)return ($('share')&&$('share').checked)?'live':'off';
+ const lst=v.lst,rawM=plRawMode(lst);
+ if(rawM==='off')return 'off';
+ if(!plHasConsent(lst,rawM))return 'off';
+ if(!plInHours(lst.hours,lst.tz,NOW()))return 'off';
+ return rawM}
+function plModeText(m){if(m==='photo')return T.trkPhoto||'📍 With photos only';
+ if(m==='1'||m==='5'||m==='15')return (T.trkEvery||'📍 Every {m} min').replace('{m}',m);
+ if(m==='live')return T.trkLive||'📍 Live';
+ return T.trkOff||'Tracking: off'}
+function plFmtMin(m){const h=Math.floor(m/60),mm=m%60;return String(h).padStart(2,'0')+':'+String(mm).padStart(2,'0')}
+function plHoursText(hrs){if(!Array.isArray(hrs)||!hrs.length)return '';
+ let days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+ try{const f=new Intl.DateTimeFormat(LANG||'en',{weekday:'short',timeZone:'UTC'});days=days.map((_,i)=>f.format(new Date(Date.UTC(2023,0,1+i))))}catch(e){}
+ const s=hrs.map(r=>(days[r[0]]||r[0])+' '+plFmtMin(r[1])+'–'+plFmtMin(r[2])).join(', ');
+ return (T.trkHours||'Work hours: {h}').replace('{h}',s)}
+var CONS_REOPEN=false;
+function plOpenConsent(reopen){const v=plGet();if(!v||!v.lst||!$('consSheet'))return false;
+ CONS_REOPEN=!!reopen;
+ const lst=v.lst,rawM=plRawMode(lst),mTxt=plModeText(rawM).replace(/^📍\s*/,'');
+ if($('consTitle'))$('consTitle').textContent=T.consTitle||'Location sharing with the office';
+ if($('consBody'))$('consBody').textContent=(T.consBody||'The office requested location sharing in mode: {mode}. If you decline, you can still take photos and each photo keeps its own coordinates.').replace('{mode}',mTxt);
+ const hTxt=plHoursText(lst.hours);
+ if($('consHours')){$('consHours').textContent=hTxt;$('consHours').classList.toggle('hide',!hTxt)}
+ if($('consLimit'))$('consLimit').textContent=T.consLimit||'A web page cannot send positions while the screen is locked or this page is closed. The office sees the time you were last seen.';
+ if($('consYes'))$('consYes').textContent=T.consYes||'Allow location sharing';
+ const hasOk=plHasConsent(lst,rawM);
+ if($('consNo'))$('consNo').textContent=(reopen&&hasOk)?(T.consWithdraw||'Withdraw consent'):(T.consNo||'No, photos only');
+ $('consSheet').classList.remove('hide');return true}
+function plUpdateUi(promptIfNeed){
+ const pin=typeof ID==='object'&&ID&&ID.pin?ID.pin:null,v=(!GPSMODE&&pin)?plGet():null;
+ if($('shareRow'))$('shareRow').classList.toggle('hide',!!v);
+ const pill=$('trkPill');
+ if(!v||!v.lst){if(pill)pill.classList.add('hide');return}
+ const lst=v.lst,rawM=plRawMode(lst),effM=plMode();
+ if(pill){
+  if(rawM==='off'&&effM==='off'){pill.textContent=T.trkOff||'Tracking: off';pill.classList.remove('hide')}
+  else{pill.textContent=plModeText(effM);pill.classList.remove('hide')}
+ }
+ if(promptIfNeed&&rawM!=='off'&&plNeedsConsent(lst,rawM))plOpenConsent(false)}
+async function recordConsent(accept){const v=plGet();if(!v||!v.lst)return null;
+ const lst=v.lst,rawM=plRawMode(lst),hh=plHoursKey(lst.hours),now=NOW(),a=!!accept;
+ const st={seq:lst.seq,mode:rawM,hh:hh,a:a,t:now};
+ keep('biruni-cons-'+ROOM,JSON.stringify(st));
+ if($('consSheet'))$('consSheet').classList.add('hide');
+ plUpdateUi(false);
+ const who=(SURVNAME||($('me')&&$('me').value)||kept('biruni-me')||'').trim().slice(0,40);
+ const recId='cn-'+DEVID+'-'+lst.seq+(a?'':'-0');
+ const bodyObj={v:1,dev:DEVID,by:who,seq:lst.seq,mode:rawM,hours:lst.hours||[],a:a,t:now};
+ const blob=new Blob(['BCN1'+JSON.stringify(bodyObj)],{type:'application/octet-stream'});
+ const meta={id:recId,t:now,cn:1,device_id:DEVID,surveyor:who,by:who,sk:SURVKEY||undefined};
+ for(const x of await all()){if((x.cn||(x.meta&&x.meta.cn))&&x.id.startsWith('cn-'+DEVID+'-')&&x.id!==recId){
+  if((typeof DRV==='object'&&DRV.holds&&DRV.holds(x.id))||(typeof acks==='object'&&acks&&acks.has(x.id)))continue;
+  await del(x.id)}}
+ const it=await put({id:recId,blob:blob,meta:meta,room:ROOM,cn:1,cap:1});
+ if(a)tellPos(true);
+ flush();if(typeof drivePump==='function')drivePump();
+ if(typeof reportHs==='function')reportHs();
+ return it}
+async function plTake(pl){try{
+ if(GPSMODE)return false;
+ if(!pl||typeof pl.l!=='string'||typeof pl.ip!=='string'||typeof pl.is!=='string')return false;
+ if(new TextEncoder().encode(pl.l).length>8000)return rlBad();
+ if(!ROOM)return false;
+ const pin=typeof ID==='object'&&ID&&ID.pin?ID.pin:null;if(!pin)return false;
+ await ensureSkTag();
+ const cur=plGet();
+ const text='BRPL1|'+hhex(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(pl.l)));
+ if(typeof IDOK!=='function'||!await IDOK(pl.ip,pl.is,text))return rlBad();
+ const lst=JSON.parse(pl.l);
+ if(!lst||lst.v!==1||typeof lst.seq!=='number'||!Number.isInteger(lst.seq)||lst.seq<1||lst.room!==ROOM)return rlBad();
+ if(cur&&cur.lst&&lst.seq<cur.lst.seq)return rlBad();
+ if(PL_MODES.indexOf(lst.mode)<0)return rlBad();
+ if(!Array.isArray(lst.hours)||lst.hours.length>21)return rlBad();
+ for(const h of lst.hours){if(!Array.isArray(h)||h.length!==3||!Number.isInteger(h[0])||!Number.isInteger(h[1])||!Number.isInteger(h[2]))return rlBad();
+  if(h[0]<0||h[0]>6||h[1]<0||h[1]>=h[2]||h[2]>1440)return rlBad()}
+ if(typeof lst.tz!=='number'||!Number.isInteger(lst.tz)||lst.tz<-840||lst.tz>840)return rlBad();
+ if(!lst.per||typeof lst.per!=='object'||Array.isArray(lst.per))return rlBad();
+ const pKeys=Object.keys(lst.per);if(pKeys.length>200)return rlBad();
+ for(const k of pKeys){if(!/^[0-9a-f]{16}$/.test(k)||PL_MODES.indexOf(lst.per[k])<0)return rlBad()}
+ if(lst.jobs!=null){if(typeof lst.jobs!=='object'||Array.isArray(lst.jobs))return rlBad();
+  const jKeys=Object.keys(lst.jobs);if(jKeys.length>200)return rlBad();
+  for(const k of jKeys){if(!/^[A-Za-z0-9_-]{1,64}$/.test(k)||PL_MODES.indexOf(lst.jobs[k])<0)return rlBad()}}
+ const v={l:pl.l,lst:lst};keep('biruni-pl-'+ROOM,JSON.stringify(v));PLS.room=ROOM;PLS.v=v;
+ plUpdateUi(true);return true}catch(e){return rlBad()}}
+async function buildHs(){if(!ROOM)return null;
+ const a=await all(),q=[0,0,0,0];let old=null;
+ for(const x of a){if(x.cap)continue;const s=itemSt(x);
+  if(s===0)q[0]++;else if(s===1)q[1]++;else if(s===2)q[2]++;else if(s===9)q[3]++;
+  if(s<3){const t=+(x.t0||(x.meta&&x.meta.t)||x.at||0);if(t>0&&(old===null||t<old))old=t}}
+ const lp=(typeof LAD==='object'&&Array.isArray(LAD._items))?LAD._items.length:0;
+ const tm=plMode(),c=consGet(),cs=(c&&c.a)?c.seq:0;
+ const who=(SURVNAME||($('me')&&$('me').value)||kept('biruni-me')||'').trim().slice(0,40);
+ return {d:DEVID,n:who,sk:SURVKEY||undefined,q:q,old:old,lp:lp,tm:tm,cs:cs,ps:!persistRefused,t:NOW()}}
+async function reportHs(){if(!HS_CAP||typeof sendHs!=='function')return null;
+ try{const h=await buildHs();if(h)await sendHs(h);return h}catch(e){return null}}
 /* envelope v2: 0x02 | n | eph(65) | n x [kid(8) | wrap(48)] | iv(12) | ct  (envelope.py; fx: the tests' fixed inputs) */
 async function sealFor2(pubs,bytes,fx){
  const eph=fx&&fx.eph||await crypto.subtle.generateKey({name:'ECDH',namedCurve:'P-256'},true,['deriveBits']);
@@ -2766,7 +3159,8 @@ function capEnsureMin(nodes,pIid){if(!capSchema()||!CAPST)return false;let chang
 function capSelectJob(jid){CAPJOB=jid||'';CAPSEL=null;CAPSHEET=null;keep('biruni-cap-job-'+ROOM,CAPJOB||null);
  const j=capJobObj(),s=capSchema();
  if(j&&s){CAPST=capLoadState(j.id,j.s);if(capEnsureMin(s.nodes,''))capSaveLocal()}else CAPST=null;
- if($('capMiss'))$('capMiss').classList.add('hide');capSyncShutter();capDraw()}
+ if($('capMiss'))$('capMiss').classList.add('hide');capSyncShutter();capDraw();
+ if(typeof plUpdateUi==='function')plUpdateUi(true)}
 function capSet(c){CAP=(c&&typeof c==='object'&&Array.isArray(c.jobs)&&c.jobs.some(j=>j&&j.st!=='closed'))?c:null;
  keep('biruni-cap-'+ROOM,CAP?JSON.stringify(CAP):null);
  if(!CAP){CAPJOB='';CAPST=null;CAPSEL=null;CAPSHEET=null;$('capCard').classList.add('hide');$('formCard').classList.remove('hide');capSyncShutter();return}
@@ -2968,7 +3362,11 @@ async function start(){if(typeof iosBlocked!=='undefined'&&iosBlocked)return;
   {enableHighAccuracy:true,maximumAge:0,timeout:30000});wake();started=true;document.body.classList.add('working');
  $('intro').classList.add('hide');$('work').classList.remove('hide');$('bar').classList.remove('hide');flush();pollGuide();drawGuide()}
 setInterval(()=>tellPos(true),30000);
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){if(started)wake();flush()}else checkEod(true)});
+setInterval(()=>{if(typeof reportHs==='function')reportHs()},60000);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){if(started)wake();flush();tellPos(true);if(typeof reportHs==='function')reportHs()}else{if(typeof reportHs==='function')reportHs();checkEod(true)}});
+if($('consYes'))$('consYes').onclick=()=>recordConsent(true);
+if($('consNo'))$('consNo').onclick=()=>recordConsent(false);
+if($('trkPill'))$('trkPill').onclick=()=>plOpenConsent(true);
 if($('eodBtn'))$('eodBtn').onclick=()=>{if($('eodSheet'))$('eodSheet').classList.add('hide');flush();if(typeof copyPoll==='function')copyPoll();if(typeof drivePump==='function')drivePump()};
 if($('eodSheet'))$('eodSheet').onclick=e=>{if(e.target===$('eodSheet'))$('eodSheet').classList.add('hide')};
 $('go').onclick=start;$('giveBtn').onclick=handGive;$('takeBtn').onclick=handTake;
@@ -3006,6 +3404,7 @@ $('file').onchange=async()=>{const f=$('file').files[0];$('file').value='';if(!f
   if(CAPST&&CAPST.job===capBind.j){const arr=CAPST.ph[capBind.k]||(CAPST.ph[capBind.k]=[]);
    if(!arr.includes(meta.id))arr.push(meta.id);capTouch();capDraw()}}
  const it={id:meta.id,blob:blob,meta:meta,room:ROOM};pending=null;CAPSEL=null;await put(it);thumb(it,'⏳');$('note').value='';if(!capBind)afterShot();
+ tellPos(true,'shot');
  toast(T.kept);count();flush();if(typeof drivePump==='function')drivePump()};
 $('langBtn').onclick=()=>{const box=$('langs');box.textContent='';Object.keys(ALL).forEach(k=>{const b=document.createElement('button');
  b.type='button';b.textContent=NAMES[k]||k;b.lang=k.replace('_','-');b.classList.toggle('sel',k===LANG);
@@ -3193,5 +3592,5 @@ checkIosGate();
 try{const c=JSON.parse(kept('biruni-cap-'+ROOM)||'null');if(c)capSet(c)}catch(e){}
 try{const g=JSON.parse(kept('biruni-guide-'+ROOM)||'null');if(g)setGuide(g)}catch(e){}
 {const e=document.createElement('div');e.className='empty';e.textContent=T.none;$('list').appendChild(e)}
-(async()=>{probeSkew();db=await openDb();await checkPrivate();await checkPersist();await checkStorageSpace(0);await sealWaiting();if(typeof driveStart==='function')driveStart();const w=await all();w.filter(it=>!it.carried&&!it.cap).slice(-9).forEach(it=>thumb(it,badgeFor(it)));await count();flush()})();
+(async()=>{probeSkew();db=await openDb();await checkPrivate();await checkPersist();await checkStorageSpace(0);await ensureSkTag();if(typeof plUpdateUi==='function')plUpdateUi(true);await sealWaiting();if(typeof driveStart==='function')driveStart();const w=await all();w.filter(it=>!it.carried&&!it.cap).slice(-9).forEach(it=>thumb(it,badgeFor(it)));await count();flush()})();
 </script></body></html>"""

@@ -162,12 +162,18 @@ const LAD=(()=>{
    await this.init();
    this.seq++;keep('biruni-lad-q-'+ROOM,String(this.seq));
    const item={q:this.seq,t:p.t||Date.now(),p:p};
-   if(GPSMODE){
+   const iv=typeof plMode==='function'&&['photo','1','5','15'].includes(plMode());
+   if(GPSMODE||iv){
     this._items.push(item);
+    const cap=GPSMODE?50000:2000;
+    if(this._items.length>cap){
+     const drop=this._items.splice(0,this._items.length-cap);
+     if(this.db){try{await this._tx('readwrite',s=>{for(const x of drop)s.delete(keyFor(x.q))})}catch(e){}}
+    }
     if(this.db){
      try{await this._tx('readwrite',s=>s.put(item,keyFor(item.q)))}catch(e){}
      this._pushes++;if(this._pushes%100===0)await this._prune();
-    }else if(this._items.length>600)this._items.splice(0,this._items.length-600);
+    }else if(this._items.length>(GPSMODE?600:2000))this._items.splice(0,this._items.length-(GPSMODE?600:2000));
    }else{this._items=[item]}
    this.drawPill();this.tick();
   },
@@ -190,6 +196,7 @@ const LAD=(()=>{
      const batch=todo.slice(off,off+300);
      const now=typeof NOW==='function'?NOW():Date.now(),loNow=this._items.length?this._items[0].q:lo,blNow=this._items.length||bl;
      const env={t:'lpos',v:1,d:DEVID,e:this.epoch,lo:loNow,bl:blNow,b:batch.map(x=>[x.q,x.p]),n:rid(),ts:now};
+     if(typeof buildHs==='function'){try{const h=await buildHs();if(h)env.hs=h}catch(e){}}
      const sealed=await seal(env,true);
      const name=pad(batch[0].q)+'-'+pad(batch[batch.length-1].q)+'-'+rid().slice(0,6)+'.bgp';
      driveSay('up');
@@ -253,6 +260,7 @@ const LAD=(()=>{
     const pick=items.length<=60?items:items.slice(0,50).concat(items.slice(-10));
     const env={t:'lpos',v:1,d:DEVID,e:this.epoch,lo:items[0].q,bl:items.length,
      b:pick.map(x=>[x.q,x.p]),n:rid(),ts:now};
+    if(typeof buildHs==='function'){try{const h=await buildHs();if(h)env.hs=h}catch(e){}}
     const live=CH.filter(c=>c.id!=='drive');
     const primary=this.primary(now),stalled=!!(primary&&this._waitSince&&(now-this._waitSince>=3000));
     let sealed=null;

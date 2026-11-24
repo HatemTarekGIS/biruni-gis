@@ -136,7 +136,12 @@ d._show_team()
 z = next(d.team_list.topLevelItem(i) for i in range(2) if d.team_list.topLevelItem(i).text(0) == "Ziad Omar")
 check(z.text(1) == "Not heard for 3 min" and "1 connected" in d.team_info.text(), f"a silent phone is shown so ({z.text(1)})")
 
-# one label for the two phones on the same spot
+# the silent phone's feature on team_live turns grey (state='off') and appends last-seen time to its label
+feats_by_dev = {f["device"]: f for f in d.team_live.getFeatures()}
+check(feats_by_dev["a" * 16]["state"] == "on" and feats_by_dev["b" * 16]["state"] == "off",
+      f"team_live state field is 'on' for active and 'off' (grey) after silence ({feats_by_dev['b' * 16]['state']})")
+
+# one label for the two phones on the same spot (Ziad is silent so his label has his last-seen time appended)
 live = d.team_live
 s = QgsMapSettings()
 s.setLayers([live])
@@ -147,7 +152,8 @@ j = QgsMapRendererSequentialJob(s)
 j.start()
 j.waitForFinished()
 labels = sorted(lab.labelText for lab in j.takeLabelingResults().allLabels())
-check(labels == ["Hatem Tarek · Ziad Omar"], f"phones on the very same spot share one label ({labels})")
+check(len(labels) == 1 and labels[0].startswith("Hatem Tarek · Ziad Omar (") and labels[0].endswith(")"),
+      f"phones on the very same spot share one label with last-seen time for off phone ({labels})")
 
 # the track keeps moves, not the wander of a phone standing still
 track = d.team_track
@@ -158,8 +164,17 @@ check(track.featureCount() == n0, f"standing still adds no track points ({track.
 d._on_pos(pos("a", "Hatem Tarek", 31.11447 + 0.0005, net="wifi"))             # 55 m away
 check(track.featureCount() == n0 + 1, "a real move does")
 
+# Last seen survives a restart via Presence (team_seen.json)
+d._get_presence().save(force=True)
+saved_team_folder = d.server.store.folder
 d.stop()
 check(not d.team_list.isVisible() and "no phone yet" in d.team_info.text(), "stopping clears the list")
+d.server = type("S", (), {"store": type("St", (), {"folder": saved_team_folder})(), "stop": lambda self: None})()
+d._presence = None
+restarted_rows = {r["name"]: r for r in d._surveyor_rows(include_disk=True)}
+check("Hatem Tarek" in restarted_rows and restarted_rows["Hatem Tarek"]["at"] is not None,
+      f"last seen survives a restart via Presence ({list(restarted_rows)})")
+d.stop()
 
 # ---- 3 surveyors with sealed identity, filters, export, name unification, device blocking & daily report ------------
 import http.client  # noqa: E402

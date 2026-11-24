@@ -355,7 +355,7 @@ profile = QWebEngineProfile.defaultProfile()
 routes = [(BASE_URL, r, "site") for r in ("/", "/v/", "/s/", "/d/", "/portal/", "/privacy.html")]
 if has_paper:
     routes.append((BASE_URL, "/paper/", "site"))
-routes.extend((PHOTOS_URL, r, "photos") for r in ("/", "/r/"))
+routes.extend((PHOTOS_URL, r, "photos") for r in ("/", "/p/", "/r/"))
 
 print("NOTE skipping /m/ in dynamic check (needs internet)", flush=True)
 
@@ -380,6 +380,9 @@ for base, route, label in routes:
         run_js(pg, "typeof window._inj") == "undefined",
         f"dynamic {label} {route}: injected inline script blocked (window._inj undefined)",
     )
+    if label == "photos" and route == "/p/":
+        p5_dom_ok = run_js(pg, "!!document.getElementById('consSheet') && !!document.getElementById('trkPill') && typeof plTake==='function'")
+        check(p5_dom_ok is True, "dynamic photos /p/: P5 consent sheet, trkPill and plTake present with zero CSP errors")
     pg.deleteLater()
 
 for src_path, want_target in (

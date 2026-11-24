@@ -558,6 +558,7 @@ class TrackingDock(QDockWidget):
         self.marker.setColor(accent)
         self.marker.setFillColor(QColor("#ffffff"))
         self.marker.setCenter(pt)
+        self.accuracy_band.show()
         fill = QColor(accent)
         fill.setAlpha(40)
         self.accuracy_band.setFillColor(fill)
@@ -621,7 +622,15 @@ class TrackingDock(QDockWidget):
             return
         secs = int((dt.datetime.now() - self._last_data).total_seconds())
         self.values["age"].setText(tr("{s} s ago").format(s=secs) if secs > 1 else tr("now"))
-        if secs > 10 and self.source.is_active():
+        if secs > 75:
+            if self.marker is not None:
+                self.marker.setColor(QColor("#8A8F98"))
+            if self.accuracy_band is not None:
+                self.accuracy_band.hide()
+            if self.source.is_active():
+                t_str = self._last_data.strftime("%H:%M:%S")
+                self.state.setText(tr("Last seen {time}: the page is closed or the screen is locked.").format(time=t_str))
+        elif secs > 10 and self.source.is_active():
             self.state.setText(tr("No data for {s} s - check the phone app.").format(s=secs))
         if self.recorder.recording:
             self._refresh_record_info()

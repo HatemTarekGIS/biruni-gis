@@ -188,6 +188,27 @@ try:
           and old_page_res.get("oldPageBrdg1Ok") is True,
           f"old cached page accepts new PC's BRAK1, BRLA1, and BRDG1 signatures while ignoring extra fields ({old_page_res})")
 
+    # 5. P5 compatibility:
+    # (a) New page, old PC (no pl in hello or guide): share toggle works unchanged (checked -> 'live', unchecked -> 'off')
+    toggle_res = ajs(r"""(async()=>{
+     const hasPolicy=!!plGet();
+     const shareVis=!$('shareRow').classList.contains('hide');
+     $('share').checked=true;
+     const mOn=plMode();
+     $('share').checked=false;
+     const mOff=plMode();
+     $('share').checked=true;
+     return {hasPolicy,shareVis,mOn,mOff};
+    })()""")
+    check(toggle_res == {"hasPolicy": False, "shareVis": True, "mOn": "live", "mOff": "off"},
+          f"new page with old PC (no pl): share toggle works unchanged ({toggle_res})")
+
+    # (b) Old cached page with new PC: position without `tm` is accepted by clean_pos (tm==''),
+    # and an old page's hello/setGuide ignores `pl` and `hs:1` without error.
+    pos_no_tm = server.clean_pos({"id": "dev_old_page_1", "name": "OldPage", "lat": 30.05, "lon": 31.24, "acc": 5, "t": now_ms})
+    check(pos_no_tm is not None and pos_no_tm["tm"] == "",
+          f"new PC accepts position without tm from an old cached page ({pos_no_tm})")
+
 finally:
     shutil.rmtree(work, ignore_errors=True)
 

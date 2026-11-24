@@ -279,9 +279,28 @@ def add_records(lyr, records):
 TEAM_LABEL = 'if("label" is null, coalesce(nullif("name", \'\'), \'•\'), "label")'
 
 
+def _team_live_renderer():
+    from qgis.core import QgsCategorizedSymbolRenderer, QgsMarkerSymbol, QgsRendererCategory
+
+    def _make_sym(color_hex):
+        sym = QgsMarkerSymbol()
+        dot = QgsSimpleMarkerSymbolLayer(Qgis.MarkerShape.Circle, 4.2, 0, Qgis.ScaleMethod.ScaleArea,
+                                         QColor(color_hex), QColor("#FFFFFF"))
+        dot.setStrokeWidth(0.8)
+        sym.deleteSymbolLayer(0)
+        sym.appendSymbolLayer(dot)
+        return sym
+
+    cats = [
+        QgsRendererCategory("on", _make_sym("#2B7FFF"), tr("Connected")),
+        QgsRendererCategory("off", _make_sym("#8A8F98"), tr("Offline")),
+    ]
+    return QgsCategorizedSymbolRenderer("state", cats)
+
+
 def team_layers(folder):
     """(live, track): the live layer is in memory (one point per phone), the track is in the GeoPackage."""
-    from qgis.core import QgsPalLayerSettings, QgsTextFormat, QgsVectorLayerSimpleLabeling
+    from qgis.core import QgsCategorizedSymbolRenderer, QgsPalLayerSettings, QgsTextFormat, QgsVectorLayerSimpleLabeling
 
     track, new = _gpkg_layer(os.path.join(folder, GPKG), TEAM_LAYER, TEAM_FIELDS, tr("Field team - tracks"))
     if new:
@@ -298,20 +317,22 @@ def team_layers(folder):
                 pal = QgsPalLayerSettings(lab.settings())
                 pal.fieldName = TEAM_LABEL
                 lyr.setLabeling(QgsVectorLayerSimpleLabeling(pal))
+            missing = []
             if lyr.fields().indexOf("label") < 0:
-                lyr.dataProvider().addAttributes([QgsField("label", QMetaType.Type.QString)])
+                missing.append(QgsField("label", QMetaType.Type.QString))
+            if lyr.fields().indexOf("state") < 0:
+                missing.append(QgsField("state", QMetaType.Type.QString))
+            if missing:
+                lyr.dataProvider().addAttributes(missing)
                 lyr.updateFields()
+            if not isinstance(lyr.renderer(), QgsCategorizedSymbolRenderer):
+                lyr.setRenderer(_team_live_renderer())
     if live is None:
         live = QgsVectorLayer("Point?crs=EPSG:4326&field=device:string&field=name:string&field=seen:string"
-                              "&field=accuracy_m:double&field=heading:double&field=label:string",
+                              "&field=accuracy_m:double&field=heading:double&field=label:string&field=state:string",
                               tr("Field team (live)"), "memory")
         live.setCustomProperty("biruni/field-team", folder)
-        dot = QgsSimpleMarkerSymbolLayer(Qgis.MarkerShape.Circle, 4.2, 0, Qgis.ScaleMethod.ScaleArea,
-                                         QColor("#2B7FFF"), QColor("#FFFFFF"))
-        dot.setStrokeWidth(0.8)
-        sym = live.renderer().symbol()
-        sym.deleteSymbolLayer(0)
-        sym.appendSymbolLayer(dot)
+        live.setRenderer(_team_live_renderer())
         pal = QgsPalLayerSettings()
         pal.fieldName = TEAM_LABEL
         pal.isExpression = True
@@ -327,10 +348,11 @@ def team_layers(folder):
 
 def _share_labels(live):
     """Phones on the very same spot: the first writes all their names, the others write none (the map drew
-    only one of the names there)."""
+    only one of the names there). When tracking is off (`state == 'off'`), appends the last-seen time."""
     col = live.fields().indexOf("label")
     if col < 0:
         return
+    has_state = live.fields().indexOf("state") >= 0
     spots = {}
     for f in live.getFeatures():
         g = f.geometry()
@@ -341,9 +363,27 @@ def _share_labels(live):
     out = {}
     for group in spots.values():
         group.sort(key=lambda f: str(f["device"]))
-        names = " · ".join(f["name"] or "•" for f in group) if len(group) > 1 else None
-        for i, f in enumerate(group):
-            want = (names if i == 0 else "") if names else None
+
+        def _feat_label(feat):
+            nm = feat["name"] or "•"
+            st = feat["state"] if has_state else "on"
+            if st == "off":
+                seen = feat["seen"]
+                t_str = _local_time_str(seen) if seen else ""
+                if t_str and t_str != "—":
+                    return f"{nm} ({t_str})"
+            return nm
+
+        if len(group) > 1:
+            names = " · ".join(_feat_label(f) for f in group)
+            for i, f in enumerate(group):
+                want = names if i == 0 else ""
+                if f["label"] != want:
+                    out[f.id()] = {col: want}
+        else:
+            f = group[0]
+            st = f["state"] if has_state else "on"
+            want = _feat_label(f) if st == "off" else None
             if f["label"] != want:
                 out[f.id()] = {col: want}
     if out:
@@ -368,35 +408,66 @@ def _moved(pos, least=10.0):
     return True
 
 
-def update_team(live, track, pos):
+def update_team(live, track, pos, state="on"):
     """Move this phone's point (or add it) and keep the position on its track."""
     geom = QgsGeometry.fromPointXY(QgsPointXY(pos["lon"], pos["lat"]))
     values = {"device": pos["id"], "name": pos.get("name") or None, "seen": pos["seen"],
-              "accuracy_m": pos.get("acc"), "heading": pos.get("heading")}
+              "accuracy_m": pos.get("acc"), "heading": pos.get("heading"), "state": state}
     pr = live.dataProvider()
     fid = next((f.id() for f in live.getFeatures() if f["device"] == pos["id"]), None)
     if fid is None:
         f = QgsFeature(live.fields())
         f.setGeometry(geom)
         for k, v in values.items():
-            f[k] = v
+            if f.fields().indexOf(k) >= 0:
+                f[k] = v
         pr.addFeatures([f])
     else:
         pr.changeGeometryValues({fid: geom})
-        pr.changeAttributeValues({fid: {live.fields().indexOf(k): v for k, v in values.items()}})
+        pr.changeAttributeValues({fid: {live.fields().indexOf(k): v for k, v in values.items() if live.fields().indexOf(k) >= 0}})
     _share_labels(live)
     live.triggerRepaint()
-    if not _moved(pos):
+    if state == "off" or not _moved(pos):
         return
     t = QgsFeature(track.fields())
     t.setGeometry(geom)
     for k, v in values.items():
-        t[k] = v
+        if t.fields().indexOf(k) >= 0:
+            t[k] = v
     track.dataProvider().addFeatures([t])
     track.triggerRepaint()
 
 
 # ---- the team list ------------------------------------------------------------------------------------
+def _tracking_mode_text(tm, policy_active=False, heard=False):
+    if not tm:
+        if policy_active and heard:
+            return tr("old page: the policy is not applied")
+        return "—"
+    if tm == "off":
+        return tr("Off")
+    if tm == "photo":
+        return tr("With photos only")
+    if tm in ("1", "5", "15"):
+        return tr("Every {m} min").format(m=tm)
+    if tm == "live":
+        return tr("Live")
+    return "—"
+
+
+def _pos_age_text(pos_at, now):
+    if not pos_at:
+        return "—"
+    ago = max(0, int(round(now - float(pos_at))))
+    if ago < 60:
+        return tr("{s} s ago").format(s=ago) if ago > 1 else tr("now")
+    mins = ago // 60
+    if mins < 60:
+        return tr("{m} min ago").format(m=mins)
+    hrs = mins // 60
+    return tr("{h} h ago").format(h=hrs)
+
+
 def _state_text(ago, lost_after):
     if ago < lost_after:
         return tr("Connected")
@@ -902,12 +973,16 @@ class FieldPhotosDock(QDockWidget):
         self.jobs_btn = QPushButton(tr("Jobs…"))
         self.jobs_btn.setToolTip(tr("Create and manage capture jobs and checklist templates sent to the phones."))
         self.jobs_btn.clicked.connect(self._open_jobs)
+        self.tracking_btn = QPushButton(tr("Tracking…"))
+        self.tracking_btn.setToolTip(tr("Set tracking mode, work hours, and per-surveyor or per-job tracking rules."))
+        self.tracking_btn.clicked.connect(self._open_tracking)
         self.import_bundle_btn = QPushButton(tr("Import bundle…"))
         self.import_bundle_btn.setToolTip(tr("Import a sealed backup bundle (.bfx) exported from a phone."))
         self.import_bundle_btn.clicked.connect(self._import_bundle_dialog)
         frow.addWidget(self.form_info, 1)
         frow.addWidget(self.form_btn)
         frow.addWidget(self.jobs_btn)
+        frow.addWidget(self.tracking_btn)
         frow.addWidget(self.import_bundle_btn)
         cv.addLayout(frow)
         row = QHBoxLayout()
@@ -1127,7 +1202,7 @@ class FieldPhotosDock(QDockWidget):
         self.team_list.setHeaderLabels([
             tr("Name"), tr("State"), tr("Network"), tr("Link"), tr("Location"),
             tr("Battery"), tr("Route"), tr("Today"), tr("Total"),
-            tr("Waiting originals"), tr("Last seen"),
+            tr("Waiting originals"), tr("Last seen"), tr("Tracking"), tr("Position age"),
         ])
         self.team_list.setToolTip(tr("Double-click a phone to see it on the map."))
         self.team_list.itemDoubleClicked.connect(self._go_to_phone)
@@ -1337,6 +1412,11 @@ class FieldPhotosDock(QDockWidget):
             dlg.exec()
         finally:
             self._jobs_dlg = None
+
+    def _open_tracking(self):
+        from .tracking_dialog import open_tracking_dialog
+
+        return open_tracking_dialog(self)
 
     def import_bundle_files(self, paths):
         """Import one or more sealed `.bfx` bundle files into the active PhotoStore and update the map layer."""
@@ -1799,6 +1879,7 @@ class FieldPhotosDock(QDockWidget):
     def _on_pos(self, pos):
         from qgis.PyQt import sip
 
+        self._get_presence().note_pos(pos)
         try:
             if (self.team_live is None or sip.isdeleted(self.team_live)
                     or QgsProject.instance().mapLayer(self.team_live.id()) is None
@@ -1818,8 +1899,8 @@ class FieldPhotosDock(QDockWidget):
         if not self._team_tick.isActive():
             self._team_tick.start()
 
-    # a phone sends its position at least every 30 s while its page is open (and sharing its place is on)
-    LOST_AFTER = 75
+    # a phone sends a position or coordinate-free `hs` beat every 60 s while its page is open
+    LOST_AFTER = 150
 
     def _get_presence(self):
         from .presence import Presence
@@ -1836,6 +1917,8 @@ class FieldPhotosDock(QDockWidget):
             self.team[dev]["at"] = time.time()
             if hs.get("name") or hs.get("n"):
                 self.team[dev]["pos"]["name"] = hs.get("name") or hs.get("n")
+            if hs.get("tm"):
+                self.team[dev]["pos"]["tm"] = hs["tm"]
         self._show_team()
         if not self._team_tick.isActive():
             self._team_tick.start()
@@ -1851,7 +1934,7 @@ class FieldPhotosDock(QDockWidget):
         if self.server is not None and hasattr(self.server.store, "records"):
             return list(self.server.store.records.values())
         if self._photo_records and not from_disk:
-            return list(self._photo_records.values())
+            return list(self.photo_records.values()) if hasattr(self, "photo_records") else list(self._photo_records.values())
         if from_disk or self._live_layer() is not None:
             recs = read_log(self._active_folder())
             if recs:
@@ -1859,6 +1942,7 @@ class FieldPhotosDock(QDockWidget):
         return []
 
     def _surveyor_rows(self, include_disk=False):
+        from . import policy
         from .server import read_blocked
 
         now = time.time()
@@ -1866,27 +1950,69 @@ class FieldPhotosDock(QDockWidget):
         active = bool(self.server is not None or self.team or self._photo_records or include_disk)
         blocked = read_blocked(self._active_folder()) if active else {}
         skeys = read_surveyor_keys(self._active_folder()).get("surveyors", {}) if active else {}
+        p_rows = {r["dev"]: r for r in self._get_presence().rows(now)} if active else {}
+        try:
+            pol_seq = policy.load(self._cert_folder()).get("seq", 0)
+        except Exception:  # noqa: BLE001
+            pol_seq = 0
         groups = {}
         for sid, s in skeys.items():
             nm = s.get("name") or sid
+            pr = p_rows.get(sid) or {}
             groups[sid] = {
                 "key": sid, "device_id": sid,
                 "name": nm,
                 "names": {nm} if nm else set(),
-                "pos": {}, "at": None,
+                "pos": {}, "at": pr.get("heard"),
+                "pos_at": pr.get("pos_at"),
+                "tm": pr.get("tm") or "",
+                "cs": pr.get("cs"),
                 "route": "",
                 "today_count": 0, "total_count": 0, "waiting_originals": 0,
-                "accs": [], "last_photo": "",
+                "accs": [pr["acc"]] if pr.get("acc") is not None else [],
+                "last_photo": "",
                 "blocked": bool(s.get("revoked") or sid in blocked),
+            }
+        for dev, pr in p_rows.items():
+            if dev in groups:
+                continue
+            s_entry = skeys.get(dev)
+            nm = (s_entry.get("name") if s_entry else None) or pr.get("name") or tr("(no name)")
+            p_fake = {}
+            if pr.get("lat") is not None and pr.get("lon") is not None:
+                p_fake = {"id": dev, "name": nm, "lat": pr["lat"], "lon": pr["lon"], "acc": pr.get("acc"), "tm": pr.get("tm") or ""}
+            groups[dev] = {
+                "key": dev, "device_id": dev,
+                "name": nm,
+                "names": {nm} if nm and nm != tr("(no name)") else set(),
+                "pos": p_fake, "at": pr.get("heard"),
+                "pos_at": pr.get("pos_at"),
+                "tm": pr.get("tm") or "",
+                "cs": pr.get("cs"),
+                "route": "",
+                "today_count": 0, "total_count": 0, "waiting_originals": 0,
+                "accs": [pr["acc"]] if pr.get("acc") is not None else [],
+                "last_photo": "",
+                "blocked": bool((s_entry and s_entry.get("revoked")) or dev in blocked),
             }
         for dev, x in self.team.items():
             p = x["pos"]
             s_entry = skeys.get(dev)
+            pr = p_rows.get(dev) or {}
+            heard_at = x["at"] if x["at"] is not None else pr.get("heard")
+            p_t = p.get("t")
+            pos_at = (float(p_t) / 1000.0) if isinstance(p_t, (int, float)) and p_t > 0 else (pr.get("pos_at") or x["at"])
+            if pr.get("pos_at") and (not pos_at or pr["pos_at"] > pos_at):
+                pos_at = pr["pos_at"]
+            tm_val = p.get("tm") or pr.get("tm") or ""
             groups[dev] = {
                 "key": dev, "device_id": dev,
-                "name": (s_entry.get("name") if s_entry else None) or p.get("name") or tr("(no name)"),
+                "name": (s_entry.get("name") if s_entry else None) or p.get("name") or pr.get("name") or tr("(no name)"),
                 "names": {p["name"]} if p.get("name") else set(),
-                "pos": p, "at": x["at"],
+                "pos": p, "at": heard_at,
+                "pos_at": pos_at,
+                "tm": tm_val,
+                "cs": pr.get("cs"),
                 "route": p.get("route") or "",
                 "today_count": 0, "total_count": 0, "waiting_originals": 0,
                 "accs": [], "last_photo": "",
@@ -1899,10 +2025,15 @@ class FieldPhotosDock(QDockWidget):
             key = dev if dev else f"name:{s_name}"
             g = groups.get(key)
             if g is None:
+                pr = p_rows.get(dev) if dev else None
                 g = groups[key] = {
                     "key": key, "device_id": dev,
                     "name": s_name, "names": set(),
-                    "pos": {}, "at": None, "route": "",
+                    "pos": {}, "at": pr.get("heard") if pr else None,
+                    "pos_at": pr.get("pos_at") if pr else None,
+                    "tm": (pr.get("tm") if pr else "") or "",
+                    "cs": pr.get("cs") if pr else None,
+                    "route": "",
                     "today_count": 0, "total_count": 0, "waiting_originals": 0,
                     "accs": [], "last_photo": "",
                     "blocked": bool(dev and dev in blocked),
@@ -1929,13 +2060,50 @@ class FieldPhotosDock(QDockWidget):
         for g in sorted(groups.values(), key=lambda x: (x["name"] or "~").lower()):
             g["avg_acc"] = (sum(g["accs"]) / len(g["accs"])) if g["accs"] else g["pos"].get("acc")
             g["connected"] = bool(g["at"] is not None and (now - g["at"] < self.LOST_AFTER) and not g["blocked"])
+            g["policy_active"] = bool(pol_seq > 0)
             out.append(g)
         return out
 
+    def _sync_live_layer_states(self, rows, now):
+        from qgis.PyQt import sip
+
+        live = self.team_live
+        if live is None or sip.isdeleted(live) or QgsProject.instance().mapLayer(live.id()) is None:
+            return
+        st_col = live.fields().indexOf("state")
+        seen_col = live.fields().indexOf("seen")
+        if st_col < 0:
+            return
+        by_dev = {r["device_id"]: r for r in rows if r.get("device_id")}
+        updates = {}
+        for f in live.getFeatures():
+            dev = f["device"]
+            r = by_dev.get(dev)
+            if r is not None:
+                 is_on = bool(r["connected"] and r.get("tm") != "off")
+            else:
+                x = self.team.get(dev)
+                is_on = bool(x and (now - x["at"] < self.LOST_AFTER))
+            want_st = "on" if is_on else "off"
+            chg = {}
+            if f["state"] != want_st:
+                chg[st_col] = want_st
+            if r is not None and r.get("at") and seen_col >= 0:
+                seen_iso = dt.datetime.fromtimestamp(r["at"], dt.timezone.utc).isoformat(timespec="seconds")
+                if f["seen"] != seen_iso:
+                    chg[seen_col] = seen_iso
+            if chg:
+                updates[f.id()] = chg
+        if updates:
+            live.dataProvider().changeAttributeValues(updates)
+            _share_labels(live)
+            live.triggerRepaint()
+
     def _show_team(self, include_disk=False):
-        """The surveyors table: name, state, network, link, average accuracy, battery, route, today/total/preview counts, last seen."""
+        """The surveyors table: name, state, network, link, average accuracy, battery, route, today/total/preview counts, last seen, tracking, position age."""
         now = time.time()
         rows = self._surveyor_rows(include_disk=include_disk)
+        self._sync_live_layer_states(rows, now)
         on = sum(1 for r in rows if r["connected"])
         if not rows:
             self.team_info.setText(tr("Field team: no phone yet"))
@@ -1959,6 +2127,8 @@ class FieldPhotosDock(QDockWidget):
             else:
                 seen_iso = r["last_photo"]
             acc_txt = "± {m} m".format(m=round(r["avg_acc"])) if r["avg_acc"] is not None else "—"
+            trk_txt = _tracking_mode_text(r.get("tm"), policy_active=r.get("policy_active", False), heard=bool(r["at"]))
+            age_txt = _pos_age_text(r.get("pos_at"), now)
             it = QTreeWidgetItem([
                 r["name"],
                 st_txt,
@@ -1971,6 +2141,8 @@ class FieldPhotosDock(QDockWidget):
                 str(r["total_count"]),
                 str(r["waiting_originals"]),
                 _local_time_str(seen_iso),
+                trk_txt,
+                age_txt,
             ])
             it.setData(0, Qt.ItemDataRole.UserRole, r["key"])
             it.setData(0, Qt.ItemDataRole.UserRole + 1, r)

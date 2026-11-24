@@ -189,7 +189,7 @@ def import_bundle(source, store, handover):
     skipped = 0
     refused = []
     records = []
-    state_ids = store.jobs.state_ids()
+    state_ids = store.jobs.state_ids() | set(getattr(store, "consents", ()))
     for entry, meta, payload in opened:
         item_id = entry["id"]
         ssha = entry["sha"]
@@ -213,7 +213,11 @@ def import_bundle(source, store, handover):
             if isinstance(rec, dict) and rec.get("photo"):
                 records.append(rec)
         else:
-            is_state = "cs" in meta or (isinstance(payload, (bytes, bytearray)) and bytes(payload)[:4] == b"BCS1")
+            is_state = (
+                "cs" in meta
+                or meta.get("cn") == 1
+                or (isinstance(payload, (bytes, bytearray)) and bytes(payload)[:4] in (b"BCS1", b"BCN1"))
+            )
             if is_state and item_id not in state_ids:
                 imported += 1
                 state_ids.add(item_id)

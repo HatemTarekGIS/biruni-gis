@@ -179,7 +179,7 @@ def backup_v2(folder, path, password, settings=None):
     """Write the v2 backup: the handover key, the bridge keys, the identity keys and the recipients list, sealed with
     a key derived from ``password`` (it must pass secure.passwords for an administrator). Returns the public key."""
     from ..secure import crypto, passwords
-    from . import bridge, recipients
+    from . import bridge, policy, recipients
     from .tunnel import unprotect
 
     why = passwords.problem(password, passwords.MIN_ADMIN)
@@ -209,7 +209,7 @@ def backup_v2(folder, path, password, settings=None):
         h = bridge.identity_slot(k)
         if h not in ids:
             ids[h] = bridge.identity(k, settings=st)[0]
-    body = {"handover": pem, "bridge": keys, "ids": ids, "rl": recipients.load(folder)}
+    body = {"handover": pem, "bridge": keys, "ids": ids, "rl": recipients.load(folder), "pl": policy.load(folder)}
     try:   # the Google Drive archive's ZIP password (archive_drive.py): without it an encrypted archive never opens
         with open(os.path.join(folder, "drive_archive_pw.dat"), encoding="ascii") as f:
             dpw = unprotect(f.read().strip())
@@ -231,7 +231,7 @@ def backup_v2(folder, path, password, settings=None):
 def _restore_v2_rest(body, folder, settings):
     """The bridge keys, identities and recipients list of a v2 backup (the handover key is already in place).
     A different bridge key already here is kept under <name>-before-restore."""
-    from . import bridge, recipients
+    from . import bridge, policy, recipients
     from .tunnel import protect, unprotect
 
     st = _settings(settings)
@@ -259,6 +259,8 @@ def _restore_v2_rest(body, folder, settings):
     st.setValue(bridge.ID_STORE, json.dumps(stored))
     if isinstance(body.get("rl"), dict):
         recipients.merge(folder, body["rl"])
+    if isinstance(body.get("pl"), dict):
+        policy.merge(folder, body["pl"])
     dpw = body.get("darchive_pw")
     if isinstance(dpw, str) and dpw:
         path = os.path.join(folder, "drive_archive_pw.dat")
