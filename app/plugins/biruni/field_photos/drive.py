@@ -301,7 +301,10 @@ class DriveIntake:
     A file is read again only when its size or time changes - a file Drive for desktop has not finished bringing
     down is refused as damaged now and taken in when it is whole. A full disk is not remembered: tried again."""
 
-    def __init__(self, roots, store, handover, k, events, interval=INTERVAL):
+    def __init__(self, roots, store, handover, k, events, interval=INTERVAL, surveyors=None):
+        # surveyors: a callable giving the surveyor codes {"qr_mode", "surveyors"}; the office reads its own list from
+        # the photo folder, a backup PC (no-loss P9) passes the office pack's list instead
+        self.surveyors = surveyors
         self.roots = list(roots or ())
         self.store, self.handover, self.k, self.events = store, handover, k, events
         if getattr(self.store, "on_job", None) is None and self.events is not None:
@@ -337,7 +340,7 @@ class DriveIntake:
         """One pass; returns {"seen": files looked at, "new": photos saved, "refused": [(file, why)]}."""
         from .server import BlockedDeviceError, read_surveyor_keys
 
-        kas = auth_keys(self.k, read_surveyor_keys(self.store.folder))
+        kas = auth_keys(self.k, self.surveyors() if self.surveyors is not None else read_surveyor_keys(self.store.folder))
         tops = office_folders(list(self.roots), self.k)
         out = {"seen": 0, "new": 0, "refused": [], "folders": len(tops)}
         changed = False
