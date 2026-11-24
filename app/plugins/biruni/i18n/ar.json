@@ -8432,5 +8432,18 @@
  "a recipient is listed twice": "مستلم مذكور مرتين",
  "unknown role": "دور غير معروف",
  "This pack says it is from the office whose id is {id}. Compare it with the id shown on the office computer (Recipients) and keep it only if they are the same.": "تذكر هذه الحزمة أنها من المكتب ذي المعرّف {id}. قارنه بالمعرّف الظاهر على حاسوب المكتب (المستلمون)، ولا تحتفظ بها إلا إذا تطابقا.",
- "This office's id: {id}. Phones receive the list within seconds while Field Photos is running.": "معرّف هذا المكتب: {id}. تصل القائمة إلى الهواتف خلال ثوانٍ ما دامت «صور الميدان» تعمل."
+ "This office's id: {id}. Phones receive the list within seconds while Field Photos is running.": "معرّف هذا المكتب: {id}. تصل القائمة إلى الهواتف خلال ثوانٍ ما دامت «صور الميدان» تعمل.",
+ "Also archive to Google Drive": "أرشفة نسخة إضافية على Google Drive",
+ "Folder inside the Google Drive synced folder": "مجلد داخل المجلد المتزامن مع Google Drive",
+ "ZIP file": "ملف ZIP",
+ "Encrypted ZIP file (password)": "ملف ZIP مشفّر (بكلمة مرور)",
+ "Original photos": "الصور الأصلية",
+ "High quality (smaller)": "جودة عالية (حجم أصغر)",
+ "Compact (smallest)": "مضغوط (أصغر حجم)",
+ "Upgrade storage": "ترقية مساحة التخزين",
+ "Archive password": "كلمة مرور الأرشيف",
+ "Write down this password now. It is shown only once and opens the encrypted ZIP files in 7-Zip or WinRAR:": "دوّن كلمة المرور هذه الآن؛ فهي تظهر مرة واحدة فقط، وبها تُفتح ملفات ZIP المشفّرة في 7-Zip أو WinRAR:",
+ "Free space of the Drive volume is unknown.": "مساحة القرص الذي يحمل مجلد Drive غير معروفة.",
+ "Free space on the Drive volume: {gb:.1f} GB ({pct:.0f}%).": "المساحة الحرة على قرص Drive: {gb:.1f} غيغابايت ({pct:.0f}%).",
+ "Warning: less than 10% is free. Free some space or upgrade your Google storage.": "تنبيه: المتبقي أقل من 10%؛ أفرغ بعض المساحة أو رقّ مساحة تخزين Google."
 }

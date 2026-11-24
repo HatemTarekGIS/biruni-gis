@@ -210,6 +210,13 @@ def backup_v2(folder, path, password, settings=None):
         if h not in ids:
             ids[h] = bridge.identity(k, settings=st)[0]
     body = {"handover": pem, "bridge": keys, "ids": ids, "rl": recipients.load(folder)}
+    try:   # the Google Drive archive's ZIP password (archive_drive.py): without it an encrypted archive never opens
+        with open(os.path.join(folder, "drive_archive_pw.dat"), encoding="ascii") as f:
+            dpw = unprotect(f.read().strip())
+        if dpw:
+            body["darchive_pw"] = dpw
+    except OSError:
+        pass
     kdf = crypto.new_kdf()
     ct = crypto.seal(crypto.derive(password, kdf), json.dumps(body).encode("utf-8"), _aad2(hk.public))
     doc = {"biruni": BACKUP_KIND, "v": 2, "pub": hk.public, "made": time.strftime("%Y-%m-%d"),
@@ -252,6 +259,21 @@ def _restore_v2_rest(body, folder, settings):
     st.setValue(bridge.ID_STORE, json.dumps(stored))
     if isinstance(body.get("rl"), dict):
         recipients.merge(folder, body["rl"])
+    dpw = body.get("darchive_pw")
+    if isinstance(dpw, str) and dpw:
+        path = os.path.join(folder, "drive_archive_pw.dat")
+        cur = ""
+        try:
+            with open(path, encoding="ascii") as f:
+                cur = unprotect(f.read().strip())
+        except OSError:
+            cur = ""
+        if cur != dpw:
+            if cur:   # a different password already here (archives made with it): kept aside, never lost
+                os.replace(path, path + "." + time.strftime("%Y%m%d-%H%M%S") + ".old")
+            with open(path + ".tmp", "w", encoding="ascii") as f:
+                f.write(protect(dpw))
+            os.replace(path + ".tmp", path)
     if settings is None:
         bridge.forget_cached_identities()
 

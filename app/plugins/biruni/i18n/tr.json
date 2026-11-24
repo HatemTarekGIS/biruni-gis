@@ -8300,5 +8300,18 @@
  "a recipient is listed twice": "bir alıcı iki kez listelenmiş",
  "unknown role": "bilinmeyen rol",
  "This pack says it is from the office whose id is {id}. Compare it with the id shown on the office computer (Recipients) and keep it only if they are the same.": "Bu paket kimliği {id} olan ofisten geldiğini söylüyor. Ofis bilgisayarında (Alıcılar) görünen kimlikle karşılaştırın ve yalnızca aynıysa saklayın.",
- "This office's id: {id}. Phones receive the list within seconds while Field Photos is running.": "Bu ofisin kimliği: {id}. Saha Fotoğrafları çalışırken telefonlar listeyi saniyeler içinde alır."
+ "This office's id: {id}. Phones receive the list within seconds while Field Photos is running.": "Bu ofisin kimliği: {id}. Saha Fotoğrafları çalışırken telefonlar listeyi saniyeler içinde alır.",
+ "Also archive to Google Drive": "Google Drive'a da arşivle",
+ "Folder inside the Google Drive synced folder": "Google Drive ile eşitlenen klasörün içinde bir klasör",
+ "ZIP file": "ZIP dosyası",
+ "Encrypted ZIP file (password)": "Şifreli ZIP dosyası (parolalı)",
+ "Original photos": "Orijinal fotoğraflar",
+ "High quality (smaller)": "Yüksek kalite (daha küçük)",
+ "Compact (smallest)": "Sıkıştırılmış (en küçük)",
+ "Upgrade storage": "Depolamayı yükselt",
+ "Archive password": "Arşiv parolası",
+ "Write down this password now. It is shown only once and opens the encrypted ZIP files in 7-Zip or WinRAR:": "Bu parolayı şimdi not edin. Yalnızca bir kez gösterilir ve şifreli ZIP dosyalarını 7-Zip veya WinRAR ile açar:",
+ "Free space of the Drive volume is unknown.": "Drive biriminin boş alanı bilinmiyor.",
+ "Free space on the Drive volume: {gb:.1f} GB ({pct:.0f}%).": "Drive biriminde boş alan: {gb:.1f} GB (%{pct:.0f}).",
+ "Warning: less than 10% is free. Free some space or upgrade your Google storage.": "Uyarı: boş alan %10'un altında. Yer açın veya Google depolamanızı yükseltin."
 }

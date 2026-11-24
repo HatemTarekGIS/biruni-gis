@@ -8300,5 +8300,18 @@
  "a recipient is listed twice": "um destinatário aparece duas vezes",
  "unknown role": "função desconhecida",
  "This pack says it is from the office whose id is {id}. Compare it with the id shown on the office computer (Recipients) and keep it only if they are the same.": "Este pacote diz vir do escritório com id {id}. Compare com o id mostrado no computador do escritório (Destinatários) e só o guarde se forem iguais.",
- "This office's id: {id}. Phones receive the list within seconds while Field Photos is running.": "Id deste escritório: {id}. Os celulares recebem a lista em segundos enquanto Fotos de campo estiver rodando."
+ "This office's id: {id}. Phones receive the list within seconds while Field Photos is running.": "Id deste escritório: {id}. Os celulares recebem a lista em segundos enquanto Fotos de campo estiver rodando.",
+ "Also archive to Google Drive": "Arquivar também no Google Drive",
+ "Folder inside the Google Drive synced folder": "Pasta dentro da pasta sincronizada do Google Drive",
+ "ZIP file": "Arquivo ZIP",
+ "Encrypted ZIP file (password)": "Arquivo ZIP criptografado (senha)",
+ "Original photos": "Fotos originais",
+ "High quality (smaller)": "Alta qualidade (menor)",
+ "Compact (smallest)": "Compacto (o menor)",
+ "Upgrade storage": "Aumentar o armazenamento",
+ "Archive password": "Senha do arquivo",
+ "Write down this password now. It is shown only once and opens the encrypted ZIP files in 7-Zip or WinRAR:": "Anote esta senha agora. Ela é exibida apenas uma vez e abre os arquivos ZIP criptografados no 7-Zip ou WinRAR:",
+ "Free space of the Drive volume is unknown.": "O espaço livre do volume do Drive é desconhecido.",
+ "Free space on the Drive volume: {gb:.1f} GB ({pct:.0f}%).": "Espaço livre no volume do Drive: {gb:.1f} GB ({pct:.0f}%).",
+ "Warning: less than 10% is free. Free some space or upgrade your Google storage.": "Aviso: menos de 10% está livre. Libere espaço ou aumente seu armazenamento do Google."
 }

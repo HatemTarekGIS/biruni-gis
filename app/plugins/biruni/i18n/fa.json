@@ -8300,5 +8300,18 @@
  "a recipient is listed twice": "یک گیرنده دو بار آمده است",
  "unknown role": "نقش ناشناخته",
  "This pack says it is from the office whose id is {id}. Compare it with the id shown on the office computer (Recipients) and keep it only if they are the same.": "این بسته می‌گوید از دفتری با شناسهٔ {id} است. آن را با شناسه‌ای که رایانهٔ دفتر نشان می‌دهد (گیرندگان) مقایسه کنید و فقط اگر یکی بودند نگهش دارید.",
- "This office's id: {id}. Phones receive the list within seconds while Field Photos is running.": "شناسهٔ این دفتر: {id}. تا وقتی «عکس‌های میدانی» در حال اجراست، گوشی‌ها فهرست را در چند ثانیه می‌گیرند."
+ "This office's id: {id}. Phones receive the list within seconds while Field Photos is running.": "شناسهٔ این دفتر: {id}. تا وقتی «عکس‌های میدانی» در حال اجراست، گوشی‌ها فهرست را در چند ثانیه می‌گیرند.",
+ "Also archive to Google Drive": "همچنین در Google Drive بایگانی شود",
+ "Folder inside the Google Drive synced folder": "پوشه‌ای درون پوشهٔ همگام‌شده با Google Drive",
+ "ZIP file": "فایل ZIP",
+ "Encrypted ZIP file (password)": "فایل ZIP رمزگذاری‌شده (با گذرواژه)",
+ "Original photos": "عکس‌های اصلی",
+ "High quality (smaller)": "کیفیت بالا (کوچک‌تر)",
+ "Compact (smallest)": "فشرده (کوچک‌ترین)",
+ "Upgrade storage": "ارتقای فضای ذخیره‌سازی",
+ "Archive password": "گذرواژهٔ بایگانی",
+ "Write down this password now. It is shown only once and opens the encrypted ZIP files in 7-Zip or WinRAR:": "همین حالا این گذرواژه را یادداشت کنید. فقط یک بار نمایش داده می‌شود و فایل‌های ZIP رمزگذاری‌شده را در 7-Zip یا WinRAR باز می‌کند:",
+ "Free space of the Drive volume is unknown.": "فضای آزاد درایو Google Drive نامشخص است.",
+ "Free space on the Drive volume: {gb:.1f} GB ({pct:.0f}%).": "فضای آزاد درایو Google Drive: {gb:.1f} گیگابایت ({pct:.0f}٪).",
+ "Warning: less than 10% is free. Free some space or upgrade your Google storage.": "هشدار: کمتر از ۱۰٪ فضا آزاد است. مقداری فضا آزاد کنید یا فضای ذخیره‌سازی Google را ارتقا دهید."
 }

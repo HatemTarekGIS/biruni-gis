@@ -162,6 +162,8 @@ check(refuses(handover.backup_v2, v2_dir, bak2, "short1", old_st) and not os.pat
       "v2: a weak password is refused (administrator rule) and nothing is written")
 check(refuses(handover.backup_v2, v2_dir, bak2, "password1234", old_st), "v2: a common password is refused")
 STRONG = "Field-Office 2026 keys!"
+from biruni.field_photos.tunnel import protect as _protect  # noqa: E402
+open(os.path.join(v2_dir, "drive_archive_pw.dat"), "w", encoding="ascii").write(_protect("ABCDE-FGHJK-LMNPQ"))
 check(handover.backup_v2(v2_dir, bak2, STRONG, old_st) == v2_office.public, "v2 backup written")
 raw2 = open(bak2, encoding="utf-8").read()
 check(json.loads(raw2)["v"] == 2 and k_fp not in raw2 and "PRIVATE" not in raw2 and handover.backup_info(bak2)["v"] == 2,
@@ -189,6 +191,8 @@ check(url_after == url_before, "the phone link is exactly the same")
 pos = Ladder(nk_fp).open(env)
 check(isinstance(pos, dict) and pos.get("b", [[0, {}]])[0][1].get("lat") == 30.0, "it opens the positions")
 check(HandoverKey(new_dir).open(photo2)[0]["id"] == "photo-v2", "it opens the photos")
+check(unprotect(open(os.path.join(new_dir, "drive_archive_pw.dat"), encoding="ascii").read().strip())
+      == "ABCDE-FGHJK-LMNPQ" and "ABCDE" not in raw2, "the Drive archive's ZIP password comes back too (sealed in the file)")
 check([e["p"] for e in recipients.load(new_dir)["r"]] == [backup_pc.public] and
       recipients.load(new_dir)["seq"] > recipients.load(v2_dir)["seq"],
       "the recipients list comes back, with a higher seq (phones never see a rollback)")
