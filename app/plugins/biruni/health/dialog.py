@@ -385,6 +385,11 @@ class HealthDialog(QDialog):
             return
         if self.plugin is None:
             return
+        if fix_str == "backup":
+            from ..backup import dialog as backup_dialog
+
+            backup_dialog.open_dialog(self.plugin)
+            return
         from ..field_photos import dock as fp_dock
 
         d = fp_dock.open_dock(self.plugin)

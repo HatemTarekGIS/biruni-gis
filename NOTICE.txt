@@ -51,6 +51,10 @@ unmodified official builds, each with its licence text in its folder):
                      (sha256 62ebb73b984f865960f20ed26619ea5f8789d5e3fd088fa40a2598384da81275),
                      also provided by Biruni GIS on request; see engine\tools\libredwg\SOURCE.txt
   GNU libiconv ..... LGPL-2.1 or later (libiconv-2.dll, with LibreDWG)  https://www.gnu.org/software/libiconv/
+  restic 0.20.0 .... BSD-2-Clause, Copyright (c) 2014, Alexander Neumann
+                     https://restic.net  source: https://github.com/restic/restic  (backup program; unmodified
+                     official Windows build, checked against the release's SHA256SUMS)
+  TODO(9c, 9d): Syncthing (MPL-2.0) and rclone (MIT) are fetched on demand, pinned by SHA-256, when added.
 
 Not included: the ERDAS ECW/JP2 SDK, the MrSID DSDK and the Oracle Instant
 Client that the QGIS installer ships are NOT redistributed with Biruni GIS,
