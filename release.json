@@ -2,14 +2,14 @@
  "files": {
   "404.html": "a8281351950491edb476a4772814d8de63cb43140a7e0d8a21c5e6aa1aa112c8",
   "_headers": "0121a30bb19e945782cab14a87f61dbd5a051483184aa4985b00f26ec676196f",
-  "index.html": "927c0f6907ed1eda29f80d4c759fc294d0f4d9ebb5189459ac8ce24eac207fc1",
+  "index.html": "cd6ffa4fd15904e68fdf63c82dc20a6e4c0cd4e05bf9db07cc4643b5f1bd9f21",
   "p/icon-512.png": "475daad2f583f5dc72a806434e23c8655302656cc3607792aa4bd3c0d7d63154",
   "p/icon.png": "68b27830ba203cd6c26f5ac42fb31e6f2d281e4ffaf3a605f606e98b8b0d0aa6",
-  "p/index.html": "03bab41b26cd5a8d56c241fe13af76264c1a6db3e0fe4c6a00afb8cb7abb5382",
+  "p/index.html": "5d126275452201b43636901141b80c47b6145f63bdd0facd52ddc540d25594db",
   "p/manifest.webmanifest": "013174cc46871acaac896554a987b895e1c5683d1c503259836ed5c509c12727",
   "p/sw.js": "46f5e287db16818e038c6ce15ce574c2acae180b83bbd6b436fcdde9074fa543",
   "r/index.html": "bc88d37aed46375c3d889cec40b697ebbcce6551f3e6fa17503e1443561e31c0"
  },
  "format": "biruni-release",
- "version": "2026-11-24T17:40:50Z"
+ "version": "2026-11-24T20:29:46Z"
 }

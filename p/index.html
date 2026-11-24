@@ -1,4 +1,4 @@
-<!doctype html><html lang="en" dir="ltr"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-vZQYnMrZKcS1bXwkRU+xg8oTV17/xvPyIIbez3wbsiM='; style-src 'sha256-CjwqvuXqqVRN9wOfPa7iW7kQney3iJwzc+3dH0mOlGQ='; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<!doctype html><html lang="en" dir="ltr"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-Yameaf1Vvt1w2k2gEv4u6eRkbB4mTMp9m2dOqTjKx6Y='; style-src 'sha256-CjwqvuXqqVRN9wOfPa7iW7kQney3iJwzc+3dH0mOlGQ='; img-src 'self' blob:; media-src blob:; connect-src 'self' wss://nos.lol wss://relay.primal.net wss://nostr.mom wss://relay.snort.social wss://relay.nostr.net wss://offchain.pub wss://nostr.bitcoiner.social wss://yabu.me wss://nostr.red5d.dev wss://nostr.rblb.it https://ntfy.sh wss://ntfy.sh wss://broker.hivemq.com:8884 wss://broker.emqx.io:8084 wss://test.mosquitto.org:8081 wss://broker-cn.emqx.io:8084 wss://relay.biruni-gis.com https://*.trycloudflare.com wss://*.workers.dev https://www.googleapis.com; worker-src 'self'; manifest-src 'self'; frame-src https://drive.biruni-gis.com; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#F4F6F8" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0E1114" media="(prefers-color-scheme: dark)">
@@ -435,6 +435,7 @@ let GUIDE={v:0,items:[]};
 function setGuide(g){if(!g||!Array.isArray(g.items))return;GUIDE=g;INDOOR=g.indoor&&Array.isArray(g.indoor.units)?g.indoor:null;
  showIndoor();if(room){const u=unitOf(room.id);if(u)room=u;else setRoom(null)}roomFromStore();
  if('cap' in g)capSet(g.cap);
+ if(g.rl&&typeof rlTake==='function')rlTake(g.rl).then(ok=>{if(ok)sealWaiting()});
  try{const j=JSON.stringify(g);if(j.length<250000)keep('biruni-guide-'+ROOM,j)}catch(e){}
  $('guideCard').classList.toggle('hide',!g.items.length);drawGuide();if(room)drawRoom()}
 function segDist(p,a,b){const dx=b[0]-a[0],dy=b[1]-a[1],l=dx*dx+dy*dy;let t=l?((p[0]-a[0])*dx+(p[1]-a[1])*dy)/l:0;
@@ -1750,7 +1751,12 @@ async function sendPos(p,force){
   else if(RELAY&&SIG.up())SIG.send({t:'rpos',p:pt},true)}}
 function pollGuide(){}
 function hello(m){if(Array.isArray(m.kinds))KINDS=m.kinds.map(String).slice(0,24);drawKinds();
- if(typeof m.pk==='string'&&m.pk.length>80&&m.pk.length<100){PCKEY=m.pk;keep('biruni-pckey-'+ROOM,m.pk);sealWaiting()}
+ if(typeof m.pk==='string'&&m.pk.length>80&&m.pk.length<100){const npk=m.pk;
+  /* with a signed list kept, an unsigned hello cannot move the office key: only a list naming the new key can */
+  (typeof rlPk==='function'?rlPk(npk,m.rl||null):Promise.resolve(true)).then(ok=>{
+   if(!ok){if(typeof SIG==='object'&&SIG)SIG.refused=(SIG.refused||0)+1;return}
+   PCKEY=npk;keep('biruni-pckey-'+ROOM,npk);sealWaiting()})}
+ else if(m.rl&&typeof rlTake==='function')rlTake(m.rl).then(ok=>{if(ok)sealWaiting()});
  if(Array.isArray(m.form)){FORM=m.form.filter(f=>f&&f.name&&f.label).slice(0,30);drawForm()}
  if(m&&m.nl===1&&typeof setNl==='function')setNl(true);
  if(m&&typeof m.now==='number')noteTime(m.now);
@@ -1958,9 +1964,73 @@ async function sealFor(pub,bytes){const pk=await crypto.subtle.importKey('raw',H
  const key=await crypto.subtle.importKey('raw',await crypto.subtle.digest('SHA-256',bits),'AES-GCM',false,['encrypt']);
  const iv=crypto.getRandomValues(new Uint8Array(12)),raw=new Uint8Array(await crypto.subtle.exportKey('raw',eph.publicKey));
  return hcat(new Uint8Array([1]),raw,iv,new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv:iv},key,bytes)))}
+/* ---- no-loss P3: the signed recipients list and envelope v2 (field_photos/recipients.py, envelope.py) ----
+   The PC signs the list with the identity behind the link's &i= pin (links without a pin: the first signer seen).
+   With a list, each item is sealed once for every computer whose scope allows it (the office, a backup PC, the
+   emergency key); without one (an older PC) v1 for the office alone, as before. Items already sealed stay as they are. */
+const RLS={room:null,v:null},RL_ROLES=['office','backup','emergency','sup'],
+ RL_DEF={office:['photo','state','pos'],backup:['photo','state','pos'],emergency:['photo','state','pos'],sup:['pos']};
+const hhex=b=>[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('');
+const kid8=async p=>new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode('biruni-drive-kid-1:'+p))).slice(0,8);
+function rlGet(){if(RLS.room!==ROOM){RLS.room=ROOM;RLS.v=null;
+  try{const c=JSON.parse(kept('biruni-rl-'+ROOM)||'null');if(c&&c.lst&&Array.isArray(c.lst.r))RLS.v=c}catch(e){}}
+ return RLS.v}
+function rlBad(){if(typeof SIG==='object'&&SIG)SIG.refused=(SIG.refused||0)+1;return false}
+async function rlSigOk(pub,sig,text){try{const raw=H64.dec(pub);if(raw.length!==65)return false;
+  const k=await crypto.subtle.importKey('raw',raw,{name:'ECDSA',namedCurve:'P-256'},false,['verify']);
+  return await crypto.subtle.verify({name:'ECDSA',hash:'SHA-256'},k,H64.dec(sig),new TextEncoder().encode(text))}catch(e){return false}}
+/* pk: the office key the list must name (a hello's new pk); default the key this phone seals for. Links without a
+   pin take no list at all (anyone with the bridge key could add themselves): they keep sealing v1. */
+async function rlTake(rl,pk){try{
+ if(!rl||typeof rl.l!=='string'||typeof rl.ip!=='string'||typeof rl.is!=='string'||rl.l.length>20000)return false;
+ const want=pk||PCKEY;if(!ROOM||!want)return false;
+ const cur=rlGet();if(cur&&cur.l===rl.l&&!pk)return true;
+ const pin=typeof ID==='object'&&ID&&ID.pin?ID.pin:null;if(!pin)return false;
+ const text='BRRL1|'+hhex(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(rl.l)));
+ if(typeof IDOK!=='function'||!await IDOK(rl.ip,rl.is,text))return rlBad();
+ const lst=JSON.parse(rl.l);
+ if(!lst||lst.v!==1||typeof lst.seq!=='number'||!Array.isArray(lst.r)||lst.room!==ROOM)return rlBad();
+ if(lst.r.length<1||lst.r.length>12)return rlBad();
+ const offs=lst.r.filter(e=>e&&e.role==='office');
+ if(offs.length!==1||offs[0].p!==want)return rlBad();                /* the office must be the key this phone seals for */
+ const curOff=cur?(cur.lst.r.find(e=>e.role==='office')||{}).p:null;
+ if(cur&&curOff===want&&lst.seq<cur.lst.seq)return rlBad();           /* a rollback: an older list for the same office */
+ const seen=new Set();
+ for(const e of lst.r){if(!e||RL_ROLES.indexOf(e.role)<0||typeof e.p!=='string'||!/^[\w-]{87}$/.test(e.p))return rlBad();
+  const raw=H64.dec(e.p);if(raw.length!==65||raw[0]!==4)return rlBad();
+  const k=hhex(await kid8(e.p));if(seen.has(k))return rlBad();seen.add(k)}
+ const v={l:rl.l,lst:lst};keep('biruni-rl-'+ROOM,JSON.stringify(v));RLS.room=ROOM;RLS.v=v;return true}catch(e){return rlBad()}}
+/* a hello or guide brings a pk: with a list kept, only a signed list naming that key may change it */
+async function rlPk(pk,rl){const cur=rlGet();
+ const curOff=cur?(cur.lst.r.find(e=>e.role==='office')||{}).p:null;
+ if(!curOff||curOff===pk){if(rl)await rlTake(rl,pk);return true}
+ return !!(rl&&await rlTake(rl,pk))}
+/* the keys one kind of item ('photo', 'state', 'pos') is sealed for, office first; null: v1 */
+function rlFor(kind){const v=rlGet();if(!v||!PCKEY)return null;
+ const off=v.lst.r.find(e=>e.role==='office');if(!off||off.p!==PCKEY)return null;   /* a list for another key: v1 */
+ const ps=[PCKEY];
+ for(const e of v.lst.r){if(e.role==='office')continue;
+  const sc=Array.isArray(e.scope)?e.scope:(RL_DEF[e.role]||[]);if(sc.indexOf(kind)>=0&&ps.indexOf(e.p)<0)ps.push(e.p)}
+ return ps.length>1?ps:null}
+/* envelope v2: 0x02 | n | eph(65) | n x [kid(8) | wrap(48)] | iv(12) | ct  (envelope.py; fx: the tests' fixed inputs) */
+async function sealFor2(pubs,bytes,fx){
+ const eph=fx&&fx.eph||await crypto.subtle.generateKey({name:'ECDH',namedCurve:'P-256'},true,['deriveBits']);
+ const er=new Uint8Array(await crypto.subtle.exportKey('raw',eph.publicKey));
+ const ck=fx&&fx.ck||crypto.getRandomValues(new Uint8Array(32)),iv=fx&&fx.iv||crypto.getRandomValues(new Uint8Array(12));
+ const parts=[new Uint8Array([2,pubs.length]),er],info=new TextEncoder().encode('biruni-seal-2');
+ for(const p of pubs){const rr=H64.dec(p);
+  const pk=await crypto.subtle.importKey('raw',rr,{name:'ECDH',namedCurve:'P-256'},false,[]);
+  const bits=await crypto.subtle.deriveBits({name:'ECDH',public:pk},eph.privateKey,256);
+  const hk=await crypto.subtle.importKey('raw',bits,'HKDF',false,['deriveKey']);
+  const kek=await crypto.subtle.deriveKey({name:'HKDF',hash:'SHA-256',salt:hcat(er,rr),info:info},hk,
+   {name:'AES-GCM',length:256},false,['encrypt']);
+  parts.push(await kid8(p),new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv:new Uint8Array(12)},kek,ck)))}
+ const head=hcat(...parts),k=await crypto.subtle.importKey('raw',ck,'AES-GCM',false,['encrypt']);
+ return hcat(head,iv,new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv:iv,additionalData:head},k,bytes)))}
 async function sealItem(it){if(it.meta&&it.meta.sealed)return it.blob;   /* already sealed for the PC: kept as it is */
  const m=new TextEncoder().encode(JSON.stringify(it.meta)),img=new Uint8Array(await it.blob.arrayBuffer()),n=new Uint8Array(4);
- new DataView(n.buffer).setUint32(0,m.length);return new Blob([await sealFor(PCKEY,hcat(n,m,img))],{type:'application/octet-stream'})}
+ new DataView(n.buffer).setUint32(0,m.length);const ps=rlFor(it.cap?'state':'photo');
+ return new Blob([ps?await sealFor2(ps,hcat(n,m,img)):await sealFor(PCKEY,hcat(n,m,img))],{type:'application/octet-stream'})}
 /* the link's offer and answer, short enough for a QR code: only what a direct link on one network needs */
 function sdpCode(sdp,kind){const g=r=>(sdp.match(r)||[])[1]||'',fp=g(/a=fingerprint:sha-256 ([0-9A-Fa-f:]+)/);
  const c=[...sdp.matchAll(/a=candidate:\S+ 1 udp \d+ (\S+) (\d+) typ host/gi)].map(x=>x[1]+'_'+x[2]).filter(x=>!x.includes(':')).slice(0,4);
