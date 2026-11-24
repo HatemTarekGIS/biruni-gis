@@ -2,7 +2,7 @@
 
 Every photo, state item and position batch has a copy ledger entry in `copies.jsonl`:
   {"id": str, "sha": str, "ssha": str, "places": {"office": int, "mirror": int, "drive_mb": int,
-   "r2": int, "backup": int, "archive": int}}
+   "r2": int, "backup": int, "archive": int, "gdrive": int}}
 
 The phone may delete an item when `count(id) >= 2` (office + drive_mb counts as 2).
 The Drive mailbox may be trashed only when `non_mailbox_count(id) >= 2` (office + mirror or backup/archive).
@@ -17,8 +17,8 @@ import threading
 import time
 
 LEDGER_NAME = "copies.jsonl"
-PLACES = ("office", "mirror", "drive_mb", "r2", "backup", "archive")
-NON_MAILBOX_PLACES = ("office", "mirror", "backup", "archive")
+PLACES = ("office", "mirror", "drive_mb", "r2", "backup", "archive", "gdrive")
+NON_MAILBOX_PLACES = ("office", "mirror", "backup", "archive", "gdrive")
 
 
 def sha256_bytes(data):

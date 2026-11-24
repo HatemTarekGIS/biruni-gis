@@ -951,6 +951,10 @@ class FieldPhotosDock(QDockWidget):
         arow.addWidget(self.archive_open_btn)
         cv.addWidget(QLabel(tr("Office archive folder")))
         cv.addLayout(arow)
+        from .archive_drive import DriveArchiveBox
+
+        self.drive_archive_box = DriveArchiveBox(self, self._folder())
+        cv.addWidget(self.drive_archive_box)
         erow = QHBoxLayout()
         erow.addWidget(QLabel(tr("End-of-day reminder hour:")))
         self.eod_spin = QSpinBox()

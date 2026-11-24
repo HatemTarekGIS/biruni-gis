@@ -221,7 +221,7 @@ class JobStore:
             try:
                 from .archive import build_job_archive
 
-                build_job_archive(
+                res = build_job_archive(
                     self,
                     job_id,
                     records=records,
@@ -229,6 +229,9 @@ class JobStore:
                     ledger=ledger,
                     iface=iface,
                 )
+                from .archive_drive import schedule_after_archive
+
+                schedule_after_archive(self, job_id, res, ledger)
             except Exception:  # noqa: BLE001
                 pass
         return job
@@ -819,6 +822,9 @@ class JobsDialog(QDialog):
 
         ledger = getattr(getattr(self.server, "store", None), "ledger", None)
         res = build_job_archive(self.store, jid, records=self.records, ledger=ledger, iface=self.iface)
+        from .archive_drive import schedule_after_archive
+
+        schedule_after_archive(self.store, jid, res, ledger)
         self.status_lbl.setText(tr("Archive built: {p}").format(p=res["job_dir"]))
         return res
 
