@@ -197,6 +197,10 @@ def audit_folder(folder, label, drive_frame_rel=None):
                 any("drive.biruni-gis.com" in t for t in frame_tokens),
                 f"{label} {rel}: keeps drive.biruni-gis.com in frame-src",
             )
+            check(
+                dmap.get("manifest-src") == ["'self'"],
+                f"{label} {rel}: has manifest-src 'self'",
+            )
 
 
 audit_folder(TMP, "site")

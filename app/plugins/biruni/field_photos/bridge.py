@@ -611,7 +611,12 @@ function gathered(pc,ms){return new Promise(r=>{if(pc.iceGatheringState==='compl
 
 # ---- the phone: the photo page of server.py, sending over the bridge ------------------------
 BOOT_JS = r"""
-const HP=new URLSearchParams(location.hash.slice(1)),KEYB=HP.get('k')||'';HASHL=HP.get('l');ROOM=KEYB.slice(0,12);
+let HP=new URLSearchParams(location.hash.slice(1)),KEYB=HP.get('k')||'';
+if(!KEYB){const _kl=kept('biruni-last-link')||'';if(_kl){const _fi=_kl.indexOf('#');
+ const _hp=new URLSearchParams(_fi>=0?_kl.slice(_fi+1):_kl),_k=_hp.get('k')||'';
+ if(/^[A-Za-z0-9_-]{43}$/.test(_k)){HP=_hp;KEYB=_k}}}
+HASHL=HP.get('l');ROOM=KEYB.slice(0,12);
+if(KEYB&&/^[A-Za-z0-9_-]{43}$/.test(KEYB)&&location.hash)keep('biruni-last-link',location.href);
 const _TH=HP.get('t')||'';
 const TUNH=/^[a-z0-9-]{3,80}$/.test(_TH)?(keep('biruni-tun-'+ROOM,_TH),_TH):(kept('biruni-tun-'+ROOM)||'');
 const _ORG_RE=/^[a-z0-9-]{1,63}\.[a-z0-9-]{1,63}\.workers\.dev$/;
@@ -830,10 +835,16 @@ function offline(){if(lineOpen())return;drivePump();
  if(DRV.on&&DRV.go()&&(typeof GDRIVE==='undefined'||!GDRIVE)){say(false,'driveMode');connect();return}
  if(RELAY&&SIG.up()){say(false,'relayMode');return}
  if(lastState==='connected'||!lastState||lastState==='driveMode')say(false,'connecting');else say(false,lastState);connect()}
-(async()=>{if(!KEYB||KEYB.length!==43||!window.isSecureContext||!window.RTCPeerConnection){
-  $('go').disabled=true;status(false,!KEYB?'nokey':'insecure');return}
+async function startBridge(k){
+ if(k&&k!==KEYB){KEYB=k;ROOM=KEYB.slice(0,12)}
+ if(!KEYB||KEYB.length!==43||!window.isSecureContext||!window.RTCPeerConnection){
+  $('go').disabled=true;status(false,!KEYB?'nokey':'insecure');
+  if(!KEYB&&typeof checkIosGate==='function')checkIosGate();return false}
+ if(typeof checkIosGate==='function')checkIosGate();
  await bridgeKey(KEYB);SIG.start(onSignal,n=>{if(n&&!linking&&!lineOpen()){backoff=4000;connect()}});
  if(typeof LAD==='object')LAD.init();
+ return true}
+(async()=>{await startBridge(KEYB);
  window.addEventListener('online',()=>{backoff=4000;connect()})})();
 """
 

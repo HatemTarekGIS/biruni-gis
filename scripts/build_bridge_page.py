@@ -80,6 +80,26 @@ def _write(path, content):
         f.write(content)
 
 
+def _copy_icon(src, dst):
+    os.makedirs(os.path.dirname(dst), exist_ok=True)
+    shutil.copy2(src, dst)
+
+
+MANIFEST_JSON = (
+    '{\n'
+    ' "name": "Biruni GIS",\n'
+    ' "short_name": "Biruni GIS",\n'
+    ' "display": "standalone",\n'
+    ' "background_color": "#0E1114",\n'
+    ' "theme_color": "#12A594",\n'
+    ' "icons": [\n'
+    '  {"src": "icon.png", "sizes": "256x256", "type": "image/png", "purpose": "any maskable"},\n'
+    '  {"src": "icon-512.png", "sizes": "1024x1024", "type": "image/png", "purpose": "any maskable"}\n'
+    ' ]\n'
+    '}\n'
+)
+
+
 def sign(folder):
     if not os.path.isfile(KEY):
         print("NOT signed: no", KEY, "- every office PC will refuse links to these pages")
@@ -114,6 +134,12 @@ page = bridge.with_csp(page, connect=(_dp.API,), frames=(_dp.HELPER,))
 # ---- photos site (https://photos.biruni-gis.com/) ----------------------------------------------------------------
 _write(os.path.join(photos, "p", "index.html"), page)
 _write(os.path.join(photos, "p", "sw.js"), bridge.SW_JS)   # opens without internet
+_write(os.path.join(photos, "p", "manifest.webmanifest"), MANIFEST_JSON)
+_copy_icon(os.path.join(ROOT, "docs", "site", "assets", "logo.png"), os.path.join(photos, "p", "icon.png"))
+_copy_icon(
+    os.path.join(ROOT, "app", "plugins", "biruni", "resources", "branding", "logo-1024.png"),
+    os.path.join(photos, "p", "icon-512.png"),
+)
 _write(os.path.join(photos, "r", "index.html"), room_page())
 _write(os.path.join(photos, "index.html"), PHOTOS_INDEX_HTML)
 _write(os.path.join(photos, "404.html"), NOT_FOUND_HTML)

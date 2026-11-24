@@ -413,7 +413,7 @@ check(js("!!(DRV.fold && DRV.fold.g && !DRV.fold.p)") is True
       and not any(f["name"] == f"p-{devid}" for f in FILES.values()),
       f"only g-{devid} folder created (no p-{devid})")
 
-dstate_text = js("document.querySelector('.dstate').textContent") or ""
+dstate_text = js("DRV.card.querySelector('.dstate').textContent") or ""
 check("up to a minute late" in dstate_text, f"driveSay('idle') shows driveGps text ({dstate_text!r})")
 
 # Put a dummy sealed photo in DB and verify dfits() is false and no .bfp is uploaded

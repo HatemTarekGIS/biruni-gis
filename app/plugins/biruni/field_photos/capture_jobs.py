@@ -215,8 +215,23 @@ class JobStore:
             self._write_job(job)
             return copy.deepcopy(job)
 
-    def close_job(self, job_id):
-        return self.set_status(job_id, "closed")
+    def close_job(self, job_id, build_archive=True, records=None, archive_root=None, ledger=None, iface=None):
+        job = self.set_status(job_id, "closed")
+        if build_archive:
+            try:
+                from .archive import build_job_archive
+
+                build_job_archive(
+                    self,
+                    job_id,
+                    records=records,
+                    archive_root=archive_root,
+                    ledger=ledger,
+                    iface=iface,
+                )
+            except Exception:  # noqa: BLE001
+                pass
+        return job
 
     def reopen_job(self, job_id):
         return self.set_status(job_id, "open")
@@ -630,11 +645,16 @@ class JobsDialog(QDialog):
         self.prog_btn.clicked.connect(self._open_progress)
         self.report_btn = QPushButton(tr("Report (PDF)…"))
         self.report_btn.clicked.connect(self._export_report)
+        self.archive_btn = QPushButton(tr("Build archive"))
+        self.archive_btn.clicked.connect(self._build_archive_selected)
+        self.search_archive_btn = QPushButton(tr("Search archive…"))
+        self.search_archive_btn.clicked.connect(self._open_archive_search)
         self.close_btn = QPushButton(tr("Close job"))
         self.close_btn.clicked.connect(self._close_selected)
         self.reopen_btn = QPushButton(tr("Reopen job"))
         self.reopen_btn.clicked.connect(self._reopen_selected)
-        for b in (self.new_btn, self.tpl_btn, self.prog_btn, self.report_btn, self.close_btn, self.reopen_btn):
+        for b in (self.new_btn, self.tpl_btn, self.prog_btn, self.report_btn,
+                  self.archive_btn, self.search_archive_btn, self.close_btn, self.reopen_btn):
             row.addWidget(b)
         row.addStretch(1)
         v.addLayout(row)
@@ -762,7 +782,7 @@ class JobsDialog(QDialog):
         """Programmatic job creation that checks the cap payload limit before keeping the job open."""
         job = self.store.create(schema, data=data, title=title, loc=loc, to=to)
         if not self.publish(limit=limit):
-            self.store.close_job(job["id"])
+            self.store.close_job(job["id"], build_archive=False)
             self.refresh()
             return None
         self.refresh()
@@ -791,11 +811,31 @@ class JobsDialog(QDialog):
         dlg = SchemaDialog(schemas[0] if schemas else None, self)
         dlg.exec()
 
+    def _build_archive_selected(self):
+        jid = self.selected_job_id()
+        if not jid:
+            return None
+        from .archive import build_job_archive
+
+        ledger = getattr(getattr(self.server, "store", None), "ledger", None)
+        res = build_job_archive(self.store, jid, records=self.records, ledger=ledger, iface=self.iface)
+        self.status_lbl.setText(tr("Archive built: {p}").format(p=res["job_dir"]))
+        return res
+
+    def _open_archive_search(self, modal=True):
+        from .archive_search import ArchiveSearchDialog
+
+        dlg = ArchiveSearchDialog(store=self.store, records=self.records, iface=self.iface, parent=self)
+        if modal:
+            dlg.exec()
+        return dlg
+
     def _close_selected(self):
         jid = self.selected_job_id()
         if not jid:
             return
-        self.store.close_job(jid)
+        ledger = getattr(getattr(self.server, "store", None), "ledger", None)
+        self.store.close_job(jid, records=self.records, ledger=ledger, iface=self.iface)
         self.publish()
         self.refresh()
 
@@ -805,7 +845,7 @@ class JobsDialog(QDialog):
             return
         self.store.reopen_job(jid)
         if not self.publish():
-            self.store.close_job(jid)
+            self.store.close_job(jid, build_archive=False)
             if self.last_error:
                 QMessageBox.warning(self, self.windowTitle(), self.last_error)
         self.refresh()

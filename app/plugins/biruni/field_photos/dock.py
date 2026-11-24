@@ -901,9 +901,13 @@ class FieldPhotosDock(QDockWidget):
         self.jobs_btn = QPushButton(tr("Jobs…"))
         self.jobs_btn.setToolTip(tr("Create and manage capture jobs and checklist templates sent to the phones."))
         self.jobs_btn.clicked.connect(self._open_jobs)
+        self.import_bundle_btn = QPushButton(tr("Import bundle…"))
+        self.import_bundle_btn.setToolTip(tr("Import a sealed backup bundle (.bfx) exported from a phone."))
+        self.import_bundle_btn.clicked.connect(self._import_bundle_dialog)
         frow.addWidget(self.form_info, 1)
         frow.addWidget(self.form_btn)
         frow.addWidget(self.jobs_btn)
+        frow.addWidget(self.import_bundle_btn)
         cv.addLayout(frow)
         row = QHBoxLayout()
         self.folder = QLineEdit()
@@ -935,6 +939,18 @@ class FieldPhotosDock(QDockWidget):
         self.mirror_warn.setWordWrap(True)
         self.mirror_warn.hide()
         cv.addWidget(self.mirror_warn)
+        arow = QHBoxLayout()
+        self.archive_root = QLineEdit()
+        self.archive_root.setReadOnly(True)
+        self.archive_pick_btn = QPushButton(tr("Change…"))
+        self.archive_pick_btn.clicked.connect(self._pick_archive_root)
+        self.archive_open_btn = QPushButton(tr("Open"))
+        self.archive_open_btn.clicked.connect(self._open_archive_root)
+        arow.addWidget(self.archive_root, 1)
+        arow.addWidget(self.archive_pick_btn)
+        arow.addWidget(self.archive_open_btn)
+        cv.addWidget(QLabel(tr("Office archive folder")))
+        cv.addLayout(arow)
         erow = QHBoxLayout()
         erow.addWidget(QLabel(tr("End-of-day reminder hour:")))
         self.eod_spin = QSpinBox()
@@ -1145,6 +1161,7 @@ class FieldPhotosDock(QDockWidget):
         self.folder.setText(self._folder())
         self.mirror_folder.setText(self._mirror_folder())
         self._update_mirror_warning()
+        self.archive_root.setText(self._archive_root())
         self._sync_drive()
 
     def refresh_theme(self):
@@ -1195,6 +1212,32 @@ class FieldPhotosDock(QDockWidget):
     def _clear_mirror_folder(self):
         self.set_mirror_folder("")
 
+    def _archive_root(self):
+        from .archive import get_archive_root
+
+        return get_archive_root(self._folder())
+
+    def set_archive_root(self, path):
+        from .archive import set_archive_root
+
+        set_archive_root(path)
+        self.archive_root.setText(self._archive_root())
+        return self._archive_root()
+
+    def _pick_archive_root(self):
+        d = QFileDialog.getExistingDirectory(self, tr("Office archive folder"), self._archive_root())
+        if d:
+            self.set_archive_root(d)
+
+    def _open_archive_root(self):
+        folder = self._archive_root()
+        try:
+            os.makedirs(folder, exist_ok=True)
+        except OSError as e:
+            self.state.setText(tr("It could not be done: {e}").format(e=e))
+            return
+        QDesktopServices.openUrl(QUrl.fromLocalFile(folder))
+
     def eod_hour(self):
         return int(self.eod_spin.value())
 
@@ -1209,6 +1252,7 @@ class FieldPhotosDock(QDockWidget):
         if d:
             QgsSettings().setValue(KEY + "folder", d)
             self.folder.setText(d)
+            self.archive_root.setText(self._archive_root())
             self._update_mirror_warning()
 
     def form(self):
@@ -1256,6 +1300,61 @@ class FieldPhotosDock(QDockWidget):
             dlg.exec()
         finally:
             self._jobs_dlg = None
+
+    def import_bundle_files(self, paths):
+        """Import one or more sealed `.bfx` bundle files into the active PhotoStore and update the map layer."""
+        from . import bundle
+        from .handover import HandoverKey
+        from .server import PhotoStore
+
+        if isinstance(paths, str):
+            paths = [paths]
+        store = self.server.store if self.server is not None else PhotoStore(
+            self._active_folder(), self.form(), mirror_folder=self._mirror_folder()
+        )
+        hk = self.server.handover if self.server is not None else HandoverKey(self._cert_folder())
+        total = imported = skipped = 0
+        refused = []
+        new_records = []
+        for p in paths or ():
+            res = bundle.import_bundle(p, store, hk)
+            total += res["total"]
+            imported += res["imported"]
+            skipped += res["skipped"]
+            refused.extend(res["refused"])
+            new_records.extend(res["records"])
+        if new_records:
+            self._on_photos(new_records)
+        if imported or new_records:
+            self._refresh_jobs_views()
+            self._show_team(include_disk=True)
+        return {
+            "total": total,
+            "imported": imported,
+            "skipped": skipped,
+            "refused": refused,
+            "records": new_records,
+        }
+
+    def _import_bundle_dialog(self):
+        from . import bundle
+
+        paths, _ = QFileDialog.getOpenFileNames(
+            self, tr("Import bundle…"), self._active_folder(),
+            tr("Biruni sealed bundle (*.bfx);;All files (*)"),
+        )
+        if not paths:
+            return
+        try:
+            res = self.import_bundle_files(paths)
+        except (bundle.BfxError, OSError, ValueError) as e:
+            QMessageBox.warning(self, tr("Import bundle…"), tr("The bundle could not be imported: {e}").format(e=e))
+            return
+        self.state.setText(
+            tr("Imported {n} items from bundle ({s} already present).").format(
+                n=res["imported"], s=res["skipped"]
+            )
+        )
 
     def _refresh_jobs_views(self):
         from qgis.PyQt import sip

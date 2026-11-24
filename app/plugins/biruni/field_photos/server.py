@@ -1058,6 +1058,17 @@ class PhotoServer:
                 elif route == "ping":
                     self._send(200, json.dumps({"ok": True, "nl": 1, "now": int(time.time() * 1000),
                                                 "eod": server.eod_hour}).encode("utf-8"))
+                elif route == "manifest.webmanifest":
+                    self._send(200, b'{"name":"Biruni GIS","short_name":"Biruni GIS","display":"standalone"}',
+                               "application/manifest+json; charset=utf-8")
+                elif route in ("icon.png", "icon-512.png"):
+                    icon_src = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "resources", "branding",
+                                            "logo-1024.png" if route == "icon-512.png" else "logo-256.png")
+                    try:
+                        with open(icon_src, "rb") as f:
+                            self._send(200, f.read(), "image/png")
+                    except OSError:
+                        self._send(404)
                 elif route == "sw.js":
                     self._send(200, b"/* sw */", "application/javascript")
                 elif route == "bridge" and self._local():
@@ -1523,7 +1534,30 @@ def phone_texts(tr):
             "eodTitle": tr("Items not yet protected by 2 copies"),
             "eodBody": tr("Keep this page open or connect to Wi-Fi so every item reaches 2 verified copies."),
             "eodPending": tr("{n} items still waiting for 2 copies"),
-            "eodDismiss": tr("Keep open & send now")}
+            "eodDismiss": tr("Keep open & send now"),
+            # iOS install gate, persistent storage, unsent banner & sealed export (phase P2)
+            "iosGateTitle": tr("Install to Home Screen first"),
+            "iosGateBody": tr("Safari on iPhone and iPad erases browser storage after 7 days. Add this page to your Home Screen before taking photos so your work is never lost."),
+            "iosStep1": tr("1. Tap the Share button in Safari."),
+            "iosStep2": tr("2. Choose “Add to Home Screen”, then tap Add."),
+            "iosCopyLink": tr("Copy link"),
+            "iosCopied": tr("Link copied. Open the installed app from your Home Screen."),
+            "iosPasteTitle": tr("Paste the office link"),
+            "iosPasteBody": tr("Paste the link you copied from Safari (or scan the office QR code again) to connect this installed app."),
+            "iosPasteHint": tr("https://photos.biruni-gis.com/p/#k=…"),
+            "iosPasteUse": tr("Use link"),
+            "iosPasteBad": tr("That link is not a valid Biruni field photos link."),
+            "androidInstall": tr("Install app to Home Screen for safer offline storage"),
+            "androidInstallBtn": tr("Install"),
+            "persistWarn": tr("Browser storage is not marked persistent. Keep this page open or export a backup bundle before closing."),
+            "spaceFree": tr("Free space on phone: {s}"),
+            "quotaStop": tr("Phone storage is full. Capture is stopped so queued items are not lost — connect to the office or export a backup bundle."),
+            "unsentBanner": tr("{n} items not protected for {d} days"),
+            "exportTitle": tr("Sealed backup bundle"),
+            "exportBtn": tr("Export sealed backup (.bfx)"),
+            "exporting": tr("Packing sealed backup…"),
+            "exportDone": tr("Exported {n} sealed items ({f} file(s)). Nothing was deleted from this phone."),
+            "exportEmpty": tr("No sealed items are waiting on this phone.")}
 
 
 def all_phone_texts():
@@ -1556,7 +1590,12 @@ PAGE = r"""<!doctype html><html lang="__LANG__" dir="__DIR__"><head><meta charse
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#F4F6F8" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0E1114" media="(prefers-color-scheme: dark)">
-<meta name="color-scheme" content="light dark"><title>Biruni GIS</title>
+<meta name="color-scheme" content="light dark">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.png">
+<link rel="apple-touch-icon" href="icon.png"><title>Biruni GIS</title>
 <style>
 :root{--bg:#F4F6F8;--card:#FFFFFF;--text:#14181D;--dim:#5F6B76;--line:#E1E6EB;--accent:#12A594;--ink:#FFFFFF;
  --soft:#E1F4F1;--good:#12A36E;--fair:#C98A12;--poor:#D24B4B;--shadow:0 1px 2px rgba(16,24,32,.05),0 6px 20px rgba(16,24,32,.06)}
@@ -1584,6 +1623,19 @@ button{font:inherit;cursor:pointer}
 @keyframes pulse{50%{opacity:.3}}
 .banner{margin:2px 16px 4px;padding:10px 13px;border-radius:14px;font-size:14px;line-height:1.45;
  background:var(--card);border:1px solid var(--line);border-inline-start:4px solid var(--fair)}
+.banner.amber{border-color:var(--fair);border-inline-start-color:var(--fair);color:var(--fair);font-weight:700}
+.banner.red{border-color:var(--poor);border-inline-start-color:var(--poor);color:var(--poor);font-weight:700}
+.banner.row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.igate{text-align:start;margin-top:14px}
+.igate h2{font-size:20px;margin:0 0 8px}
+.igate p{color:var(--dim);font-size:14px;margin:0 0 12px}
+.istep{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:14px;background:var(--bg);
+ border:1px solid var(--line);margin-bottom:10px;font-weight:600;font-size:15px}
+.iico{width:38px;height:38px;border-radius:10px;background:var(--soft);color:var(--accent);display:grid;
+ place-items:center;font-size:20px;flex:none}
+.dlbox{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.dlbox a{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:10px;background:var(--soft);
+ color:var(--accent);font-weight:600;font-size:13px;text-decoration:none}
 main{max-width:520px;margin:0 auto;padding:10px 16px 16px}
 .intro{text-align:center;padding:26px 6px 10px}
 .hero{position:relative;width:118px;height:118px;margin:10px auto 22px;border-radius:34px;background:var(--soft);
@@ -1718,7 +1770,24 @@ input.in:focus{border-color:var(--accent)}
 </header>
 <div class="banner hide" id="st"></div>
 <div class="banner hide" id="privWarn"></div>
+<div class="banner hide" id="persistWarn"></div>
+<div class="banner hide" id="quotaWarn"></div>
+<div class="banner hide" id="unsentWarn"></div>
+<div class="banner row hide" id="androidBar"><span id="androidText"></span><button class="ghost" id="androidBtn" type="button"></button></div>
 <main>
+<section class="card igate hide" id="iosGate">
+ <h2 id="iosGateTitle"></h2>
+ <p id="iosGateBody"></p>
+ <div class="istep"><span class="iico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M5 11v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8"/></svg></span><span id="iosStep1"></span></div>
+ <div class="istep"><span class="iico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M12 8v8M8 12h8"/></svg></span><span id="iosStep2"></span></div>
+ <button class="primary" id="iosCopyBtn" type="button"></button>
+</section>
+<section class="card igate hide" id="iosPaste">
+ <h2 id="iosPasteTitle"></h2>
+ <p id="iosPasteBody"></p>
+ <div class="mrow"><input type="url" class="in" id="iosPasteIn" dir="ltr" autocomplete="off"><button class="ghost" id="iosPasteBtn" type="button"></button></div>
+ <div class="dstate" id="iosPasteErr"></div>
+</section>
 <section id="intro" class="intro">
  <div class="hero"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h1a2 2 0 0 0 2-2a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1a2 2 0 0 0 2 2h1a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2"/><circle cx="12" cy="13" r="3"/></svg>
  <span class="pin"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="11" r="3"/><path d="M17.66 16.66L13.41 20.9a2 2 0 0 1-2.83 0l-4.24-4.24a8 8 0 1 1 11.32 0z"/></svg></span></div>
@@ -1761,6 +1830,10 @@ input.in:focus{border-color:var(--accent)}
  <div class="card" id="handCard"><span class="lbl" id="lHand"></span>
   <div class="mrow"><button class="ghost" id="giveBtn" type="button"></button><button class="ghost" id="takeBtn" type="button"></button></div>
   <div class="handInfo" id="handInfo"></div></div>
+ <div class="card" id="exportCard"><div class="row"><span class="lbl" id="lExport"></span><span class="lbl" id="spaceInfo"></span></div>
+  <div class="mrow"><button class="ghost" id="exportBtn" type="button"></button></div>
+  <div class="dstate" id="exportInfo"></div>
+  <div class="dlbox" id="exportLinks"></div></div>
  <span class="lbl" id="lRecent"></span><div id="list" class="grid"></div>
 </section>
 </main>
@@ -1832,6 +1905,22 @@ function label(){document.title=T.title;$('hero').textContent=T.hero;$('introTex
  if($('eodTitle'))$('eodTitle').textContent=T.eodTitle||'Items not yet protected by 2 copies';
  if($('eodBody'))$('eodBody').textContent=T.eodBody||'Keep this page open or connect to Wi-Fi so every item reaches 2 verified copies.';
  if($('eodBtn'))$('eodBtn').textContent=T.eodDismiss||'Keep open & send now';
+ if($('iosGateTitle'))$('iosGateTitle').textContent=T.iosGateTitle||'Install to Home Screen first';
+ if($('iosGateBody'))$('iosGateBody').textContent=T.iosGateBody||'Safari on iPhone and iPad erases browser storage after 7 days. Add this page to your Home Screen before taking photos so your work is never lost.';
+ if($('iosStep1'))$('iosStep1').textContent=T.iosStep1||'1. Tap the Share button in Safari.';
+ if($('iosStep2'))$('iosStep2').textContent=T.iosStep2||'2. Choose “Add to Home Screen”, then tap Add.';
+ if($('iosCopyBtn'))$('iosCopyBtn').textContent=T.iosCopyLink||'Copy link';
+ if($('iosPasteTitle'))$('iosPasteTitle').textContent=T.iosPasteTitle||'Paste the office link';
+ if($('iosPasteBody'))$('iosPasteBody').textContent=T.iosPasteBody||'Paste the link you copied from Safari (or scan the office QR code again) to connect this installed app.';
+ if($('iosPasteIn'))$('iosPasteIn').placeholder=T.iosPasteHint||'https://photos.biruni-gis.com/p/#k=…';
+ if($('iosPasteBtn'))$('iosPasteBtn').textContent=T.iosPasteUse||'Use link';
+ if($('androidText'))$('androidText').textContent=T.androidInstall||'Install app to Home Screen for safer offline storage';
+ if($('androidBtn'))$('androidBtn').textContent=T.androidInstallBtn||'Install';
+ if($('lExport'))$('lExport').textContent=T.exportTitle||'Sealed backup bundle';
+ if($('exportBtn'))$('exportBtn').textContent=T.exportBtn||'Export sealed backup (.bfx)';
+ if(typeof updatePersistBanner==='function')updatePersistBanner();
+ if(typeof updateQuotaBanner==='function')updateQuotaBanner();
+ if(typeof updateSpaceInfo==='function')updateSpaceInfo();
  if(typeof count==='function')count();
  if(typeof driveLabel==='function')driveLabel();if(typeof capLabel==='function')capLabel()}
 function setLang(l){LANG=l;T=Object.assign({},ALL.en||{},ALL[l]||{});const h=document.documentElement;
@@ -2128,7 +2217,8 @@ async function put(it){
  if(it&&typeof it.st!=='number')it.st=0;
  if(it&&typeof it.c!=='number')it.c=0;
  if(it&&!it.at)it.at=NOW();
- it=await sealRecord(it);if(db){try{await tx('readwrite',s=>s.put(it));return it}catch(e){}}
+ it=await sealRecord(it);if(db){try{await tx('readwrite',s=>s.put(it));return it}catch(e){
+  if(e&&(e.name==='QuotaExceededError'||e.code===22||/quota/i.test(String(e.message||e)))&&typeof setQuotaStopped==='function')setQuotaStopped(true)}}
  mem=mem.filter(x=>x.id!==it.id);mem.push(it);return it}
 async function all(){let a=[];if(db){try{a=await tx('readonly',s=>s.getAll())||[]}catch(e){}}
  return a.concat(mem).filter(x=>(x.room||'')===ROOM)}
@@ -2193,7 +2283,9 @@ async function count(){const a=(await all()).filter(x=>!x.cap),
   else $('waitPill').classList.add('hide')}
  $('lWait').textContent=hasPending?wt:bare(T.queued);
  $('handInfo').textContent=c?T.handCarry.replace('{n}',c):'';
- $('waitBox').classList.toggle('warn',hasPending)}
+ $('waitBox').classList.toggle('warn',hasPending);
+ if(typeof updateUnsentBanner==='function')await updateUnsentBanner();
+ if(typeof checkStorageSpace==='function')checkStorageSpace()}
 /*SEND{*/
 /* the phone talks to the PC's own server: one request per photo */
 /* every request has a time limit: a photo whose sending stalled (mobile data, the tunnel) waited for ever, the
@@ -2391,14 +2483,14 @@ function handReceive(h,ch){ch.binaryType='arraybuffer';let cur=null,q=Promise.re
  ch.onclose=()=>{if(HAND===h&&!h.done){h.done=true;handClose();toast(h.n?T.handTook.replace('{n}',h.n):T.handFail);count()}}}
 /*}HAND*/
 /*CAP{*/
-let CAP=null,CAPJOB='',CAPSEL=null,CAPSHEET=null,CAPTM=0,CAPLASTFIX=null,CAPST=null;
+var CAP=null,CAPJOB='',CAPSEL=null,CAPSHEET=null,CAPTM=0,CAPLASTFIX=null,CAPST=null;
 function capRand(n){const a='abcdefghijklmnopqrstuvwxyz0123456789',r=crypto.getRandomValues(new Uint8Array(n));
  let s='';for(let i=0;i<n;i++)s+=a[r[i]%36];return s}
-const capEl=(tag,cls,txt)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(txt!=null)e.textContent=txt;return e};
-const capJobObj=()=>CAP&&Array.isArray(CAP.jobs)&&CAP.jobs.find(j=>j&&j.id===CAPJOB&&j.st!=='closed')||null;
-const capSchema=()=>{const j=capJobObj();return j&&CAP&&CAP.schemas&&CAP.schemas[j.s]||null};
-const capStateKey=jid=>'biruni-job-'+ROOM+'-'+jid;
-const capWho=()=>(SURVNAME||$('me').value||kept('biruni-me')||'').trim().slice(0,40);
+function capEl(tag,cls,txt){const e=document.createElement(tag);if(cls)e.className=cls;if(txt!=null)e.textContent=txt;return e}
+function capJobObj(){return CAP&&Array.isArray(CAP.jobs)&&CAP.jobs.find(j=>j&&j.id===CAPJOB&&j.st!=='closed')||null}
+function capSchema(){const j=capJobObj();return j&&CAP&&CAP.schemas&&CAP.schemas[j.s]||null}
+function capStateKey(jid){return 'biruni-job-'+ROOM+'-'+jid}
+function capWho(){return (SURVNAME||$('me').value||kept('biruni-me')||'').trim().slice(0,40)}
 function capLoadState(jid,sref){if(!jid)return null;
  try{const st=JSON.parse(kept(capStateKey(jid))||'null');
   if(st&&st.job===jid&&typeof st.inst==='object')return st}catch(e){}
@@ -2419,7 +2511,8 @@ async function capSnap(){clearTimeout(CAPTM);CAPTM=0;if(!CAPST||!CAPJOB)return n
 function capFallbackFix(){const j=capJobObj();if(!j)return null;
  if(CAPLASTFIX&&CAPLASTFIX.j===j.id)return {lat:CAPLASTFIX.lat,lon:CAPLASTFIX.lon,acc:CAPLASTFIX.acc||999,alt:null,heading:null,t:Date.now()};
  const l=j.loc;return Array.isArray(l)&&l.length===2&&isFinite(l[0])&&isFinite(l[1])?{lat:+l[1],lon:+l[0],acc:999,alt:null,heading:null,t:Date.now()}:null}
-function capSyncShutter(){const sf=shotFix();$('shot').disabled=!sf;$('shotHint').textContent=sf?T.shoot:T.waiting}
+function capSyncShutter(){const sf=shotFix(),blk=(typeof iosBlocked!=='undefined'&&iosBlocked)||(typeof quotaStopped!=='undefined'&&quotaStopped);
+ $('shot').disabled=!sf||blk;$('shotHint').textContent=quotaStopped?(T.quotaStop||''):sf?T.shoot:T.waiting}
 function capCleanVal(q,val){if(val==null||val===''||(Array.isArray(val)&&!val.length))return undefined;
  const t=q.type;
  if(t==='text'){const s=String(val).trim().slice(0,250);return s||undefined}
@@ -2595,6 +2688,8 @@ function capSkip(){if(!CAPSHEET||!CAPST)return;const k=CAPSHEET.k,r=$('capReason
  if(r.length<3){toast(T.capReasonNeed||'Write a reason of at least 3 characters.');$('capReason').focus();return}
  CAPST.skip[k]=[r,Date.now()];capTouch();capCloseSheet()}
 function capShot(){if(!CAPSHEET||!CAPST||CAPSHEET.kind==='repeat')return;
+ if((typeof iosBlocked!=='undefined'&&iosBlocked)||(typeof quotaStopped!=='undefined'&&quotaStopped)){
+  if(quotaStopped)toast(T.quotaStop||'Phone storage is full.');return}
  const sf=shotFix();if(!sf){toast(T.waiting);return}if(!requireName())return;
  const qDefs=CAPSHEET.q||[],checked=checkForm(qDefs,CAPSHEET.vmap||{},$('capForm'));if(!checked)return;
  const now=Date.now(),k=CAPSHEET.k;
@@ -2682,7 +2777,8 @@ function onFix(p){const c=p.coords,first=!fix;fix={lat:c.latitude,lon:c.longitud
  if(avg)avg.pts.push({lat:c.latitude,lon:c.longitude,acc:c.accuracy});tellPos();drawGuide();
  $('accBar').className=q;$('accBar').style.width=Math.max(6,Math.min(100,100-(a-3)*2.2))+'%';
  if(compass==null&&c.heading!=null&&!isNaN(c.heading))showDir(c.heading);
- $('shot').disabled=false;$('shotHint').textContent=T.shoot;if(first&&navigator.vibrate)navigator.vibrate(15)}
+ const blk=(typeof iosBlocked!=='undefined'&&iosBlocked)||(typeof quotaStopped!=='undefined'&&quotaStopped);
+ $('shot').disabled=blk;$('shotHint').textContent=quotaStopped?(T.quotaStop||''):T.shoot;if(first&&navigator.vibrate)navigator.vibrate(15)}
 let gdraw=0;function showFix(){if(!fix)return;const a=Math.round(fix.acc),q=a<=8?'good':a<=20?'fair':'poor';
  $('pos').classList.remove('inroom');$('pos').textContent=fix.lat.toFixed(6)+', '+fix.lon.toFixed(6);$('acc').textContent='± '+a+' m';$('acc').className='acc '+q}
 function showDir(h){$('arrow').style.transform='rotate('+Math.round(h)+'deg)';$('deg').textContent=Math.round(h)%360+'°';
@@ -2690,7 +2786,8 @@ function showDir(h){$('arrow').style.transform='rotate('+Math.round(h)+'deg)';$(
 function onCompass(e){let h=null;if(typeof e.webkitCompassHeading==='number')h=e.webkitCompassHeading;
  else if(e.absolute&&e.alpha!=null)h=(360-e.alpha)%360;if(h!=null){compass=Math.round(h)%360;showDir(compass)}}
 async function wake(){try{await navigator.wakeLock.request('screen')}catch(e){}}
-async function start(){if(!window.isSecureContext||!navigator.geolocation){status(false,'insecure');return}
+async function start(){if(typeof iosBlocked!=='undefined'&&iosBlocked)return;
+ if(!window.isSecureContext||!navigator.geolocation){status(false,'insecure');return}
  try{if(window.DeviceOrientationEvent&&DeviceOrientationEvent.requestPermission)await DeviceOrientationEvent.requestPermission()}catch(e){}
  window.addEventListener('deviceorientationabsolute',onCompass);window.addEventListener('deviceorientation',onCompass);
  navigator.geolocation.watchPosition(onFix,e=>status(false,T.denied+' ('+e.message+')'),
@@ -2716,15 +2813,19 @@ $('me').value=SURVNAME||kept('biruni-me')||'';if(SURVNAME)$('me').readOnly=true;
 $('me').oninput=()=>{if($('me').value.trim()&&$('meCard'))$('meCard').classList.remove('bad');keep('biruni-me',$('me').value.trim())};
 $('me').onchange=()=>{keep('biruni-me',$('me').value.trim());if($('meCard'))$('meCard').classList.remove('bad');tellPos(true)};
 $('share').checked=kept('biruni-share')!=='0';$('share').onchange=()=>{keep('biruni-share',$('share').checked?'1':'0');tellPos(true)};
-$('shot').onclick=()=>{const sf=shotFix();if(!sf)return;if(!requireName())return;
+$('shot').onclick=()=>{if((typeof iosBlocked!=='undefined'&&iosBlocked)||(typeof quotaStopped!=='undefined'&&quotaStopped)){
+  if(quotaStopped)toast(T.quotaStop||'Phone storage is full.');return}
+ const sf=shotFix();if(!sf)return;if(!requireName())return;
  const inJob=!!(capJobObj()&&capSchema());
  const f=inJob?{}:answers();if(!f)return;if(navigator.vibrate)navigator.vibrate(25);
  CAPSEL=inJob?{j:CAPJOB,k:'*',pl:'*',ch:[]}:null;
  pending={fix:sf,compass:compass,at:Date.now(),f:f,cap:CAPSEL};$('file').click()};
 $('file').onchange=async()=>{const f=$('file').files[0];$('file').value='';if(!f||!pending)return;
+ if((typeof iosBlocked!=='undefined'&&iosBlocked)||(typeof quotaStopped!=='undefined'&&quotaStopped)){pending=null;return}
  const who=requireName();if(!who)return;
  const p=pending.fix,capBind=pending.cap||CAPSEL,pnote=pending.note!=null?pending.note:$('note').value.trim();
  const blob=await fitPhoto(new Blob([await f.arrayBuffer()],{type:f.type||'image/jpeg'}));
+ if(typeof checkStorageSpace==='function'&&!await checkStorageSpace(blob.size*2)){pending=null;return}
  const meta={id:uid(),lat:p.lat,lon:p.lon,acc:p.acc,alt:p.alt,heading:p.heading,compass:pending.compass,
   t:pending.at,fix_age:Math.max(0,Math.round((pending.at-p.t)/1000)),kind:kind,note:pnote,device:dev,device_id:DEVID,surveyor:who.slice(0,40),by:who.slice(0,40),sk:SURVKEY||undefined,f:pending.f,avg_n:p.n,avg_sd:p.sd,level:p.level,unit:p.unit};
  if(capBind){meta.cap=capBind;CAPLASTFIX={j:capBind.j,lat:p.lat,lon:p.lon,acc:p.acc};
@@ -2737,9 +2838,186 @@ $('langBtn').onclick=()=>{const box=$('langs');box.textContent='';Object.keys(AL
  b.onclick=()=>{keep('biruni-lang',k);setLang(k);$('sheet').classList.add('hide')};box.appendChild(b)});
  $('sheet').classList.remove('hide')};
 $('sheet').onclick=e=>{if(e.target===$('sheet'))$('sheet').classList.add('hide')};
+/* ---- Phase P2: iOS install gate, persistent storage, unsent banner & sealed export (.bfx) ---- */
+const HEADROOM_BYTES=15*1024*1024,BFX_MAX_CHUNK=200*1024*1024;
+var iosBlocked=false,persistRefused=false,quotaStopped=false,spaceFreeBytes=null,deferredPrompt=null;
+function isIos(){const u=String(window.BIRUNI_UA!=null?window.BIRUNI_UA:(navigator.userAgent||''));
+ const p=String(window.BIRUNI_PLATFORM!=null?window.BIRUNI_PLATFORM:(navigator.platform||''));
+ const mt=window.BIRUNI_MAX_TOUCH!=null?window.BIRUNI_MAX_TOUCH:(navigator.maxTouchPoints||0);
+ return /iPad|iPhone|iPod/.test(u)||(p==='MacIntel'&&mt>1)}
+function isStandalone(){if(window.BIRUNI_STANDALONE!=null)return !!window.BIRUNI_STANDALONE;
+ if(typeof navigator.standalone==='boolean')return navigator.standalone;
+ return !!(window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)}
+function hasBridgeKey(){return typeof KEYB==='string'&&/^[A-Za-z0-9_-]{43}$/.test(KEYB)}
+function validateBridgeLink(raw){
+ const s=String(raw||'').trim();if(!s)return null;
+ let frag='';
+ try{if(/^https?:\/\//i.test(s)){const u=new URL(s);
+   if(u.origin!==location.origin&&!/^https:\/\/(photos\.)?biruni-gis\.com$/i.test(u.origin))return null;
+   frag=(u.hash||'').replace(/^#/,'')}
+  else if(s.startsWith('#'))frag=s.slice(1);
+  else if(s.includes('#')){const idx=s.indexOf('#'),pre=s.slice(0,idx).trim();
+   if(pre&&!/^(https:\/\/(photos\.)?biruni-gis\.com)?(\/p\/?)?$/i.test(pre))return null;
+   frag=s.slice(idx+1)}
+  else if(/^k=[A-Za-z0-9_-]{43}(&|$)/.test(s))frag=s;
+  else return null}catch(e){return null}
+ const hp=new URLSearchParams(frag),k=hp.get('k')||'';
+ if(!/^[A-Za-z0-9_-]{43}$/.test(k))return null;
+ const i=hp.get('i')||'';if(i&&!/^[A-Za-z0-9_-]{22}$/.test(i))return null;
+ const pk=hp.get('pk')||'';if(pk&&!/^[\w-]{81,99}$/.test(pk))return null;
+ const o=(hp.get('o')||'').trim().toLowerCase();if(o&&!/^[a-z0-9-]{1,63}\.[a-z0-9-]{1,63}\.workers\.dev$/.test(o))return null;
+ const t=hp.get('t')||'';if(t&&!/^[a-z0-9-]{3,80}$/.test(t))return null;
+ return {hash:'#'+frag,k:k,i:i,pk:pk,d:hp.get('d')==='1',o:o,t:t,l:hp.get('l')||'',sk:hp.get('sk')||'',sn:hp.get('sn')||''}}
+async function applyBridgeLink(raw){
+ const v=validateBridgeLink(raw);
+ const err=$('iosPasteErr');
+ if(!v){if(err)err.textContent=T.iosPasteBad||'That link is not a valid Biruni field photos link.';
+  if($('iosPaste')){$('iosPaste').classList.remove('bad');void $('iosPaste').offsetWidth;$('iosPaste').classList.add('bad')}
+  return false}
+ if(err)err.textContent='';
+ if($('iosPaste'))$('iosPaste').classList.remove('bad');
+ try{history.replaceState(null,'',v.hash)}catch(e){try{location.hash=v.hash}catch(x){}}
+ keep('biruni-last-link',location.origin+location.pathname+v.hash);
+ ROOM=v.k.slice(0,12);
+ if(v.pk&&v.d){PCKEY=v.pk;keep('biruni-pckey-'+ROOM,v.pk)}
+ if(v.o)keep('biruni-org-'+ROOM,v.o);
+ if(v.t)keep('biruni-tun-'+ROOM,v.t);
+ if(v.sk){keep('biruni-sk-'+ROOM,v.sk);if(v.sn){keep('biruni-sn-'+ROOM,v.sn);keep('biruni-me',v.sn);if($('me')){$('me').value=v.sn;$('me').readOnly=true}}}
+ if(v.l&&pick(v.l))setLang(pick(v.l));
+ if(typeof startBridge==='function')await startBridge(v.k);
+ checkIosGate();
+ return true}
+function checkIosGate(){
+ const ios=isIos(),sa=isStandalone(),bridgeMode=typeof KEYB!=='undefined',needKey=bridgeMode&&!hasBridgeKey();
+ const blockInstall=ios&&!sa;
+ const blockPaste=bridgeMode&&sa&&needKey;
+ iosBlocked=blockInstall||blockPaste;
+ if($('iosGate'))$('iosGate').classList.toggle('hide',!blockInstall);
+ if($('iosPaste'))$('iosPaste').classList.toggle('hide',!blockPaste);
+ if($('intro'))$('intro').classList.toggle('hide',started||iosBlocked);
+ if($('work'))$('work').classList.toggle('hide',!started||iosBlocked);
+ if($('bar'))$('bar').classList.toggle('hide',!started||iosBlocked);
+ if($('go'))$('go').disabled=iosBlocked||quotaStopped||(bridgeMode&&(!hasBridgeKey()||!window.isSecureContext||!window.RTCPeerConnection));
+ if($('shot'))$('shot').disabled=iosBlocked||quotaStopped||!shotFix();
+ if($('capShoot'))$('capShoot').disabled=iosBlocked||quotaStopped;
+ return !iosBlocked}
+async function copyCurrentLink(){
+ const u=location.href;
+ try{if(navigator.clipboard&&navigator.clipboard.writeText)await navigator.clipboard.writeText(u);
+  else{const ta=document.createElement('textarea');ta.value=u;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove()}}catch(e){}
+ toast(T.iosCopied||'Link copied. Open the installed app from your Home Screen.');return u}
+if($('iosCopyBtn'))$('iosCopyBtn').onclick=copyCurrentLink;
+if($('iosPasteBtn'))$('iosPasteBtn').onclick=()=>applyBridgeLink($('iosPasteIn')&&$('iosPasteIn').value);
+window.addEventListener('beforeinstallprompt',e=>{
+ if(isIos()||isStandalone())return;
+ e.preventDefault();deferredPrompt=e;
+ if($('androidBar'))$('androidBar').classList.remove('hide')});
+if($('androidBtn'))$('androidBtn').onclick=async()=>{
+ if(!deferredPrompt)return;const p=deferredPrompt;deferredPrompt=null;
+ try{await p.prompt()}catch(e){}
+ if($('androidBar'))$('androidBar').classList.add('hide')};
+function fmtBytes(b){if(!(typeof b==='number'&&isFinite(b)&&b>=0))return '';
+ if(b>=1073741824)return '\u2066'+(b/1073741824).toFixed(1)+' GB\u2069';
+ return '\u2066'+Math.max(0,Math.round(b/1048576))+' MB\u2069'}
+function updatePersistBanner(){const b=$('persistWarn');if(!b)return;
+ b.textContent=T.persistWarn||'Browser storage is not marked persistent. Keep this page open or export a backup bundle before closing.';
+ b.classList.toggle('hide',!persistRefused)}
+function updateQuotaBanner(){const b=$('quotaWarn');if(!b)return;
+ b.textContent=T.quotaStop||'Phone storage is full. Capture is stopped so queued items are not lost — connect to the office or export a backup bundle.';
+ b.classList.toggle('red',quotaStopped);
+ b.classList.toggle('hide',!quotaStopped)}
+function updateSpaceInfo(){const el=$('spaceInfo');if(!el)return;
+ el.textContent=spaceFreeBytes!=null?(T.spaceFree||'Free space on phone: {s}').replace('{s}',fmtBytes(spaceFreeBytes)):''}
+function setQuotaStopped(on){quotaStopped=!!on;updateQuotaBanner();
+ const blk=iosBlocked||quotaStopped;
+ if($('shot'))$('shot').disabled=blk||!shotFix();
+ if($('shotHint'))$('shotHint').textContent=quotaStopped?(T.quotaStop||''):shotFix()?T.shoot:T.waiting;
+ if($('capShoot'))$('capShoot').disabled=blk;
+ if(quotaStopped)toast(T.quotaStop||'Phone storage is full.')}
+async function checkPersist(){
+ let ok=true;
+ if(window.BIRUNI_PERSISTED!=null){ok=!!window.BIRUNI_PERSISTED}
+ else if(navigator.storage){
+  try{if(typeof navigator.storage.persist==='function')await navigator.storage.persist()}catch(e){}
+  try{if(typeof navigator.storage.persisted==='function')ok=!!await navigator.storage.persisted()}catch(e){ok=false}}
+ persistRefused=!ok;updatePersistBanner();return ok}
+async function checkStorageSpace(needBytes){
+ needBytes=+needBytes||0;
+ if(!navigator.storage||typeof navigator.storage.estimate!=='function')return !quotaStopped;
+ try{const e=await navigator.storage.estimate();
+  if(e&&typeof e.quota==='number'&&e.quota>0){
+   const u=typeof e.usage==='number'?e.usage:0,free=Math.max(0,e.quota-u);
+   spaceFreeBytes=free;updateSpaceInfo();
+   if(free<HEADROOM_BYTES+needBytes){setQuotaStopped(true);return false}
+   if(quotaStopped&&free>=HEADROOM_BYTES*2)setQuotaStopped(false)}}catch(e){}
+ return !quotaStopped}
+async function updateUnsentBanner(){
+ const b=$('unsentWarn');if(!b)return {n:0,days:0,level:''};
+ const a=(await all()).filter(x=>{const s=itemSt(x);return s<3||s===9});
+ if(!a.length){b.classList.add('hide');b.classList.remove('amber','red');return {n:0,days:0,level:''}}
+ const now=NOW();let oldest=now;
+ for(const x of a){const t=+(x.t0||(x.meta&&x.meta.t)||x.at||now);if(t>0&&t<oldest)oldest=t}
+ const days=Math.floor(Math.max(0,now-oldest)/86400000);
+ if(days<3){b.classList.add('hide');b.classList.remove('amber','red');return {n:a.length,days:days,level:''}}
+ const level=days>=5?'red':'amber';
+ b.textContent=(T.unsentBanner||'{n} items not protected for {d} days').replace('{n}',a.length).replace('{d}',days);
+ b.classList.remove('hide','amber','red');b.classList.add(level);
+ return {n:a.length,days:days,level:level}}
+async function buildBundles(maxChunkBytes){
+ const maxB=+maxChunkBytes||BFX_MAX_CHUNK;
+ await sealWaiting();
+ const raw=(await all()).filter(x=>x&&x.blob&&(itemSt(x)<3||itemSt(x)===9));
+ const ready=[];
+ for(const x of raw){let it=x;
+  if(!(it.meta&&it.meta.sealed)){if(!PCKEY)continue;it=await put(it)}
+  if(!(it.meta&&it.meta.sealed)||!it.blob)continue;
+  const buf=new Uint8Array(await it.blob.arrayBuffer());
+  const h=it.h||await blobSha(new Blob([buf]));
+  ready.push({id:String(it.id),size:buf.length,sha:h,st:itemSt(it),bytes:buf})}
+ if(!ready.length)return [];
+ const groups=[];let cur=[],curBytes=0;
+ for(const r of ready){
+  if(cur.length&&curBytes+r.size+256>maxB){groups.push(cur);cur=[];curBytes=0}
+  cur.push(r);curBytes+=r.size+128}
+ if(cur.length)groups.push(cur);
+ const ts=new Date(NOW()).toISOString().slice(0,10).replace(/-/g,'');
+ const out=[];
+ for(let i=0;i<groups.length;i++){
+  const g=groups[i];
+  const idx={v:1,items:g.map(r=>({id:r.id,size:r.size,sha:r.sha,st:r.st}))};
+  const jb=new TextEncoder().encode(JSON.stringify(idx));
+  const hdr=new Uint8Array(8);
+  hdr.set([0x42,0x46,0x58,0x31],0);
+  new DataView(hdr.buffer).setUint32(4,jb.length,false);
+  const parts=[hdr,jb,...g.map(r=>r.bytes)];
+  const name=groups.length>1?('biruni-'+ts+'-'+(i+1)+'.bfx'):('biruni-'+ts+'.bfx');
+  out.push({name:name,blob:new Blob(parts,{type:'application/octet-stream'}),count:g.length,index:idx})}
+ return out}
+async function exportBundles(){
+ const info=$('exportInfo'),links=$('exportLinks'),btn=$('exportBtn');
+ if(btn)btn.disabled=true;
+ if(info)info.textContent=T.exporting||'Packing sealed backup…';
+ if(links)links.textContent='';
+ try{const bundles=await buildBundles(BFX_MAX_CHUNK);
+  if(!bundles.length){if(info)info.textContent=T.exportEmpty||'No sealed items are waiting on this phone.';
+   toast(T.exportEmpty||'No sealed items are waiting on this phone.');return []}
+  const total=bundles.reduce((s,b)=>s+b.count,0);
+  if(links){for(const b of bundles){const a=document.createElement('a');
+   a.href=URL.createObjectURL(b.blob);a.download=b.name;a.textContent='⬇ '+b.name+' ('+b.count+')';
+   links.appendChild(a)}}
+  let shared=false;
+  if(typeof File==='function'&&navigator.share&&navigator.canShare){
+   try{const files=bundles.map(b=>new File([b.blob],b.name,{type:'application/octet-stream'}));
+    if(navigator.canShare({files:files})){await navigator.share({files:files,title:T.exportTitle||'Biruni backup'});shared=true}}catch(e){}}
+  if(!shared&&links&&links.firstChild&&!window.BIRUNI_NO_AUTODL){try{links.firstChild.click()}catch(e){}}
+  const msg=(T.exportDone||'Exported {n} sealed items ({f} file(s)). Nothing was deleted from this phone.').replace('{n}',total).replace('{f}',bundles.length);
+  if(info)info.textContent=msg;toast(msg);return bundles}
+ finally{if(btn)btn.disabled=false}}
+if($('exportBtn'))$('exportBtn').onclick=exportBundles;
 setLang(pick(kept('biruni-lang'))||pick(HASHL)||pick(DEF)||pick(navigator.language)||'en');
+checkIosGate();
 try{const c=JSON.parse(kept('biruni-cap-'+ROOM)||'null');if(c)capSet(c)}catch(e){}
 try{const g=JSON.parse(kept('biruni-guide-'+ROOM)||'null');if(g)setGuide(g)}catch(e){}
 {const e=document.createElement('div');e.className='empty';e.textContent=T.none;$('list').appendChild(e)}
-(async()=>{probeSkew();db=await openDb();await checkPrivate();await sealWaiting();if(typeof driveStart==='function')driveStart();const w=await all();w.filter(it=>!it.carried&&!it.cap).slice(-9).forEach(it=>thumb(it,badgeFor(it)));count();flush()})();
+(async()=>{probeSkew();db=await openDb();await checkPrivate();await checkPersist();await checkStorageSpace(0);await sealWaiting();if(typeof driveStart==='function')driveStart();const w=await all();w.filter(it=>!it.carried&&!it.cap).slice(-9).forEach(it=>thumb(it,badgeFor(it)));await count();flush()})();
 </script></body></html>"""
