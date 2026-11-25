@@ -54,7 +54,14 @@ unmodified official builds, each with its licence text in its folder):
   restic 0.20.0 .... BSD-2-Clause, Copyright (c) 2014, Alexander Neumann
                      https://restic.net  source: https://github.com/restic/restic  (backup program; unmodified
                      official Windows build, checked against the release's SHA256SUMS)
-  TODO(9c, 9d): Syncthing (MPL-2.0) and rclone (MIT) are fetched on demand, pinned by SHA-256, when added.
+  Syncthing 2.1.7 .. MPL-2.0, Copyright (c) The Syncthing Authors
+                     https://syncthing.net  source: https://github.com/syncthing/syncthing  (fetched on demand
+                     for PC-to-PC folder sync, checked against the release's sha256sum.txt.asc; see
+                     scripts/tool-licenses/syncthing/LICENSE.txt)
+  rclone 1.76.0 .... MIT, Copyright (c) 2012 by Nick Craig-Wood
+                     https://rclone.org  source: https://github.com/rclone/rclone  (fetched on demand for
+                     off-site backup copies, checked against the release's SHA256SUMS; see
+                     scripts/tool-licenses/rclone/LICENSE.txt)
 
 Not included: the ERDAS ECW/JP2 SDK, the MrSID DSDK and the Oracle Instant
 Client that the QGIS installer ships are NOT redistributed with Biruni GIS,

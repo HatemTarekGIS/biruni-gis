@@ -27,7 +27,8 @@ PHOTOS_SETTING = "biruni/field-photos/folder"
 MIRROR_SETTING = "biruni/field-photos/mirror-folder"
 CHECK_PARTS = 13
 DEFAULTS = {"enabled": False, "repo": "", "kind": "usb", "extra-paths": "", "backup-hours": 24, "check-days": 7,
-            "restore-days": 30, "vault-days": 7, "auto-intake": False, "org-name": ""}
+            "restore-days": 30, "vault-days": 7, "auto-intake": False, "org-name": "",
+            "sync-enabled": False, "sync-role": "office", "sync-lan-only": False, "offsite-remote": ""}
 
 
 # ---- settings -------------------------------------------------------------------------------------------------------
@@ -82,6 +83,10 @@ def config(get):
         "restore-days": as_float(setting(get, "restore-days"), 30),
         "vault-days": as_float(setting(get, "vault-days"), 7),
         "auto-intake": as_bool(setting(get, "auto-intake")),
+        "sync-enabled": as_bool(setting(get, "sync-enabled")),
+        "sync-role": str(setting(get, "sync-role") or "office").strip() or "office",
+        "sync-lan-only": as_bool(setting(get, "sync-lan-only")),
+        "offsite-remote": str(setting(get, "offsite-remote") or "").strip(),
     }
 
 
@@ -153,10 +158,11 @@ class Engine:
     (default: the pinned program). ``ledger``: the live CopyLedger, or None to open the photo folder's own."""
 
     def __init__(self, cert_folder, photos_folder, get_setting, restic_factory=None, ledger=None, archive_root="",
-                 vault_root="", vault_factory=None, now=time.time):
+                 vault_root="", vault_factory=None, rclone_factory=None, now=time.time):
         self.cert, self.photos = cert_folder, photos_folder
         self.get = get_setting
         self._factory = restic_factory
+        self._rclone_factory = rclone_factory
         self._ledger = ledger
         self.archive_root, self.vault_root, self.vault_factory = archive_root, vault_root, vault_factory
         self.now = now
@@ -397,6 +403,15 @@ class Engine:
             self._record("last_vault", {"at": self.now(), "unplaced": unplaced})
             append_log(self.cert, "vault", ok=True, unplaced=unplaced)
             return {"status": "ok", "unplaced": unplaced}
+
+    def run_offsite(self):
+        """Copy the restic repository to the configured remote with ``rclone copy --immutable``."""
+        from . import offsite
+
+        with self.lock:
+            remote = str(setting(self.get, "offsite-remote") or "").strip()
+            rc = self._rclone_factory(self.cert) if self._rclone_factory is not None else None
+            return offsite.run_offsite(self.cert, self.repo, remote, rclone=rc, now=self.now)
 
     # ---- the only way to prune --------------------------------------------------------------------------------------
     def org_name(self):

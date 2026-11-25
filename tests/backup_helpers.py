@@ -50,8 +50,9 @@ class Env:
     def factory(self, repo, pw):
         return fake_restic(repo, pw)
 
-    def engine(self, factory=None, now=None):
-        kw = {"now": now} if now else {}
+    def engine(self, factory=None, now=None, **kw):
+        if now:
+            kw["now"] = now
         return engine.Engine(self.cert, self.photos, self.get, restic_factory=factory or self.factory,
                              ledger=self.ledger, **kw)
 

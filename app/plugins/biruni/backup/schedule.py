@@ -37,6 +37,11 @@ def due(state, cfg, now, present=True):
     v = age("last_vault")
     if v is None or v >= cfg.get("vault-days", 7) * DAY:
         out.append("vault")
+    if cfg.get("offsite-remote") and (a is not None or state.get("last_backup")):
+        lo = state.get("last_offsite") or {}
+        oa = None if not isinstance(lo.get("at"), (int, float)) else now - lo["at"]
+        if oa is None or oa >= cfg.get("backup-hours", 24) * HOUR:
+            out.append("offsite")
     return out
 
 
@@ -87,7 +92,7 @@ class Scheduler:
         self.running = job
         eng = self.factory()
         fn = {"backup": eng.run_backup, "check": eng.run_check, "restore": eng.run_restore_test,
-              "vault": eng.run_vault_snapshot}[job]
+              "vault": eng.run_vault_snapshot, "offsite": eng.run_offsite}[job]
         self.calls.append(job)
 
         def done(res, err):

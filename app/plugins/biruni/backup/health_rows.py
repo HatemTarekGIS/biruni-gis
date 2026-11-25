@@ -124,7 +124,6 @@ def _backup_rows(ctx):
         else:
             rows.append(_row("backup_password", "Backup password", "ok", tr("The backup password is kept safely."), None))
 
-    # TODO(9c): one `sync:<peer>` row per Syncthing peer (amber below 100% for 24 h, red unseen for 7 days).
     return rows
 
 
@@ -154,6 +153,46 @@ def _side_rows(ctx):
         rows.append(_row("vault_auto", "Keys in the vault", "warn" if n else "ok", tr(
             "{n} shard(s) of the keys snapshot are not with a holder yet.").format(n=n) if n
             else tr("The keys snapshot is with its holders."), "backup" if n else None))
+
+    # ---- sync:<peer> (9c: amber below 100% for 24 h; red when unseen for 7 days) ------------------------------------------
+    peers = st.get("sync_peers") or {}
+    if isinstance(peers, dict):
+        for pid in sorted(peers):
+            p = peers[pid]
+            if not isinstance(p, dict):
+                continue
+            name = str(p.get("name") or pid[:7])
+            pct = int(round(float(p.get("completion") or 0.0)))
+            seen = p.get("seen_at")
+            below = p.get("below_100_since")
+            if isinstance(seen, (int, float)) and (now - float(seen)) >= 7 * DAY:
+                rows.append(_row(f"sync:{pid}", "PC sync", "bad", tr(
+                    "Computer {name} has not been seen for {n} day(s).").format(name=name, n=_days(now, seen)), "backup"))
+            elif pct < 100 and isinstance(below, (int, float)) and (now - float(below)) >= DAY:
+                rows.append(_row(f"sync:{pid}", "PC sync", "warn", tr(
+                    "Sync with {name} has stayed below 100% ({pct}%) for over 24 hours.").format(name=name, pct=pct),
+                    "backup"))
+            elif pct < 100:
+                rows.append(_row(f"sync:{pid}", "PC sync", "ok", tr(
+                    "Syncing with {name} ({pct}%).").format(name=name, pct=pct), None))
+            else:
+                rows.append(_row(f"sync:{pid}", "PC sync", "ok", tr(
+                    "In sync with {name} (100%).").format(name=name), None))
+
+    # ---- offsite (9d: amber after 7 days; red after 30 days or on a failure) ----------------------------------------------
+    lo = st.get("last_offsite") or {}
+    if cfg.get("offsite-remote") or lo:
+        if lo.get("at") and lo.get("ok") is False:
+            rows.append(_row("offsite", "Off-site copy", "bad", tr(
+                "The last off-site copy failed. Check the remote connection."), "backup"))
+        elif lo.get("at"):
+            ref = lo.get("last_ok_at") or lo["at"]
+            lvl = _stale(now, ref, 7, 30)
+            rows.append(_row("offsite", "Off-site copy", lvl, tr(
+                "Last off-site copy {n} day(s) ago.").format(n=_days(now, ref)), "backup" if lvl != "ok" else None))
+        else:
+            rows.append(_row("offsite", "Off-site copy", "warn", tr(
+                "No off-site copy has run yet."), "backup"))
 
     return rows
 

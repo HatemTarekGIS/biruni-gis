@@ -218,11 +218,14 @@ def backup_v2(folder, path, password, settings=None):
             body["darchive_pw"] = dpw
     except OSError:
         pass
-    from ..backup import secret as backup_secret   # P9: the office's one restic password
+    from ..backup import offsite as backup_offsite, secret as backup_secret   # P9: the office's restic and rclone passwords
 
     bpw = backup_secret.load_password(folder)
     if bpw:
         body["backup_pw"] = bpw
+    rpw = backup_offsite.load_password(folder)
+    if rpw:
+        body["rclone_pw"] = rpw
     kdf = crypto.new_kdf()
     ct = crypto.seal(crypto.derive(password, kdf), json.dumps(body).encode("utf-8"), _aad2(hk.public))
     doc = {"biruni": BACKUP_KIND, "v": 2, "pub": hk.public, "made": time.strftime("%Y-%m-%d"),
@@ -309,6 +312,11 @@ def _restore_v2_rest(body, folder, settings):
         from ..backup import secret as backup_secret
 
         backup_secret.install_password(folder, bpw)   # a different one already here is kept as .old
+    rpw = body.get("rclone_pw")
+    if isinstance(rpw, str) and rpw:
+        from ..backup import offsite as backup_offsite
+
+        backup_offsite.install_password(folder, rpw)  # a different one already here is kept as .old
     if settings is None:
         bridge.forget_cached_identities()
 

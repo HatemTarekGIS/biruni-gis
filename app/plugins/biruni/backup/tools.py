@@ -5,8 +5,8 @@ the plugin folder only) downloads the same official zip once, checks its SHA-256
 program's own SHA-256 and keeps it under <settings>\biruni\tools\<name>\<version>\.  Never "latest", never a self-update,
 and the program is re-hashed before every run (verified).
 
-TODO(9c): "syncthing" (MPL-2.0, run with --no-upgrade).  TODO(9d): "rclone" (MIT).  Add them to PINNED with their
-own SHA-256 from the official release; nothing else changes.
+Syncthing (MPL-2.0, run with --no-upgrade) and rclone (MIT) are downloaded on demand only, pinned by their official
+release SHA-256 hashes.
 """
 import hashlib
 import os
@@ -24,6 +24,20 @@ PINNED = {
         "zip_sha256": "bba9061c3dce081701ab353ec8cb73a78be73b71a538aad560f2d1067602b7fe",
         "exe_sha256": "2683eb2b061f11568b9132ac0242f183ba4b3a0ed7630f1186a57e889c82a0e2",
         "member": "restic_0.20.0_windows_amd64.exe",
+    },
+    "syncthing": {
+        "version": "2.1.7",
+        "url": "https://github.com/syncthing/syncthing/releases/download/v2.1.7/syncthing-windows-amd64-v2.1.7.zip",
+        "zip_sha256": "3ce7da770f546a8d02b65b2e7ee31f2a3b8b7c3f990ede045590cca4172ecfe1",
+        "exe_sha256": "cd9aea20afda2b9bdba5aff2e6ac964ed5c2e741ed4ceb48ad9e1be096ca7891",
+        "member": "syncthing-windows-amd64-v2.1.7/syncthing.exe",
+    },
+    "rclone": {
+        "version": "1.76.0",
+        "url": "https://github.com/rclone/rclone/releases/download/v1.76.0/rclone-v1.76.0-windows-amd64.zip",
+        "zip_sha256": "8b4fd2737ade4e70c057ef4a49deb7cffe94b0fb9d7587c189d149823f21a1dc",
+        "exe_sha256": "acd80683e23151e93bbe0d6ffa74d26e542ec510332f630beecb9944f8d1a623",
+        "member": "rclone-v1.76.0-windows-amd64/rclone.exe",
     },
 }
 

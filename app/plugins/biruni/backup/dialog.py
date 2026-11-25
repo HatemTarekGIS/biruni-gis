@@ -1,5 +1,6 @@
-"""The "Backup and sync" window: choose the backup disk, see what ran, run a job now. Not modal (the window stays
-usable; jobs run in a background thread and report back). 9c (sync between PCs) and 9d (off-site) are marked tabs."""
+"""The "Backup and sync" window: choose the backup disk, see what ran, run a job now, sync folders between PCs
+(Syncthing, 9c), and copy the restic repository off-site (rclone, 9d). Not modal (the window stays usable; jobs run in
+a background thread and report back)."""
 import json
 import os
 import time
@@ -12,9 +13,10 @@ from qgis.PyQt.QtWidgets import (QCheckBox, QComboBox, QDialog, QDoubleSpinBox, 
 
 from .. import background
 from ..i18n import tr
-from . import SETTINGS, engine, schedule, secret
+from . import SETTINGS, engine, offsite, schedule, secret, syncthing, tools
 
 KINDS = (("usb", "USB disk"), ("nas", "Network folder (NAS)"), ("folder", "Another folder"))
+ROLES = (("office", "Office or branch (send only)"), ("center", "Main centre (receive only, keep versions)"))
 
 
 def _hint(text):
@@ -42,9 +44,8 @@ class BackupDialog(QDialog):
         v.addWidget(self.tabs)
         self._target_tab()
         self._schedule_tab()
-        self._placeholder_tab(tr("Sync between PCs"), tr(
-            "Syncing folders between your computers is not available yet. A synced copy never counts as a backup."))
-        self._placeholder_tab(tr("Off-site"), tr("Copying the backup off-site is not available yet."))
+        self._sync_tab()
+        self._offsite_tab()
         self._log_tab()
         row = QHBoxLayout()
         self.btns = {}
@@ -110,10 +111,71 @@ class BackupDialog(QDialog):
         f.addRow(_hint(tr("Backups run only while Biruni is open. The health screen shows how old the last one is.")))
         self.tabs.addTab(w, tr("Schedule"))
 
-    def _placeholder_tab(self, title, text):
+    def _sync_tab(self):
         w = QWidget()
-        QVBoxLayout(w).addWidget(_hint(text))
-        self.tabs.addTab(w, title)
+        f = QFormLayout(w)
+        self.sync_enabled = QCheckBox(tr("Sync the photos folder with another office computer"))
+        f.addRow(self.sync_enabled)
+        self.sync_role = QComboBox()
+        for k, label in ROLES:
+            self.sync_role.addItem(tr(label), k)
+        f.addRow(tr("This computer's role"), self.sync_role)
+        self.sync_lan = QCheckBox(tr("Local network only (no internet discovery or relays)"))
+        f.addRow(self.sync_lan)
+        self.my_dev_id = QLineEdit()
+        self.my_dev_id.setReadOnly(True)
+        self.my_dev_id.setPlaceholderText(tr("Install Syncthing to see this computer's ID"))
+        f.addRow(tr("This computer's ID"), self.my_dev_id)
+        pr = QHBoxLayout()
+        self.peer_id = QLineEdit()
+        self.peer_id.setPlaceholderText(tr("The other computer's Syncthing ID"))
+        self.peer_name = QLineEdit()
+        self.peer_name.setPlaceholderText(tr("Label (for example: Main centre)"))
+        add_btn = QPushButton(tr("Add computer"))
+        add_btn.clicked.connect(self.add_sync_peer)
+        pr.addWidget(self.peer_id, 2)
+        pr.addWidget(self.peer_name, 1)
+        pr.addWidget(add_btn)
+        f.addRow(tr("Other computer"), pr)
+        sr = QHBoxLayout()
+        save_sync = QPushButton(tr("Save"))
+        save_sync.clicked.connect(self.save)
+        dl_sync = QPushButton(tr("Download Syncthing"))
+        dl_sync.clicked.connect(lambda _=False: self.download_tool("syncthing"))
+        sr.addWidget(save_sync)
+        sr.addWidget(dl_sync)
+        f.addRow(sr)
+        f.addRow(_hint(tr(
+            "Syncing keeps a live copy on another computer, so work continues if this computer breaks. A synced folder "
+            "is NOT a backup: damage or a mistake can travel to the other computer before it is noticed, and a synced "
+            "peer at 100% never marks photos as backed up.")))
+        self.tabs.addTab(w, tr("Sync between PCs"))
+
+    def _offsite_tab(self):
+        w = QWidget()
+        f = QFormLayout(w)
+        self.offsite_remote = QLineEdit()
+        self.offsite_remote.setPlaceholderText(tr("Remote name and folder (for example: office-cloud:biruni-backup)"))
+        f.addRow(tr("Cloud remote"), self.offsite_remote)
+        br = QHBoxLayout()
+        cfg_btn = QPushButton(tr("Configure cloud remote…"))
+        cfg_btn.clicked.connect(self.configure_offsite)
+        copy_btn = QPushButton(tr("Copy off-site now"))
+        copy_btn.clicked.connect(self.copy_offsite_now)
+        dl_rc = QPushButton(tr("Download rclone"))
+        dl_rc.clicked.connect(lambda _=False: self.download_tool("rclone"))
+        br.addWidget(cfg_btn)
+        br.addWidget(copy_btn)
+        br.addWidget(dl_rc)
+        f.addRow(br)
+        save_off = QPushButton(tr("Save"))
+        save_off.clicked.connect(self.save)
+        f.addRow(save_off)
+        f.addRow(_hint(tr(
+            "Copies the encrypted backup repository to your own cloud account with rclone copy --immutable. Biruni "
+            "never runs sync or deletes remote files, and the rclone configuration is locked with a password kept in "
+            "your key backup. Make a new key backup after setting this up.")))
+        self.tabs.addTab(w, tr("Off-site"))
 
     def _log_tab(self):
         self.log = QPlainTextEdit()
@@ -131,6 +193,11 @@ class BackupDialog(QDialog):
         self.auto_intake.setChecked(cfg["auto-intake"])
         for key, sp in self.spins.items():
             sp.setValue(cfg[key])
+        self.sync_enabled.setChecked(cfg["sync-enabled"])
+        ri = self.sync_role.findData(cfg["sync-role"])
+        self.sync_role.setCurrentIndex(max(0, ri))
+        self.sync_lan.setChecked(cfg["sync-lan-only"])
+        self.offsite_remote.setText(cfg["offsite-remote"])
 
     def save(self):
         set_ = lambda k, v: self.s.setValue(SETTINGS + k, v)   # noqa: E731
@@ -143,6 +210,15 @@ class BackupDialog(QDialog):
         set_("auto-intake", self.auto_intake.isChecked())
         for key, sp in self.spins.items():
             set_(key, int(sp.value()))
+        set_("sync-enabled", self.sync_enabled.isChecked())
+        set_("sync-role", self.sync_role.currentData())
+        set_("sync-lan-only", self.sync_lan.isChecked())
+        remote = self.offsite_remote.text().strip()
+        set_("offsite-remote", remote)
+        if remote:
+            offsite.ensure_password(self.cert)
+        if self.sync_enabled.isChecked():
+            syncthing.ensure_gui_lock(syncthing.default_home(self.cert), self.cert, lan_only=self.sync_lan.isChecked())
         if first:
             pw, _created = secret.ensure_password(self.cert)
             box = QMessageBox(QMessageBox.Icon.Information, tr("Backup password"), tr(
@@ -223,6 +299,38 @@ class BackupDialog(QDialog):
         policy = {"keep-daily": 30, "keep-weekly": 26, "keep-monthly": 24}
         self._run(tr("Free space (administrator)…"), lambda: eng.admin_prune(policy, text))
 
+    def download_tool(self, name):
+        self._run(name, lambda: tools.download(name))
+
+    def add_sync_peer(self):
+        self.save()
+        pid = self.peer_id.text().strip()
+        if not pid:
+            return
+        name = self.peer_name.text().strip()
+        role = self.sync_role.currentData() or "office"
+        eng = self._engine()
+        st = syncthing.Syncthing(cert_folder=self.cert, lan_only=self.sync_lan.isChecked())
+        st.ensure_gui_lock()
+        st.add_peer(pid, name=name)
+        st.share(eng.photos, pid, role=role)
+        self.peer_id.clear()
+        self.peer_name.clear()
+        self.refresh()
+
+    def configure_offsite(self):
+        self.save()
+        try:
+            offsite.ensure_password(self.cert)
+            offsite.Rclone(cert_folder=self.cert).open_config_console()
+        except Exception as e:  # noqa: BLE001
+            self.status.setText(tr("It could not be done: {e}").format(e=e))
+
+    def copy_offsite_now(self):
+        self.save()
+        eng = self._engine()
+        self._run(tr("Copy off-site now"), eng.run_offsite)
+
     # ---- what is shown --------------------------------------------------------------------------------------------------
     def refresh(self):
         st = engine.load_state(self.cert)
@@ -231,6 +339,13 @@ class BackupDialog(QDialog):
             self.status.setText(tr("Last backup: {t}.").format(t=time.strftime("%Y-%m-%d %H:%M", time.localtime(lb["at"]))))
         else:
             self.status.setText(tr("No backup has run yet."))
+        try:
+            if tools.find("syncthing"):
+                did = syncthing.device_id(cert_folder=self.cert)
+                if did:
+                    self.my_dev_id.setText(did)
+        except Exception:  # noqa: BLE001
+            pass
         self.fill_log()
 
     def fill_log(self):
