@@ -1,9 +1,12 @@
-param([string]$Out = "$PSScriptRoot\runall.txt", [string]$Only = "")
+param([string]$Out = "$PSScriptRoot\runall.txt", [string]$Only = "", [switch]$Live)
 # every test of D:\Biruni-GIS\tests, off screen, one line per test: "name: exit=N"
 # (skipped: the load / outside-network / takeover / open-data tests, which need minutes or the internet)
 $root = "D:\Biruni-GIS"
 $env:QT_QPA_PLATFORM = "offscreen"
 $env:QT_QPA_FONTDIR = "C:\Windows\Fonts"   # the layout tests measure text: they need real fonts
+# the live parts of other tests (e.g. test_thesis_starter asks the public Overpass servers, which can take
+# longer than the 10-minute limit when they are busy) run only with -Live
+if (-not $Live) { $env:BIRUNI_NO_LIVE = "1" } else { Remove-Item Env:BIRUNI_NO_LIVE -ErrorAction SilentlyContinue }
 $skip = "test_team_load", "test_team_outside", "test_team_takeover", "test_opendata"
 Set-Content -Path $Out -Value "" -Encoding utf8
 $tests = Get-ChildItem "$root\tests" -Filter "test_*.py" | Where-Object { $skip -notcontains $_.BaseName } | Sort-Object Name
