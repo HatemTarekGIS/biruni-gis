@@ -683,6 +683,7 @@ function hello(m){if(Array.isArray(m.kinds))KINDS=m.kinds.map(String).slice(0,24
    PCKEY=npk;keep('biruni-pckey-'+ROOM,npk);sealWaiting()})}
  else if(m.rl&&typeof rlTake==='function')rlTake(m.rl).then(ok=>{if(ok)sealWaiting()});
  if(m&&m.pl&&typeof plTake==='function')plTake(m.pl);
+ if(m&&m.mb&&typeof mbTake==='function')mbTake(m.mb);
  if(Array.isArray(m.form)){FORM=m.form.filter(f=>f&&f.name&&f.label).slice(0,30);drawForm()}
  if(m&&m.nl===1&&typeof setNl==='function')setNl(true);
  if(m&&m.hs===1&&typeof setHsCap==='function')setHsCap(true);
@@ -697,19 +698,21 @@ async function copyPoll(){
  const ids=a.map(x=>x.id),nonce=rid();COPY_REQ={nonce:nonce,ids:new Set(ids)};
  if(lineOpen()){try{lineText(JSON.stringify({t:'chave',nonce:nonce,ids:ids}))}catch(e){}}
  else if(SIG.up()){try{await SIG.send({t:'rchave',nonce:nonce,ids:ids},true)}catch(e){}}}
-async function handleCopyGot(m){
- const q=COPY_REQ;if(!q||!m||m.nonce!==q.nonce||!Array.isArray(m.items))return;
- const cs=m.items.map(x=>Array.isArray(x)?(x[0]+':'+x[1]+':'+(x[2]||'')):'').join(',');
- if(ID.pin&&!await IDOK(m.ip,m.is,'BRCP1|'+m.nonce+'|'+(m.rt||0)+'|'+cs)){SIG.refused=(SIG.refused||0)+1;return}
- COPY_REQ=null;if(typeof m.rt==='number')noteTime(m.rt);
- for(const row of m.items){if(!Array.isArray(row)||row.length<2)continue;
+async function copyRows(items,ids){
+ for(const row of items){if(!Array.isArray(row)||row.length<2)continue;
   const id=String(row[0]||''),c=+row[1]||0,h8=String(row[2]||'');
-  if(!q.ids.has(id))continue;
+  if(ids&&!ids.has(id))continue;
   const it=typeof getItem==='function'?await getItem(id):(await all()).find(x=>x.id===id);
   if(!it)continue;
   if(it.h&&h8&&!it.h.startsWith(h8)){SIG.refused=(SIG.refused||0)+1;continue}
   if(c>=2&&typeof setState==='function')await setState(id,3,c);
   else if(c===1&&typeof setState==='function'&&(typeof itemSt==='function'?itemSt(it)<2:(it.st||0)<2))await setState(id,2,1)}}
+async function handleCopyGot(m){
+ const q=COPY_REQ;if(!q||!m||m.nonce!==q.nonce||!Array.isArray(m.items))return;
+ const cs=m.items.map(x=>Array.isArray(x)?(x[0]+':'+x[1]+':'+(x[2]||'')):'').join(',');
+ if(ID.pin&&!await IDOK(m.ip,m.is,'BRCP1|'+m.nonce+'|'+(m.rt||0)+'|'+cs)){SIG.refused=(SIG.refused||0)+1;return}
+ COPY_REQ=null;if(typeof m.rt==='number')noteTime(m.rt);
+ await copyRows(m.items,q.ids)}
 async function handleAck(m){const f=acks.get(m.id);if(!f)return;
  if(m.status===200){const k=m.kind||'original',n=m.nonce||'';
   if(k!==f.kind||n!==f.nonce||!await IDOK(m.ip,m.is,'BRAK1|'+m.id+'|'+k+'|'+n)){
@@ -902,7 +905,7 @@ async function onRelay(o,kind,s,relay){
  if(o.t==='offer')return onOffer(o);
  if(o.t==='rhi'){tell({type:'phone',ua:String(o.ua||'').slice(0,160),relay:true});
   await SIG.send({t:'rhello',sid:String(o.sid||''),kinds:CFG.kinds,lang:CFG.lang,form:CFG.form||[],pk:CFG.pk||'',rl:CFG.rl||null,
-   pl:CFG.pl||null,lad:CFG.lad?1:0,tun:CFG.tun||'',org:CFG.org||'',nl:1,hs:1,now:Date.now(),eod:CFG.eod??18},true);
+   pl:CFG.pl||null,mb:CFG.mb||null,lad:CFG.lad?1:0,tun:CFG.tun||'',org:CFG.org||'',nl:1,hs:1,now:Date.now(),eod:CFG.eod??18},true);
   if(GV)try{await SIG.send({t:'rguide',g:JSON.parse(GUIDE_TXT)},true)}catch(e){}return}
  if(o.t==='rchave'&&Array.isArray(o.ids)&&typeof o.nonce==='string'&&o.nonce.length<80){
   const ids=o.ids.filter(x=>typeof x==='string'&&x.length<80).slice(0,100);let r={};
@@ -981,14 +984,14 @@ function serve(ch,end,pc){ch.binaryType='arraybuffer';const P={send:s=>ch.send(s
     if(m.t==='hi'&&m.e&&!v.key){const kp=await E2E.pair();v.key=await E2E.key(kp.kp,m.e);ports.add(v.P);
      const g=await IDSIGN('BRH1|'+m.e+'|'+kp.pub)||{};
      ch.send(JSON.stringify({t:'fwd',to:v.id,m:JSON.stringify({t:'hello',kinds:CFG.kinds,lang:CFG.lang,
-      form:CFG.form||[],pk:CFG.pk||'',rl:CFG.rl||null,pl:CFG.pl||null,lad:CFG.lad?1:0,tun:CFG.tun||'',org:CFG.org||'',nl:1,hs:1,now:Date.now(),eod:CFG.eod??18,e:kp.pub,ip:g.pub,is:g.sig})}));
+      form:CFG.form||[],pk:CFG.pk||'',rl:CFG.rl||null,pl:CFG.pl||null,mb:CFG.mb||null,lad:CFG.lad?1:0,tun:CFG.tun||'',org:CFG.org||'',nl:1,hs:1,now:Date.now(),eod:CFG.eod??18,e:kp.pub,ip:g.pub,is:g.sig})}));
      tell({type:'phone',ua:String(m.ua||'').slice(0,160),via:true});if(GV)v.P.send('{"t":"guide","g":'+GUIDE_TXT+'}')}
     return}
    if(!v.key)return;const p=await E2E.open(v.key,data);
    if(p[0]===0)await handle(v.P,dec.decode(p.slice(1)));else await handle(v.P,p.slice(1).buffer)}).catch(()=>{})};
  const gone=id=>{const v=carried.get(id);if(v){ports.delete(v.P);carried.delete(id)}};
  ch.onopen=()=>{ports.add(P);ch.send(JSON.stringify({t:'hello',kinds:CFG.kinds,lang:CFG.lang,form:CFG.form||[],
-  pk:CFG.pk||'',rl:CFG.rl||null,pl:CFG.pl||null,lad:CFG.lad?1:0,tun:CFG.tun||'',org:CFG.org||'',nl:1,hs:1,now:Date.now(),eod:CFG.eod??18}));
+  pk:CFG.pk||'',rl:CFG.rl||null,pl:CFG.pl||null,mb:CFG.mb||null,lad:CFG.lad?1:0,tun:CFG.tun||'',org:CFG.org||'',nl:1,hs:1,now:Date.now(),eod:CFG.eod??18}));
   if(GV)ch.send('{"t":"guide","g":'+GUIDE_TXT+'}')};
  ch.onclose=()=>{ports.delete(P);for(const id of [...carried.keys()])gone(id);end()};
  ch.onmessage=e=>{
@@ -1095,9 +1098,9 @@ def phone_page(all_texts):
 
     head, rest = PAGE.split("/*SEND{*/", 1)
     _, tail = rest.split("/*}SEND*/", 1)
-    from . import drive, drive_page, ladder_page
+    from . import drive, drive_page, ladder_page, mailbox_page
 
-    page = (head + _core() + drive.BFP_JS + drive_page.drive_js()
+    page = (head + _core() + drive.BFP_JS + drive_page.drive_js() + mailbox_page.mailbox_js()
             + ladder_page.DR_JS + ladder_page.LADDER_JS + PHONE_JS + tail)
     page = page.replace("/*BOOT*/", BOOT_JS)
     return (page.replace("__LANG__", "en").replace("__DEFLANG__", "").replace("__DIR__", "ltr")
@@ -1123,6 +1126,8 @@ def connect_sources(tunnel=False, org=False):
         sources.append(_origin(TUNNEL.replace("{h}", "*")))
     if org and ORG:
         sources.append(_origin(ORG.replace("{h}", "*.workers.dev")))
+    if org and MB:
+        sources.append(_origin(MB.replace("{h}", "*.workers.dev")))
     return list(dict.fromkeys(sources))
 
 

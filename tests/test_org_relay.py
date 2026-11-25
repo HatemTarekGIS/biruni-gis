@@ -259,14 +259,17 @@ for bad_h in (
 ):
     check(not bridge.ORG_RE.fullmatch(bad_h), f"ORG_RE rejects {bad_h!r}")
 
-# ---- 4. CSP: photos page has wss://*.workers.dev, d/ and s/ do not ---------------------------------
+# ---- 4. CSP: photos page has wss://*.workers.dev and https://*.workers.dev, d/ and s/ do not -------
 photos_csp = bridge.with_csp(bridge.phone_page({"en": {}}))
 photos_conn = photos_csp.split("connect-src", 1)[1].split(";", 1)[0].split()
 pol = csp.site_policies()
-check("wss://*.workers.dev" in photos_conn, f"photos page CSP has wss://*.workers.dev ({photos_conn})")
+check("wss://*.workers.dev" in photos_conn and "https://*.workers.dev" in photos_conn,
+      f"photos page CSP has wss://*.workers.dev and https://*.workers.dev ({photos_conn})")
 check("wss://*.workers.dev" not in pol["d/index.html"]["connect"]
-      and "wss://*.workers.dev" not in pol["s/index.html"]["connect"],
-      "d/index.html and s/index.html CSP do not include wss://*.workers.dev")
+      and "wss://*.workers.dev" not in pol["s/index.html"]["connect"]
+      and "https://*.workers.dev" not in pol["d/index.html"]["connect"]
+      and "https://*.workers.dev" not in pol["s/index.html"]["connect"],
+      "d/index.html and s/index.html CSP do not include wss://*.workers.dev or https://*.workers.dev")
 
 # ---- 5. Captured stdout/stderr/logging around deploy runs ------------------------------------------
 log_buf = io.StringIO()

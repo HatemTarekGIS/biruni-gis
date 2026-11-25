@@ -2372,6 +2372,7 @@ function setGuide(g){if(!g||!Array.isArray(g.items))return;GUIDE=g;INDOOR=g.indo
  if('cap' in g)capSet(g.cap);
  if(g.rl&&typeof rlTake==='function')rlTake(g.rl).then(ok=>{if(ok)sealWaiting()});
  if(g.pl&&typeof plTake==='function')plTake(g.pl);
+ if(g.mb&&typeof mbTake==='function')mbTake(g.mb);
  try{const j=JSON.stringify(g);if(j.length<250000)keep('biruni-guide-'+ROOM,j)}catch(e){}
  $('guideCard').classList.toggle('hide',!g.items.length);drawGuide();if(room)drawRoom()}
 function segDist(p,a,b){const dx=b[0]-a[0],dy=b[1]-a[1],l=dx*dx+dy*dy;let t=l?((p[0]-a[0])*dx+(p[1]-a[1])*dy)/l:0;
@@ -3082,7 +3083,7 @@ async function capSnap(){clearTimeout(CAPTM);CAPTM=0;if(!CAPST||!CAPJOB)return n
   if((typeof DRV==='object'&&DRV.holds&&DRV.holds(x.id))||(typeof acks==='object'&&acks&&acks.has(x.id)))continue;
   await del(x.id)}}
  const it=await put({id:id,blob:blob,meta:meta,room:ROOM,cap:1,csj:jid});
- flush();if(typeof drivePump==='function')drivePump();return it}
+ flush();if(typeof drivePump==='function')drivePump();if(typeof mbPump==='function')mbPump();return it}
 function capFallbackFix(){const j=capJobObj();if(!j)return null;
  if(CAPLASTFIX&&CAPLASTFIX.j===j.id)return {lat:CAPLASTFIX.lat,lon:CAPLASTFIX.lon,acc:CAPLASTFIX.acc||999,alt:null,heading:null,t:Date.now()};
  const l=j.loc;return Array.isArray(l)&&l.length===2&&isFinite(l[0])&&isFinite(l[1])?{lat:+l[1],lon:+l[0],acc:999,alt:null,heading:null,t:Date.now()}:null}
@@ -3413,7 +3414,7 @@ $('file').onchange=async()=>{const f=$('file').files[0];$('file').value='';if(!f
    if(!arr.includes(meta.id))arr.push(meta.id);capTouch();capDraw()}}
  const it={id:meta.id,blob:blob,meta:meta,room:ROOM};pending=null;CAPSEL=null;await put(it);thumb(it,'⏳');$('note').value='';if(!capBind)afterShot();
  tellPos(true,'shot');
- toast(T.kept);count();flush();if(typeof drivePump==='function')drivePump()};
+ toast(T.kept);count();flush();if(typeof drivePump==='function')drivePump();if(typeof mbPump==='function')mbPump()};
 $('langBtn').onclick=()=>{const box=$('langs');box.textContent='';Object.keys(ALL).forEach(k=>{const b=document.createElement('button');
  b.type='button';b.textContent=NAMES[k]||k;b.lang=k.replace('_','-');b.classList.toggle('sel',k===LANG);
  b.onclick=()=>{keep('biruni-lang',k);setLang(k);$('sheet').classList.add('hide')};box.appendChild(b)});
@@ -3600,5 +3601,5 @@ checkIosGate();
 try{const c=JSON.parse(kept('biruni-cap-'+ROOM)||'null');if(c)capSet(c)}catch(e){}
 try{const g=JSON.parse(kept('biruni-guide-'+ROOM)||'null');if(g)setGuide(g)}catch(e){}
 {const e=document.createElement('div');e.className='empty';e.textContent=T.none;$('list').appendChild(e)}
-(async()=>{probeSkew();db=await openDb();await checkPrivate();await checkPersist();await checkStorageSpace(0);await ensureSkTag();if(typeof plUpdateUi==='function')plUpdateUi(true);await sealWaiting();if(typeof driveStart==='function')driveStart();const w=await all();w.filter(it=>!it.carried&&!it.cap).slice(-9).forEach(it=>thumb(it,badgeFor(it)));await count();flush()})();
+(async()=>{probeSkew();db=await openDb();await checkPrivate();await checkPersist();await checkStorageSpace(0);await ensureSkTag();if(typeof plUpdateUi==='function')plUpdateUi(true);await sealWaiting();if(typeof driveStart==='function')driveStart();if(typeof mbStart==='function')mbStart();const w=await all();w.filter(it=>!it.carried&&!it.cap).slice(-9).forEach(it=>thumb(it,badgeFor(it)));await count();flush()})();
 </script></body></html>"""
