@@ -214,6 +214,29 @@ v1_st = FakeSettings()
 check(handover.restore(os.path.join(work, "v1-again"), bak, PW, v1_st) == pub and not v1_st.d,
       "a v1 backup still restores (the handover key only)")
 
+# ---- P6 (D2): key_backup_carries_mb_secret ------------------------------------------------------------------------
+from biruni.field_photos import mailbox  # noqa: E402
+
+mb_old_st = FakeSettings()
+_ = bridge.load_key(mb_old_st)
+mb_secret_val = "M" * 43
+mailbox.save_config(mb_secret_val, 14, settings=mb_old_st)
+mb_dir = os.path.join(work, "v2-mb-office")
+mb_hk = HandoverKey(mb_dir)
+bak_mb = os.path.join(work, "office-mb.biruni-key")
+check(handover.backup_v2(mb_dir, bak_mb, STRONG, mb_old_st) == mb_hk.public, "v2 backup with mb_secret written")
+raw_mb = open(bak_mb, encoding="utf-8").read()
+check(mb_secret_val not in raw_mb, "mb_secret is sealed inside v2 backup and never in clear")
+
+mb_new_st = FakeSettings()
+mailbox.save_config("", 30, settings=mb_new_st, on=False)
+mb_new_dir = os.path.join(work, "v2-mb-restored")
+check(handover.restore(mb_new_dir, bak_mb, STRONG, mb_new_st) == mb_hk.public, "v2 backup with mb_secret restored")
+check(mailbox.load_secret(mb_new_st) == mb_secret_val
+      and mailbox.load_days(mb_new_st) == 30
+      and mb_secret_val not in str(mb_new_st.value(mailbox.SECRET_KEY, "")),
+      "key_backup_carries_mb_secret: restores mb_secret DPAPI-protected while keeping stored days")
+
 shutil.rmtree(work, ignore_errors=True)
 print(f"\n{'FAILED ' + str(len(failures)) if failures else 'ALL PASSED'}")
 sys.exit(1 if failures else 0)

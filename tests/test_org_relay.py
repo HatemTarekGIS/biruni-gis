@@ -52,6 +52,13 @@ class FakeCloudflareState:
         self.migration_error_once = False
         self.multipart_parts = []
         self.subdomain_post_body = None
+        self.bucket_exists = False
+        self.r2_off = False
+        self.r2_no_perm = False
+        self.r2_lock_fail = False
+        self.lock_body = None
+        self.lifecycle_body = None
+        self.v_mb = True
 
 
 STATE = FakeCloudflareState()
@@ -91,6 +98,9 @@ class FakeCfHandler(BaseHTTPRequestHandler):
         if path.startswith("/r/"):
             self.send_response(426)
             self.end_headers()
+            return
+        if path == "/v":
+            self._send_json(200, {"rel": 2, "mb": bool(STATE.v_mb)})
             return
 
         STATE.calls.append((method, path, auth))
@@ -143,6 +153,43 @@ class FakeCfHandler(BaseHTTPRequestHandler):
             STATE.subdomain_post_body = json.loads(body.decode("utf-8"))
             self._send_json(200, {"success": True, "result": {"enabled": True}})
             return
+
+        if "/r2/buckets" in path:
+            if STATE.r2_off:
+                self._send_json(403, {
+                    "success": False,
+                    "errors": [{"code": 10042, "message": "Please enable R2 through the Cloudflare Dashboard."}],
+                })
+                return
+            if STATE.r2_no_perm:
+                self._send_json(403, {
+                    "success": False,
+                    "errors": [{"code": 10000, "message": "Authentication error"}],
+                })
+                return
+            if method == "GET" and path.endswith("/r2/buckets/biruni-mailbox"):
+                if STATE.bucket_exists:
+                    self._send_json(200, {"success": True, "result": {"name": "biruni-mailbox"}})
+                else:
+                    self._send_json(404, {"success": False, "errors": [{"code": 10006, "message": "bucket not found"}]})
+                return
+            if method == "POST" and path.endswith("/r2/buckets"):
+                data = json.loads(body.decode("utf-8"))
+                if data.get("name") == "biruni-mailbox":
+                    STATE.bucket_exists = True
+                    self._send_json(200, {"success": True, "result": {"name": "biruni-mailbox"}})
+                    return
+            if method == "PUT" and path.endswith("/r2/buckets/biruni-mailbox/lock"):
+                if STATE.r2_lock_fail:
+                    self._send_json(500, {"success": False, "errors": [{"code": 10500, "message": "lock failed"}]})
+                    return
+                STATE.lock_body = json.loads(body.decode("utf-8"))
+                self._send_json(200, {"success": True, "result": STATE.lock_body})
+                return
+            if method == "PUT" and path.endswith("/r2/buckets/biruni-mailbox/lifecycle"):
+                STATE.lifecycle_body = json.loads(body.decode("utf-8"))
+                self._send_json(200, {"success": True, "result": STATE.lifecycle_body})
+                return
 
         self._send_json(404, {"success": False, "errors": [{"message": "unknown route"}]})
 
@@ -314,8 +361,85 @@ except org_relay.OrgRelayError as e:
     check(SENTINEL not in str(e) and "***" in str(e) and "Forbidden for token" in str(e),
           f"403 error carries scrubbed Cloudflare message without token ({e})")
 
+# ---- 5f. Mailbox deploy tests (mb_fresh, mb_redeploy_keeps_secret, mb_r2_off, mb_no_perm, mb_lock_fails) ----------
+STATE.reset()
+res_mb1 = run_captured(lambda: org_relay.deploy(SENTINEL, mailbox={"days": 14, "secret": None}))
+mb_sec1 = res_mb1.get("mb_secret") or ""
+expected_mb_order = [
+    ("GET", "/client/v4/accounts"),
+    ("GET", "/client/v4/accounts/acc1/workers/subdomain"),
+    ("GET", "/client/v4/accounts/acc1/workers/scripts"),
+    ("GET", "/client/v4/accounts/acc1/r2/buckets/biruni-mailbox"),
+    ("POST", "/client/v4/accounts/acc1/r2/buckets"),
+    ("PUT", "/client/v4/accounts/acc1/r2/buckets/biruni-mailbox/lock"),
+    ("PUT", "/client/v4/accounts/acc1/r2/buckets/biruni-mailbox/lifecycle"),
+    ("PUT", "/client/v4/accounts/acc1/workers/scripts/biruni-relay"),
+    ("POST", "/client/v4/accounts/acc1/workers/scripts/biruni-relay/subdomain"),
+]
+meta_mb1 = json.loads(STATE.multipart_parts[0]["metadata"]["payload"].decode("utf-8"))
+expected_bindings_1 = [
+    {"type": "durable_object_namespace", "name": "HUB", "class_name": "HubDO"},
+    {"type": "r2_bucket", "name": "MB", "bucket_name": "biruni-mailbox"},
+    {"type": "secret_text", "name": "MB_SECRET", "text": mb_sec1},
+]
+lock_rules = (STATE.lock_body or {}).get("rules") or []
+check([(m, p) for m, p, _a in STATE.calls] == expected_mb_order
+      and len(lock_rules) == 1
+      and lock_rules[0].get("prefix") == "o/"
+      and (lock_rules[0].get("condition") or {}).get("maxAgeSeconds") == 14 * 86400
+      and meta_mb1.get("bindings") == expected_bindings_1
+      and res_mb1.get("mb") is True
+      and res_mb1.get("mb_error") == ""
+      and res_mb1.get("mb_days") == 14
+      and len(mb_sec1) == 43,
+      f"mb_fresh ({res_mb1})")
+
+# mb_redeploy_keeps_secret
+STATE.calls.clear()
+STATE.multipart_parts.clear()
+res_mb2 = run_captured(lambda: org_relay.deploy(SENTINEL, mailbox={"days": 30, "secret": mb_sec1}))
+meta_mb2 = json.loads(STATE.multipart_parts[0]["metadata"]["payload"].decode("utf-8"))
+check(res_mb2.get("mb") is True
+      and res_mb2.get("mb_secret") == mb_sec1
+      and res_mb2.get("mb_days") == 30
+      and not any(m == "POST" and p.endswith("/r2/buckets") for m, p, _ in STATE.calls)
+      and meta_mb2.get("bindings")[2]["text"] == mb_sec1,
+      f"mb_redeploy_keeps_secret ({res_mb2})")
+
+# mb_r2_off
+STATE.reset()
+STATE.r2_off = True
+res_r2_off = run_captured(lambda: org_relay.deploy(SENTINEL, mailbox={"days": 7, "secret": None}))
+meta_r2_off = json.loads(STATE.multipart_parts[0]["metadata"]["payload"].decode("utf-8"))
+check(res_r2_off.get("mb") is False
+      and res_r2_off.get("mb_error") == "r2_off"
+      and res_r2_off.get("mb_secret") == ""
+      and meta_r2_off.get("bindings") == [{"type": "durable_object_namespace", "name": "HUB", "class_name": "HubDO"}],
+      f"mb_r2_off ({res_r2_off})")
+
+# mb_no_perm
+STATE.reset()
+STATE.r2_no_perm = True
+res_no_perm = run_captured(lambda: org_relay.deploy(SENTINEL, mailbox={"days": 7, "secret": None}))
+meta_no_perm = json.loads(STATE.multipart_parts[0]["metadata"]["payload"].decode("utf-8"))
+check(res_no_perm.get("mb") is False
+      and res_no_perm.get("mb_error") == "r2_perm"
+      and meta_no_perm.get("bindings") == [{"type": "durable_object_namespace", "name": "HUB", "class_name": "HubDO"}],
+      f"mb_no_perm ({res_no_perm})")
+
+# mb_lock_fails
+STATE.reset()
+STATE.r2_lock_fail = True
+res_lock_fail = run_captured(lambda: org_relay.deploy(SENTINEL, mailbox={"days": 7, "secret": None}))
+meta_lock_fail = json.loads(STATE.multipart_parts[0]["metadata"]["payload"].decode("utf-8"))
+check(res_lock_fail.get("mb") is False
+      and res_lock_fail.get("mb_error") == "r2_fail"
+      and meta_lock_fail.get("bindings") == [{"type": "durable_object_namespace", "name": "HUB", "class_name": "HubDO"}],
+      f"mb_lock_fails ({res_lock_fail})")
+
 # ---- 6. Dialog + QgsSettings + phone_url + sentinel leak scan -------------------------------------
 from qgis.core import QgsApplication, QgsSettings  # noqa: E402
+from biruni.field_photos import mailbox  # noqa: E402
 from biruni.field_photos.org_relay_dialog import OrgRelayDialog  # noqa: E402
 
 qapp = QgsApplication([], True)
@@ -344,17 +468,55 @@ check(bridge.org_host() == "" and changed_hits[-1] == "" and "dash.cloudflare.co
       "Stop using it clears org_host and explains Worker can be deleted in dashboard")
 dlg.close()
 
-# Verify sentinel appears nowhere in QgsSettings, temp profile folder, stdout, stderr, or logging
+# Dialog with mailbox checked: saves DPAPI-protected secret, never in clear in settings/profile/stdout/stderr/logging
+STATE.reset()
+dlg_mb = OrgRelayDialog(on_changed=lambda: changed_hits.append(bridge.org_host()))
+dlg_mb.mb_check.setChecked(True)
+dlg_mb.mb_days.setCurrentIndex(dlg_mb.mb_days.findData(14))
+dlg_mb.token_edit.setText(SENTINEL)
+run_captured(dlg_mb.start_deploy)
+deadline = time.monotonic() + 10
+while time.monotonic() < deadline and dlg_mb._busy:
+    qapp.processEvents()
+    time.sleep(0.02)
+saved_mb_secret = mailbox.load_secret()
+check(mailbox.enabled() is True and len(saved_mb_secret) == 43 and mailbox.load_days() == 14,
+      "dialog with mailbox checked saves secret and days")
+dlg_mb.close()
+
+# Dialog with R2 off: relay still succeeds, mailbox disabled, status explains R2 is not enabled
+STATE.reset()
+STATE.r2_off = True
+dlg_r2 = OrgRelayDialog()
+check(dlg_r2.mb_check.isChecked() is True, "dialog pre-checks mailbox box when mailbox was enabled")
+dlg_r2.token_edit.setText(SENTINEL)
+run_captured(dlg_r2.start_deploy)
+deadline = time.monotonic() + 10
+while time.monotonic() < deadline and dlg_r2._busy:
+    qapp.processEvents()
+    time.sleep(0.02)
+check(bridge.org_host() == "biruni-relay.myorg.workers.dev"
+      and mailbox.enabled() is False
+      and "R2 is not enabled" in dlg_r2.status_lbl.text(),
+      f"dialog with R2 off disables mailbox and shows R2 message ({dlg_r2.status_lbl.text()})")
+dlg_r2.stop_using()
+dlg_r2.close()
+
+# Verify sentinel and mb_secret appear nowhere in clear in QgsSettings, temp profile folder, stdout, stderr, or logging
 st = QgsSettings()
 st.sync()
 all_settings = [f"{k}={st.value(k)}" for k in st.allKeys()]
 leaked_files = []
+leaked_mb_files = []
 for root, _dirs, names in os.walk(SETTINGS_DIR):
     for name in names:
         fp = os.path.join(root, name)
         with open(fp, "r", encoding="utf-8", errors="replace") as f:
-            if SENTINEL in f.read():
+            txt = f.read()
+            if SENTINEL in txt:
                 leaked_files.append(fp)
+            if saved_mb_secret and saved_mb_secret in txt:
+                leaked_mb_files.append(fp)
 
 logging.getLogger().removeHandler(log_handler)
 check(not any(SENTINEL in s for s in all_settings), "sentinel token is not in QgsSettings")
@@ -362,6 +524,13 @@ check(not leaked_files, f"sentinel token is not in temp profile folder ({leaked_
 check(SENTINEL not in out_buf.getvalue() and SENTINEL not in err_buf.getvalue()
       and SENTINEL not in log_buf.getvalue(),
       "sentinel token is not in captured stdout, stderr, or logging")
+check(bool(saved_mb_secret)
+      and not any(saved_mb_secret in s for s in all_settings)
+      and not leaked_mb_files
+      and saved_mb_secret not in out_buf.getvalue()
+      and saved_mb_secret not in err_buf.getvalue()
+      and saved_mb_secret not in log_buf.getvalue(),
+      "mb_secret is never in clear in QgsSettings, profile folder, stdout, stderr, or logging")
 
 qapp.exitQgis()
 srv.shutdown()

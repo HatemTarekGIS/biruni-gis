@@ -10,6 +10,11 @@ try:   # P9: the backup's rows (they register themselves)
 except Exception:  # noqa: BLE001 - a broken backup module must not take the health screen down
     pass
 
+try:   # P6: the cloud mailbox's rows (they register themselves)
+    from ..field_photos import mailbox_health as _mailbox_rows  # noqa: F401
+except Exception:  # noqa: BLE001 - a broken mailbox module must not take the health screen down
+    pass
+
 
 def open_dialog(plugin):
     from .dialog import open_health_dialog

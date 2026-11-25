@@ -14,6 +14,9 @@ import urllib.request
 
 API = os.environ.get("BIRUNI_CF_API") or "https://api.cloudflare.com/client/v4"
 TIMEOUT = 30
+BUCKET = "biruni-mailbox"
+MB_DAYS = (7, 14, 30)
+EXPIRE_EXTRA = 30
 _SUB_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789"
 _BUNDLE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "org_relay_worker.js")
 
@@ -50,6 +53,20 @@ def _api_base():
     return (os.environ.get("BIRUNI_CF_API") or API).rstrip("/")
 
 
+def _cf_error_codes(raw):
+    try:
+        data = json.loads(raw.decode("utf-8", errors="replace")) if raw else {}
+    except ValueError:
+        data = {}
+    if isinstance(data, dict) and isinstance(data.get("errors"), list):
+        return [
+            int(e["code"])
+            for e in data["errors"]
+            if isinstance(e, dict) and isinstance(e.get("code"), int) and not isinstance(e.get("code"), bool)
+        ]
+    return []
+
+
 def _cf_error_message(raw, status, token):
     try:
         data = json.loads(raw.decode("utf-8", errors="replace")) if raw else {}
@@ -80,16 +97,26 @@ def _request(method, url, token, body=None, content_type=None):
         msg = _cf_error_message(raw, e.code, token)
         err = OrgRelayError(msg)
         err.status = e.code
+        err.codes = _cf_error_codes(raw)
         raise err from None
     except (urllib.error.URLError, OSError, TimeoutError) as e:
         reason = getattr(e, "reason", e)
-        raise OrgRelayError(_scrub(str(reason), token)) from None
+        err = OrgRelayError(_scrub(str(reason), token))
+        err.status = None
+        err.codes = []
+        raise err from None
     try:
         data = json.loads(raw.decode("utf-8")) if raw else {}
     except (ValueError, UnicodeDecodeError):
-        raise OrgRelayError(f"Invalid JSON response (HTTP {status})") from None
+        err = OrgRelayError(f"Invalid JSON response (HTTP {status})")
+        err.status = status
+        err.codes = []
+        raise err from None
     if isinstance(data, dict) and data.get("success") is False:
-        raise OrgRelayError(_cf_error_message(raw, status, token))
+        err = OrgRelayError(_cf_error_message(raw, status, token))
+        err.status = status
+        err.codes = _cf_error_codes(raw)
+        raise err
     return data
 
 
@@ -126,14 +153,101 @@ def _load_bundle_bytes():
         return f.read().encode("utf-8")
 
 
-def _poll_live(host, token):
+def _live_url(host, path):
     api = _api_base()
     parsed = urllib.parse.urlsplit(api)
-    dummy = "biruni" + "0" * 40
+    p = path if str(path).startswith("/") else ("/" + str(path))
     if parsed.netloc.lower() == "api.cloudflare.com":
-        url = f"https://{host}/r/{dummy}"
-    else:
-        url = f"{parsed.scheme}://{parsed.netloc}/r/{dummy}"
+        return f"https://{host}{p}"
+    return f"{parsed.scheme}://{parsed.netloc}{p}"
+
+
+def _probe_v(host):
+    url = _live_url(host, "/v")
+    req = urllib.request.Request(url, headers={"User-Agent": "Biruni-GIS"}, method="GET")
+    try:
+        with urllib.request.urlopen(req, timeout=min(TIMEOUT, 10)) as resp:
+            raw = resp.read()
+        data = json.loads(raw.decode("utf-8")) if raw else {}
+        if isinstance(data, dict) and "rel" in data:
+            return {"rel": int(data.get("rel") or 0), "mb": bool(data.get("mb"))}
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
+def _r2_error_code(err):
+    codes = set(getattr(err, "codes", None) or ())
+    status = getattr(err, "status", None)
+    msg = str(err).lower()
+    if 10042 in codes or "enable r2" in msg or "r2 is not enabled" in msg:
+        return "r2_off"
+    if status == 403 or 10000 in codes:
+        return "r2_perm"
+    return "r2_fail"
+
+
+def _ensure_bucket(account_id, tok, days, say):
+    """Ensure the R2 bucket, lock rule, and lifecycle rule exist; returns '' on success or an error code."""
+    days = int(days) if days in MB_DAYS else 7
+    base = f"/accounts/{account_id}/r2/buckets/{BUCKET}"
+    say("Checking R2 mailbox bucket…")
+    need_create = False
+    try:
+        _cf_json("GET", base, tok)
+    except OrgRelayError as e:
+        if getattr(e, "status", None) == 404 and 10042 not in (getattr(e, "codes", None) or ()) and "enable r2" not in str(e).lower():
+            need_create = True
+        else:
+            return _r2_error_code(e)
+    except Exception:  # noqa: BLE001
+        return "r2_fail"
+
+    if need_create:
+        say("Creating R2 mailbox bucket…")
+        try:
+            _cf_json("POST", f"/accounts/{account_id}/r2/buckets", tok, {"name": BUCKET})
+        except OrgRelayError as e:
+            return _r2_error_code(e)
+        except Exception:  # noqa: BLE001
+            return "r2_fail"
+
+    try:
+        _cf_json("PUT", f"{base}/lock", tok, {
+            "rules": [{
+                "id": "biruni-mb-lock",
+                "enabled": True,
+                "prefix": "o/",
+                "condition": {"type": "Age", "maxAgeSeconds": days * 86400},
+            }]
+        })
+        _cf_json("PUT", f"{base}/lifecycle", tok, {
+            "rules": [
+                {
+                    "id": "biruni-mb-o-expire",
+                    "enabled": True,
+                    "conditions": {"prefix": "o/"},
+                    "deleteObjectsTransition": {"condition": {"type": "Age", "maxAgeSeconds": (days + EXPIRE_EXTRA) * 86400}},
+                },
+                {
+                    "id": "biruni-mb-rc-expire",
+                    "enabled": True,
+                    "conditions": {"prefix": "rc/"},
+                    "deleteObjectsTransition": {"condition": {"type": "Age", "maxAgeSeconds": 90 * 86400}},
+                },
+            ]
+        })
+    except OrgRelayError as e:
+        code = _r2_error_code(e)
+        return code if code in ("r2_off", "r2_perm") else "r2_fail"
+    except Exception:  # noqa: BLE001
+        return "r2_fail"
+    return ""
+
+
+def _poll_live(host, token):
+    dummy = "biruni" + "0" * 40
+    url = _live_url(host, f"/r/{dummy}")
 
     deadline = time.monotonic() + 60.0
     while True:
@@ -155,8 +269,8 @@ def _poll_live(host, token):
             time.sleep(sleep_for)
 
 
-def deploy(token, account_id=None, progress=None):
-    """Deploy biruni-relay to the user's Cloudflare account; returns {'host', 'account'}."""
+def deploy(token, account_id=None, progress=None, mailbox=None):
+    """Deploy biruni-relay to the user's Cloudflare account; returns {'host', 'account'} (plus mb fields when mailbox is given)."""
     from . import bridge
 
     tok = str(token or "").strip()
@@ -213,15 +327,31 @@ def deploy(token, account_id=None, progress=None):
         for s in (scripts_res.get("result") or [])
     )
 
+    mb_want = isinstance(mailbox, dict)
+    mb_days = 7
+    mb_secret = ""
+    mb_error = ""
+    if mb_want:
+        raw_days = mailbox.get("days")
+        mb_days = int(raw_days) if raw_days in MB_DAYS else 7
+        mb_error = _ensure_bucket(account_id, tok, mb_days, say)
+        if not mb_error:
+            given_sec = str(mailbox.get("secret") or "").strip()
+            mb_secret = given_sec if len(given_sec) == 43 else secrets.token_urlsafe(32)
+
     # 4. Upload worker module
     say("Uploading relay Worker…")
     worker_bytes = _load_bundle_bytes()
 
     def upload(include_migrations):
+        bindings = [{"type": "durable_object_namespace", "name": "HUB", "class_name": "HubDO"}]
+        if mb_want and not mb_error:
+            bindings.append({"type": "r2_bucket", "name": "MB", "bucket_name": BUCKET})
+            bindings.append({"type": "secret_text", "name": "MB_SECRET", "text": mb_secret})
         meta = {
             "main_module": "worker.js",
             "compatibility_date": "2026-01-01",
-            "bindings": [{"type": "durable_object_namespace", "name": "HUB", "class_name": "HubDO"}],
+            "bindings": bindings,
         }
         if include_migrations:
             meta["migrations"] = {"new_tag": "v1", "new_sqlite_classes": ["HubDO"]}
@@ -254,4 +384,21 @@ def deploy(token, account_id=None, progress=None):
     # 7. Validate and return
     if not bridge.ORG_RE.fullmatch(host):
         raise OrgRelayError("Invalid worker hostname returned.")
-    return {"host": host, "account": account_id}
+    if not mb_want:
+        return {"host": host, "account": account_id}
+    mb_ok = False
+    if not mb_error:
+        pv = _probe_v(host)
+        if pv and pv.get("mb"):
+            mb_ok = True
+        else:
+            mb_error = "r2_bind"
+            mb_secret = ""
+    return {
+        "host": host,
+        "account": account_id,
+        "mb": mb_ok,
+        "mb_error": mb_error,
+        "mb_secret": mb_secret if mb_ok else "",
+        "mb_days": mb_days,
+    }

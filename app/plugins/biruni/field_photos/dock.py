@@ -877,7 +877,7 @@ class FieldPhotosDock(QDockWidget):
         self.plugin = plugin
         self.iface = plugin.iface
         self.setObjectName("BiruniFieldPhotos")
-        self.server = self.tunnel = self.bridge = self.drive = self._bridge_tunnel = None
+        self.server = self.tunnel = self.bridge = self.drive = self.mailbox = self._bridge_tunnel = None
         self._drive_last = None
         self._bridge_since = 0
         self._relays_up = 0
@@ -944,6 +944,11 @@ class FieldPhotosDock(QDockWidget):
         self.org_relay_btn.setToolTip(tr("Deploy or clear your own organization relay on Cloudflare."))
         self.org_relay_btn.clicked.connect(self._open_org_relay)
         cv.addWidget(self.org_relay_btn)
+        self.mb_state = QLabel()
+        self.mb_state.setObjectName("GpsHint")
+        self.mb_state.setWordWrap(True)
+        self.mb_state.hide()
+        cv.addWidget(self.mb_state)
         self.qr_mode = QComboBox()
         self.qr_mode.addItem(tr("One QR code for all surveyors (each writes their name)"), "shared")
         self.qr_mode.addItem(tr("Separate QR code per surveyor (verified identity & instant revoke)"), "per_surveyor")
@@ -1610,6 +1615,7 @@ class FieldPhotosDock(QDockWidget):
         self._start_drive()
         if bridged:
             self._start_bridge()
+            self._start_mailbox()
         elif mode in ("internet", "own"):
             self._start_tunnel()
         else:
@@ -1655,6 +1661,70 @@ class FieldPhotosDock(QDockWidget):
         self.url.setText(bridge.PAGE_URL.split("://", 1)[1])
         self.state.setText(tr("Connecting to the relays…"))
 
+    def _start_mailbox(self):
+        from . import bridge, mailbox
+
+        self._stop_mailbox()
+        if self.server is None:
+            return
+        host = bridge.org_host()
+        if not mailbox.enabled() or not host:
+            self.server.set_mailbox(None)
+            return
+        secret = mailbox.load_secret()
+        days = mailbox.load_days()
+        if not secret:
+            self.server.set_mailbox(None)
+            return
+        pv = mailbox.probe(host)
+        if pv is None:
+            mailbox.save_state(self._cert_folder(), {
+                "at": time.time(), "ok": False, "err": "old-relay",
+                "rel": None, "mb": False, "bytes": 0, "count": 0,
+                "month_puts": 0, "new": 0, "refused": 0, "days": days, "host": host,
+            })
+            self.server.set_mailbox(None)
+            self.mb_state.setText(tr("This relay is an older version. Press Deploy again to update it."))
+            self.mb_state.show()
+            return
+        if not pv.get("mb"):
+            mailbox.save_state(self._cert_folder(), {
+                "at": time.time(), "ok": True, "err": "",
+                "rel": pv.get("rel", 2), "mb": False, "bytes": 0, "count": 0,
+                "month_puts": 0, "new": 0, "refused": 0, "days": days, "host": host,
+            })
+            self.server.set_mailbox(None)
+            self.mb_state.hide()
+            return
+        k = bridge.load_key(QgsSettings())
+        desc = mailbox.descriptor(k, host, secret, days)
+        self.server.set_mailbox(desc)
+        self.mailbox = mailbox.MailboxIntake(
+            host, secret, self.server.store, self.server.handover, k,
+            self.server.events, self._cert_folder(), days=days,
+        )
+        self.mailbox.start()
+
+    def _stop_mailbox(self):
+        if self.mailbox is not None:
+            self.mailbox.stop()
+            self.mailbox = None
+        if hasattr(self, "mb_state"):
+            self.mb_state.hide()
+
+    def _on_mailbox(self, ev):
+        if not isinstance(ev, dict):
+            return
+        if ev.get("error"):
+            self.mb_state.setText(tr("Cloud mailbox: {e}").format(e=ev["error"]))
+        else:
+            self.mb_state.setText(
+                tr("Cloud mailbox: {n} new, {r} refused").format(
+                    n=int(ev.get("new") or 0), r=int(ev.get("refused") or 0)
+                )
+            )
+        self.mb_state.show()
+
     def _start_tunnel(self):
         from . import tunnel
 
@@ -1688,6 +1758,7 @@ class FieldPhotosDock(QDockWidget):
             except Exception:  # noqa: BLE001
                 pass
         self._stop_drive()
+        self._stop_mailbox()
         self._poll.stop()
         if self._downloading is not None:
             self._downloading["cancel"] = True
@@ -1817,6 +1888,8 @@ class FieldPhotosDock(QDockWidget):
                 self._on_hs(value)
             elif kind == "drive":
                 self._on_drive(value)
+            elif kind == "mailbox":
+                self._on_mailbox(value)
             elif kind == "rejected":
                 self.state.setText(tr("Refused a photo from blocked device {d} ({r}).").format(
                     d=value.get("device_id", ""), r=value.get("reason", "")))
@@ -2614,6 +2687,7 @@ class FieldPhotosDock(QDockWidget):
 
         if self.server is not None and self.bridge is not None:
             self.server.org_host = bridge.org_host()
+            self._start_mailbox()
         if self.bridge is None or not self._base_qr_url.startswith(bridge.PAGE_URL):
             return
         url = bridge.phone_url(bridge.load_key(QgsSettings()), lang(), self._drive_pk())

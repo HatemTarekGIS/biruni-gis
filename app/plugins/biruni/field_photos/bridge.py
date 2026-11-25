@@ -57,6 +57,7 @@ if os.environ.get("BIRUNI_BRIDGE_RELAYS"):  # tests: a relay on this PC
     ORG = os.environ.get("BIRUNI_BRIDGE_ORG", "")
 elif "BIRUNI_BRIDGE_ORG" in os.environ:
     ORG = os.environ["BIRUNI_BRIDGE_ORG"]
+MB = os.environ.get("BIRUNI_MB_BASE") or "https://{h}"
 KEY = "biruni/field-photos/bridge-key"
 
 

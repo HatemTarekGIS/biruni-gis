@@ -5,11 +5,12 @@ import threading
 
 from qgis.core import QgsApplication
 from qgis.PyQt.QtCore import Qt, QTimer
-from qgis.PyQt.QtWidgets import (QDialog, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QPushButton, QVBoxLayout)
+from qgis.PyQt.QtWidgets import (QCheckBox, QComboBox, QDialog, QHBoxLayout, QInputDialog, QLabel, QLineEdit,
+                                 QPushButton, QVBoxLayout)
 
 from ..health import owners
 from ..i18n import tr
-from . import bridge, org_relay
+from . import bridge, mailbox, org_relay
 
 
 class OrgRelayDialog(QDialog):
@@ -35,6 +36,7 @@ class OrgRelayDialog(QDialog):
             tr("Sign in at <a href='https://dash.cloudflare.com'>dash.cloudflare.com</a> (a free account is enough)."),
             tr("My Profile → API Tokens → Create Token → Create Custom Token."),
             tr("Permissions: Account · Workers Scripts · Edit, and Account · Account Settings · Read."),
+            tr("For the mailbox, add the permission: Account · Workers R2 Storage · Edit."),
             tr("Account Resources: your account."),
             tr("Create it and paste it here."),
             tr("Delete the token afterwards; Biruni does not keep it."),
@@ -45,6 +47,22 @@ class OrgRelayDialog(QDialog):
         guide.setOpenExternalLinks(True)
         guide.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
         v.addWidget(guide)
+
+        self.mb_check = QCheckBox(tr("Also create the cloud mailbox (Cloudflare R2)"))
+        self.mb_check.setChecked(mailbox.enabled())
+        v.addWidget(self.mb_check)
+        drow = QHBoxLayout()
+        drow.addWidget(QLabel(tr("Keep files in the mailbox for:")))
+        self.mb_days = QComboBox()
+        for n in org_relay.MB_DAYS:
+            self.mb_days.addItem(tr("{n} days").format(n=n), n)
+        cur_days = mailbox.load_days()
+        self.mb_days.setCurrentIndex(max(0, self.mb_days.findData(cur_days)))
+        self.mb_days.setEnabled(self.mb_check.isChecked())
+        self.mb_check.toggled.connect(self.mb_days.setEnabled)
+        drow.addWidget(self.mb_days)
+        drow.addStretch(1)
+        v.addLayout(drow)
 
         self.addr_lbl = QLabel()
         self.addr_lbl.setWordWrap(True)
@@ -100,7 +118,15 @@ class OrgRelayDialog(QDialog):
         self._busy = busy
         self.deploy_btn.setEnabled(not busy)
         self.token_edit.setEnabled(not busy)
+        self.mb_check.setEnabled(not busy)
+        self.mb_days.setEnabled((not busy) and self.mb_check.isChecked())
         self.stop_btn.setEnabled((not busy) and bool(bridge.org_host()))
+
+    def _mailbox_arg(self):
+        if not self.mb_check.isChecked():
+            return None
+        days = int(self.mb_days.currentData() or 7)
+        return {"days": days, "secret": mailbox.load_secret() or None}
 
     def start_deploy(self):
         """Clear the token input immediately and start deployment on a background thread."""
@@ -112,7 +138,7 @@ class OrgRelayDialog(QDialog):
             self.status_lbl.setText(tr("Paste your Cloudflare API token first."))
             return
         self._save_owner()
-        self._run_worker(tok, account_id=None)
+        self._run_worker(tok, account_id=None, mb=self._mailbox_arg())
 
     def _save_owner(self):
         name = self.owner_name_edit.text().strip()
@@ -120,19 +146,21 @@ class OrgRelayDialog(QDialog):
         if name or email:
             owners.set_owner(self._cert_folder, "cloudflare", name, email)
 
-    def _run_worker(self, token, account_id=None):
+    def _run_worker(self, token, account_id=None, mb=None):
         self._set_busy(True)
         self.status_lbl.setText(tr("Deploying relay…"))
         q = self._q
         if not self._timer.isActive():
             self._timer.start()
 
-        def work(secret=token, acc_id=account_id):
+        def work(secret=token, acc_id=account_id, mb_cfg=mb):
             try:
-                res = org_relay.deploy(secret, account_id=acc_id, progress=lambda m: q.put(("progress", m)))
+                res = org_relay.deploy(
+                    secret, account_id=acc_id, progress=lambda m: q.put(("progress", m)), mailbox=mb_cfg
+                )
                 q.put(("done", res))
             except org_relay.ChooseAccount as ca:
-                q.put(("choose", ca.accounts, lambda picked: self._run_worker(secret, account_id=picked)))
+                q.put(("choose", ca.accounts, lambda picked: self._run_worker(secret, account_id=picked, mb=mb_cfg)))
             except org_relay.OrgRelayError as e:
                 q.put(("error", str(e)))
             except Exception:  # noqa: BLE001
@@ -152,8 +180,31 @@ class OrgRelayDialog(QDialog):
                 self._set_busy(False)
                 bridge.set_org_host(res["host"])
                 self._save_owner()
+                if res.get("mb"):
+                    mailbox.save_config(res["mb_secret"], res.get("mb_days") or 7)
+                else:
+                    mailbox.set_enabled(False)
                 self._refresh_addr()
-                self.status_lbl.setText(tr("Relay deployed and active: {host}").format(host=res["host"]))
+                msg = tr("Relay deployed and active: {host}").format(host=res["host"])
+                mb_err = res.get("mb_error") or ""
+                if mb_err == "r2_off":
+                    msg += "\n" + tr(
+                        "The relay was deployed, but the cloud mailbox was not created: R2 is not enabled on this "
+                        "Cloudflare account. Open R2 once in the Cloudflare dashboard and enable it (Cloudflare may "
+                        "ask for a payment method even on the free plan), then press Deploy again. Google Drive "
+                        "remains the first mailbox."
+                    )
+                elif mb_err == "r2_perm":
+                    msg += "\n" + tr(
+                        "The relay was deployed, but the token lacks the permission Workers R2 Storage · Edit, so "
+                        "the cloud mailbox was not created. Create a new token with this permission and deploy again."
+                    )
+                elif mb_err in ("r2_fail", "r2_bind"):
+                    msg += "\n" + tr(
+                        "The cloud mailbox could not be set up ({e}). The relay works, and Google Drive remains the "
+                        "first mailbox."
+                    ).format(e=mb_err)
+                self.status_lbl.setText(msg)
                 if self._on_changed is not None:
                     self._on_changed()
             elif kind == "choose":
@@ -180,6 +231,7 @@ class OrgRelayDialog(QDialog):
         if self._busy:
             return
         bridge.set_org_host("")
+        mailbox.set_enabled(False)
         self._refresh_addr()
         self.status_lbl.setText(
             tr("Stopped using your organization's relay. You can delete the Worker at dash.cloudflare.com.")

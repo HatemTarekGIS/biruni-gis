@@ -399,6 +399,8 @@ class HealthDialog(QDialog):
             d._pick_mirror_folder()
         elif fix_str == "emergency_key":
             d._emergency_dialog()
+        elif fix_str == "org_relay":
+            d._open_org_relay()
         self.refresh()
 
     def open_owners(self):

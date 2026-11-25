@@ -177,6 +177,22 @@ def verify(blob, kas, kid, room=None):
     raise BfpError("not from this office's code")
 
 
+def take_blob(blob, dev, name, kas, kid, room, handover, store, route="drive"):
+    """Verify and open a .bfp blob and save it into `store` with the given `route`."""
+    m = NAME_RE.match(str(name or ""))
+    if not m:
+        raise BfpError("file name does not match its header")
+    h, body, sk = verify(blob, kas, kid, room)
+    if h["dev"] != dev or m.group(2) != h["sha"][:12]:
+        raise BfpError("file name does not match its header")
+    meta, data = handover.open(body)
+    if str(meta.get("id") or "") != h["id"]:
+        raise BfpError("photo id does not match its header")
+    meta = dict(meta, sk=sk, route=route)   # the cert decides the surveyor, never the sealed data
+    meta.pop("preview", None)
+    return store.save(meta, data, ssha=h["sha"])
+
+
 # ---- the intake: Drive for desktop's folder -> PhotoStore ------------------------------------------------------------
 SEEN_NAME = "drive_seen.json"    # in the photo folder: files already taken in (or refused), so they are read once
 INTERVAL = 15                    # seconds; Drive for desktop's streaming mode sends no change notices to rely on
@@ -396,15 +412,7 @@ class DriveIntake:
             raise BfpError("too large")
         with open(path, "rb") as f:
             blob = f.read()
-        h, body, sk = verify(blob, kas, self.kid, self.room)
-        if h["dev"] != dev or NAME_RE.match(name).group(2) != h["sha"][:12]:
-            raise BfpError("file name does not match its header")
-        meta, data = self.handover.open(body)
-        if str(meta.get("id") or "") != h["id"]:
-            raise BfpError("photo id does not match its header")
-        meta = dict(meta, sk=sk, route="drive")   # the cert decides the surveyor, never the sealed data
-        meta.pop("preview", None)
-        return self.store.save(meta, data, ssha=h["sha"])
+        return take_blob(blob, dev, name, kas, self.kid, self.room, self.handover, self.store, route="drive")
 
     def retry_refused(self):
         """Read the refused files again on the next pass (after a surveyor or phone is let back in)."""

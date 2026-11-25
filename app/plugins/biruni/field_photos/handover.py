@@ -226,6 +226,11 @@ def backup_v2(folder, path, password, settings=None):
     rpw = backup_offsite.load_password(folder)
     if rpw:
         body["rclone_pw"] = rpw
+    from . import mailbox   # P6 (D2): the organization's cloud mailbox secret
+
+    mb_sec = mailbox.load_secret(st)
+    if mb_sec:
+        body["mb_secret"] = mb_sec
     kdf = crypto.new_kdf()
     ct = crypto.seal(crypto.derive(password, kdf), json.dumps(body).encode("utf-8"), _aad2(hk.public))
     doc = {"biruni": BACKUP_KIND, "v": 2, "pub": hk.public, "made": time.strftime("%Y-%m-%d"),
@@ -317,6 +322,12 @@ def _restore_v2_rest(body, folder, settings):
         from ..backup import offsite as backup_offsite
 
         backup_offsite.install_password(folder, rpw)  # a different one already here is kept as .old
+    mb_sec = body.get("mb_secret")
+    if isinstance(mb_sec, str) and len(mb_sec) == 43:
+        from . import mailbox
+
+        cur_on = mailbox.enabled(st) if st.value(mailbox.ON_KEY, None) is not None else True
+        mailbox.save_config(mb_sec, mailbox.load_days(st), settings=st, on=cur_on)
     if settings is None:
         bridge.forget_cached_identities()
 

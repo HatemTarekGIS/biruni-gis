@@ -98,7 +98,7 @@ def clean_meta(m, form=()):
     if dev_id and not DEV_RE.match(dev_id):
         dev_id = ""
     route = str(m.get("route") or "")
-    route = route if route in ("lan", "direct", "relay", "peer", "drive") else ("relay" if m.get("preview") else "")
+    route = route if route in ("lan", "direct", "relay", "peer", "drive", "r2") else ("relay" if m.get("preview") else "")
     out = {"id": m["id"], "lat": lat, "lon": lon, "acc": _num(m.get("acc"), 0),
            "alt": _num(m.get("alt")), "heading": _num(m.get("heading"), 0, 360),
            "compass": _num(m.get("compass"), 0, 360), "fix_age": _num(m.get("fix_age")),
@@ -153,7 +153,7 @@ def clean_pos(m):
             "net": net if net in NETS else "", "eff": eff if eff in ("slow-2g", "2g", "3g", "4g") else "",
             "down": _num(m.get("down"), 0, 10000), "ping": _num(m.get("ping"), 0, 120000),
             "crtt": _num(m.get("crtt"), 0, 60000),
-            "route": route if route in ("lan", "direct", "relay", "peer", "mqtt", "org", "own", "tunnel", "drive") else "",
+            "route": route if route in ("lan", "direct", "relay", "peer", "mqtt", "org", "own", "tunnel", "drive", "r2") else "",
             "bat": _num(m.get("bat"), 0, 1), "chg": m.get("chg") is True}
 
 
@@ -185,7 +185,7 @@ def clean_hs(m):
     t = _num(m.get("t"), 0)
     t = int(t) if t else int(time.time() * 1000)
     route = str(m.get("route") or "")
-    route = route if route in ("lan", "direct", "relay", "peer", "mqtt", "org", "own", "tunnel", "drive") else ""
+    route = route if route in ("lan", "direct", "relay", "peer", "mqtt", "org", "own", "tunnel", "drive", "r2") else ""
     return {
         "id": d,
         "d": d,
@@ -418,6 +418,16 @@ def write_surveyor_keys(folder, data):
     os.replace(part, path)
 
 
+def _places(*routes):
+    out = ["office"]
+    for r in routes:
+        if r == "drive" and "drive_mb" not in out:
+            out.append("drive_mb")
+        elif r == "r2" and "r2" not in out:
+            out.append("r2")
+    return out
+
+
 class PhotoStore:
     """The photo folder: one sub-folder per day, plus photos.jsonl (one line per photo)
     that lets the map layer be rebuilt if Biruni stops between the two writes."""
@@ -444,9 +454,7 @@ class PhotoStore:
                 if not r.get("ssha") and cur.get("ssha"):
                     r["ssha"] = cur["ssha"]
             if not r.get("preview") and r.get("photo") and os.path.isfile(r["photo"]):
-                places = ["office"]
-                if r.get("route") == "drive":
-                    places.append("drive_mb")
+                places = _places(r.get("route"))
                 self.ledger.mark(r["id"], places=places, sha=r.get("sha") or "", ssha=r.get("ssha") or "")
         for c_id, c_rec in self.consents.items():
             self.ledger.mark(c_id, "office", sha=c_rec.get("sha") or "", ssha=c_rec.get("ssha") or "")
@@ -493,9 +501,7 @@ class PhotoStore:
             if c == 0:
                 r = self.records.get(i)
                 if r and not r.get("preview") and r.get("photo") and os.path.isfile(r["photo"]):
-                    places = ["office"]
-                    if r.get("route") == "drive":
-                        places.append("drive_mb")
+                    places = _places(r.get("route"))
                     self.ledger.mark(i, places=places, sha=r.get("sha") or "", ssha=r.get("ssha") or "")
                     c, _h, h8 = self.ledger.receipt_info(i)
                 else:
@@ -848,9 +854,7 @@ class PhotoStore:
         if rec.get("by"):
             state_in["by"] = rec["by"]
         self.jobs.take_state(job_id, dev, state_in, item_id=rec["id"])
-        places = ["office"]
-        if meta.get("route") == "drive":
-            places.append("drive_mb")
+        places = _places(meta.get("route"))
         self.ledger.mark(rec["id"], places=places, sha=sha, ssha=ssha)
         if self.ledger.mirror_folder:
             try:
@@ -921,9 +925,7 @@ class PhotoStore:
                 raise ValueError("bad dev id")
             sha = hashlib.sha256(raw_blob).hexdigest()
             ssha = str(ssha or meta.get("_ssha") or "")
-            places = ["office"]
-            if meta.get("route") == "drive":
-                places.append("drive_mb")
+            places = _places(meta.get("route"))
             existing = self.consents.get(rec["id"])
             if existing is not None:
                 self.ledger.mark(rec["id"], places=places, sha=existing.get("sha") or sha, ssha=ssha or existing.get("ssha") or "")
@@ -981,9 +983,7 @@ class PhotoStore:
                             old["sha"] = sha
                         if ssha and not old.get("ssha"):
                             old["ssha"] = ssha
-                        places = ["office"]
-                        if rec.get("route") == "drive" or old.get("route") == "drive":
-                            places.append("drive_mb")
+                        places = _places(rec.get("route"), old.get("route"))
                         self.ledger.mark(old["id"], places=places, sha=old.get("sha") or sha, ssha=ssha or old.get("ssha") or "")
                         if self.ledger.mirror_folder and old.get("photo") and os.path.isfile(old["photo"]):
                             cur = self.ledger.get(old["id"])
@@ -1028,9 +1028,7 @@ class PhotoStore:
                 rec["sha"] = sha
                 rec["ssha"] = ssha
                 self.records[rec["id"]] = rec
-                places = ["office"]
-                if rec.get("route") == "drive":
-                    places.append("drive_mb")
+                places = _places(rec.get("route"))
                 self.ledger.mark(rec["id"], places=places, sha=sha, ssha=ssha)
                 if self.ledger.mirror_folder:
                     self.ledger.write_mirror_file(rec["id"], path, expected_sha=sha, ssha=ssha)
@@ -1059,9 +1057,7 @@ class PhotoStore:
             rec["ssha"] = ssha
             self.records[rec["id"]] = rec
             if not rec.get("preview"):
-                places = ["office"]
-                if rec.get("route") == "drive":
-                    places.append("drive_mb")
+                places = _places(rec.get("route"))
                 self.ledger.mark(rec["id"], places=places, sha=sha, ssha=ssha)
                 if self.ledger.mirror_folder:
                     self.ledger.write_mirror_file(rec["id"], path, expected_sha=sha, ssha=ssha)
@@ -1126,6 +1122,7 @@ class PhotoServer:
         self.cert_folder = cert_folder
         self.rl = None   # the signed recipients list (recipients.py): set with the bridge key in set_ladder
         self.pl = None   # the signed tracking policy (policy.py): set with the bridge key in set_ladder
+        self.mb = None   # the signed cloud mailbox descriptor (mailbox.py)
         self.eod_hour = int(eod_hour) if isinstance(eod_hour, int) and 0 <= eod_hour <= 23 else 18
         self.page = render_page(page_texts, lang, kinds, self.store.form, self.handover.public)
         # the bridge (bridge.py) runs a hidden receiver page on this PC that hands the photos in here
@@ -1564,7 +1561,7 @@ class PhotoServer:
             hs = info.get("hs")
             if isinstance(hs, dict):
                 hs_in = dict(hs)
-                if not hs_in.get("route") and via in ("lan", "direct", "relay", "peer", "mqtt", "org", "own", "tunnel", "drive"):
+                if not hs_in.get("route") and via in ("lan", "direct", "relay", "peer", "mqtt", "org", "own", "tunnel", "drive", "r2"):
                     hs_in["route"] = via
                 hs_res = self.store.resolve_pos(hs_in)
                 if hs_res is not None:
@@ -1577,6 +1574,12 @@ class PhotoServer:
             self.events.put(("ladder", info))
         return ack
 
+    def set_mailbox(self, desc):
+        """Set or clear the signed cloud mailbox descriptor (`mb`) and publish it in the guide."""
+        self.mb = desc
+        self._publish_guide()
+        return self.mb
+
     def _bridge_config_bytes(self):
         d = json.loads(self.bridge_config.decode("utf-8"))
         d["eod"] = self.eod_hour
@@ -1584,6 +1587,8 @@ class PhotoServer:
             d["rl"] = self.rl
         if getattr(self, "pl", None):
             d["pl"] = self.pl
+        if getattr(self, "mb", None):
+            d["mb"] = self.mb
         if self.ladder is not None:
             d["lad"] = 1
             d["tun"] = self.tunnel_host or ""
@@ -1614,7 +1619,8 @@ class PhotoServer:
         cap = getattr(self, "_capture", None)
         rl = getattr(self, "rl", None)
         pl = getattr(self, "pl", None)
-        if indoor or cap or rl or pl:
+        mb = getattr(self, "mb", None)
+        if indoor or cap or rl or pl or mb:
             g = json.loads(self.guide)
             if indoor:
                 g["indoor"] = indoor
@@ -1624,6 +1630,8 @@ class PhotoServer:
                 g["rl"] = rl   # carries its own signature: the guide is not signed
             if pl:
                 g["pl"] = pl
+            if mb:
+                g["mb"] = mb
             self.guide = json.dumps(g, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         return n
 
